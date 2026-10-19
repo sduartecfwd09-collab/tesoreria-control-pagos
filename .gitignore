@@ -1,0 +1,42 @@
+# Secretos y configuración local (solo se versionan los .env.example)
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
+# Bases de datos locales
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Dependencias y compilación
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+src/generated/
+
+# Logs
+*.log
+logs/
+
+# DATOS FINANCIEROS: nunca se versionan (estados de cuenta, tabla de pagos, resultados, borradores)
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.eml
+borradores/
+PASANTES/
+resultados/
+
+# Sistema
+.DS_Store
+Thumbs.db
+.claude/
