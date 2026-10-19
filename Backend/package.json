@@ -17,14 +17,17 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx seed/seed.ts",
-    "db:setup": "prisma generate && prisma db push && tsx seed/seed.ts"
+    "db:setup": "prisma generate && prisma db push && tsx seed/seed.ts",
+    "importar": "tsx src/cli/importar.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",
     "@prisma/adapter-better-sqlite3": "7.10.1",
     "@prisma/client": "7.10.1",
     "dotenv": "^18.0.8",
+    "exceljs": "^4.4.0",
     "fastify": "^5.12.7",
+    "jszip": "^3.10.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
