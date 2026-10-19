@@ -6,5 +6,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     env: { DATABASE_URL: "file:./test.db" },
     globalSetup: ["tests/global-setup.ts"],
+    fileParallelism: false, // todas las pruebas comparten test.db (SQLite)
+    testTimeout: 120_000,
   },
 });

@@ -1,0 +1,185 @@
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { clavesDeDeduplicacion } from "./clave-dedup.js";
+import { ErrorLectura, LECTOR_VERSION, leerEstadoDeCuenta, leerLibro } from "./lector.js";
+import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
+import type { ResultadoLectura } from "./tipos.js";
+import {
+  ArchivoConConciliaciones, asegurarSociedad, buscarArchivoPorRuta,
+  guardarArchivoConError, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
+} from "../repositories/importaciones.js";
+
+export type EstadoArchivo = "leido" | "error" | "sin_cambios";
+export type OrigenMoneda = "archivo" | "iban" | "otro_mes" | "desconocida";
+
+export interface ResumenArchivo {
+  ruta: string; // relativa a STATEMENTS_ROOT
+  sociedad: string;
+  formato: string | null;
+  estado: EstadoArchivo;
+  movimientos: number;
+  duplicados: number;
+  error?: string;
+}
+
+export interface ResumenImportacion {
+  archivos: ResumenArchivo[];
+  leidos: number;
+  conError: number;
+  sinCambios: number;
+  movimientos: number;
+  duplicados: number;
+}
+
+// Una sola importación a la vez.
+let enCurso = false;
+export const hayImportacionEnCurso = () => enCurso;
+
+const CARPETAS_EXCLUIDAS = new Set(["resultados"]);
+
+interface Candidato {
+  ruta: string; // relativa, con "/"
+  rutaAbsoluta: string;
+  carpeta: string; // sociedad según la carpeta
+  nombre: NombreArchivo | null;
+}
+
+/** Subcarpetas inmediatas de la raíz (una por sociedad) con sus .xlsx. No entra en "resultados" ni toca archivos de la raíz. */
+export async function listarCandidatos(raiz: string): Promise<Candidato[]> {
+  const out: Candidato[] = [];
+  for (const d of await readdir(raiz, { withFileTypes: true })) {
+    if (!d.isDirectory() || d.name.startsWith(".") || CARPETAS_EXCLUIDAS.has(d.name.toLowerCase())) continue;
+    const dir = path.join(raiz, d.name);
+    for (const f of await readdir(dir, { withFileTypes: true })) {
+      if (!f.isFile() || !/\.xlsx$/i.test(f.name) || f.name.startsWith("~$")) continue;
+      out.push({ ruta: `${d.name}/${f.name}`, rutaAbsoluta: path.join(dir, f.name), carpeta: d.name.toUpperCase(), nombre: parsearNombreArchivo(f.name) });
+    }
+  }
+  return out.sort((a, b) => a.ruta.localeCompare(b.ruta));
+}
+
+interface Lectura {
+  cand: Candidato;
+  hash: string;
+  resultado?: ResultadoLectura;
+  error?: string;
+}
+
+export async function importarCarpeta(raiz: string): Promise<ResumenImportacion> {
+  if (enCurso) throw new Error("Ya hay una importación en curso");
+  enCurso = true;
+  try {
+    return await ejecutar(raiz);
+  } finally {
+    enCurso = false;
+  }
+}
+
+async function ejecutar(raiz: string): Promise<ResumenImportacion> {
+  const candidatos = await listarCandidatos(raiz);
+  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, sinCambios: 0, movimientos: 0, duplicados: 0 };
+
+  // Fase 1: hash y lectura. Un archivo con error se marca y se sigue con los demás.
+  const lecturas: Lectura[] = [];
+  for (const cand of candidatos) {
+    let hash = "";
+    try {
+      const contenido = await readFile(cand.rutaAbsoluta);
+      hash = createHash("sha256").update(contenido).digest("hex");
+      const previo = await buscarArchivoPorRuta(cand.ruta);
+      if (previo && previo.hash === hash && previo.estado === "leido" && versionDe(previo.detalle) === LECTOR_VERSION) {
+        resumen.sinCambios++;
+        resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: previo.formato, estado: "sin_cambios", movimientos: previo.numMovimientos, duplicados: previo.numDuplicados });
+        continue;
+      }
+      if (!cand.nombre) throw new ErrorLectura("El nombre no cumple la convención «<IBAN> <MMAA> <SOCIEDAD>.xlsx»");
+      const resultado = leerEstadoDeCuenta(await leerLibro(contenido), cand.nombre);
+      lecturas.push({ cand, hash, resultado });
+    } catch (e) {
+      lecturas.push({ cand, hash, error: e instanceof ErrorLectura ? e.message : "Error inesperado al leer el archivo" });
+    }
+  }
+
+  // Fase 2: moneda por cuenta (archivo > IBAN BCT > otro mes). Se marca "por confirmar" si no vino explícita.
+  const explicitaPorCuenta = new Map<string, Set<string>>();
+  for (const l of lecturas) {
+    if (l.resultado?.monedaArchivo && l.cand.nombre) {
+      const k = clave(l.cand);
+      (explicitaPorCuenta.get(k) ?? explicitaPorCuenta.set(k, new Set()).get(k)!).add(l.resultado.monedaArchivo);
+    }
+  }
+
+  // Fase 3: persistencia.
+  for (const l of lecturas) {
+    const { cand, hash } = l;
+    const base = { ruta: cand.ruta, hash, formato: l.resultado?.formato ?? null, mes: cand.nombre?.periodo ?? null };
+    const sociedad = await asegurarSociedad(cand.carpeta);
+    const archivoBase: ArchivoParaGuardar = { ...base, sociedadId: sociedad.id, cuentaId: null };
+    if (l.error || !l.resultado || !cand.nombre) {
+      await guardarArchivoConError(archivoBase, l.error ?? "Error desconocido", { discrepancias: [], advertencias: [] });
+      resumen.conError++;
+      resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: null, estado: "error", movimientos: 0, duplicados: 0, error: l.error });
+      continue;
+    }
+    const r = l.resultado;
+    const nombre = cand.nombre;
+    const advertencias = [...r.advertencias];
+    const discrepancias = [...r.discrepancias];
+    if (nombre.sociedad !== cand.carpeta) {
+      discrepancias.push({ tipo: "sociedad", mensaje: `La sociedad del nombre (${nombre.sociedad}) no coincide con la carpeta (${cand.carpeta}); se usó la carpeta` });
+    }
+
+    // moneda de este archivo y de la cuenta
+    const explicitas = explicitaPorCuenta.get(clave(cand)) ?? new Set<string>();
+    const porIban = monedaDeIbanBct(nombre.cuenta);
+    let monedaArchivo: "CRC" | "USD" | null = r.monedaArchivo;
+    let origen: OrigenMoneda = "archivo";
+    if (!monedaArchivo) {
+      if (porIban) { monedaArchivo = porIban; origen = "iban"; }
+      else if (explicitas.size > 0) { monedaArchivo = [...explicitas][0] as "CRC" | "USD"; origen = "otro_mes"; }
+      else origen = "desconocida";
+    } else if (porIban && porIban !== monedaArchivo) {
+      advertencias.push(`La moneda del archivo (${monedaArchivo}) difiere de la que sugiere el IBAN (${porIban})`);
+    }
+    if (explicitas.size > 1) advertencias.push("Los archivos de esta cuenta declaran monedas distintas");
+    const monedaCuenta = (explicitas.size > 0 ? ([...explicitas][0] as "CRC" | "USD") : porIban) ?? null;
+
+    const cuenta = await guardarCuenta({
+      sociedadId: sociedad.id, numero: nombre.cuenta, codigoBanco: nombre.codigoBanco, formato: r.formato,
+      bancoArchivo: r.bancoArchivo, moneda: monedaCuenta, monedaPorConfirmar: explicitas.size === 0,
+    });
+    const claves = clavesDeDeduplicacion(cuenta.id, r.movimientos);
+    const movs = r.movimientos.map((m, i) => ({ ...m, claveDedup: claves[i]! }));
+    const detalle = {
+      versionLector: LECTOR_VERSION, continuidad: r.continuidad, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas,
+      monedaOrigen: origen, moneda: monedaArchivo, hojaLeida: r.hoja, filaEncabezado: r.filaEncabezado,
+    };
+    try {
+      const { duplicados } = await guardarArchivoLeido(
+        { ...archivoBase, cuentaId: cuenta.id, formato: r.formato },
+        movs, { moneda: monedaArchivo, detalle },
+      );
+      resumen.leidos++;
+      resumen.movimientos += movs.length;
+      resumen.duplicados += duplicados;
+      resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: r.formato, estado: "leido", movimientos: movs.length, duplicados });
+    } catch (e) {
+      const msg = e instanceof ArchivoConConciliaciones ? e.message : "No se pudo guardar el archivo en la base de datos";
+      await guardarArchivoConError({ ...archivoBase, cuentaId: cuenta.id, formato: r.formato }, msg, detalle);
+      resumen.conError++;
+      resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: r.formato, estado: "error", movimientos: 0, duplicados: 0, error: msg });
+    }
+  }
+  return resumen;
+}
+
+function versionDe(detalle: string | null): number | null {
+  try {
+    return detalle ? (JSON.parse(detalle).versionLector ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+const clave = (c: Candidato) => `${c.carpeta}|${c.nombre?.cuenta}`;
