@@ -1,4 +1,4 @@
-import type { Parametro } from "./tipos";
+import type { Cobertura, Importaciones, Parametro } from "./tipos";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
@@ -28,6 +28,8 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listarImportaciones: () => pedir<Importaciones>("/api/importaciones"),
+  obtenerCobertura: async () => (await pedir<{ datos: Cobertura }>("/api/cobertura")).datos,
   listarParametros: async () => (await pedir<{ datos: Parametro[] }>("/api/parametros")).datos,
   guardarParametro: (id: number, valor: string) =>
     pedir<{ datos: { id: number; valor: string; actualizado: string } }>(`/api/parametros/${id}`, {

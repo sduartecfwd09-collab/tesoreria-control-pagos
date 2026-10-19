@@ -9,6 +9,7 @@ const PANTALLAS = [
   { href: "/conciliacion", texto: "Conciliación", pronto: true },
   { href: "/inconsistencias", texto: "Inconsistencias", pronto: true },
   { href: "/avisos", texto: "Avisos", pronto: true },
+  { href: "/archivos", texto: "Archivos importados", pronto: false },
   { href: "/configuracion", texto: "Configuración", pronto: false },
 ];
 
