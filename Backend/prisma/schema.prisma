@@ -1,0 +1,201 @@
+// Modelo de datos del control de pagos.
+// Convenciones: montos en centavos (Int/BigInt), estados como texto validado en la app
+// (sin enums nativos, para portar a PostgreSQL / SQL Server), identificadores como texto
+// (conservan ceros a la izquierda), fechas de vencimiento sin hora (se guardan a medianoche UTC).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Sociedad {
+  id          Int          @id @default(autoincrement())
+  codigo      String       @unique // ZFL, GGDI, BONAVISTA, WW, MEMEMC, DM
+  nombre      String?
+  creadoEn    DateTime     @default(now())
+  actualizado DateTime     @updatedAt
+  cuentas     Cuenta[]
+  obligaciones Obligacion[]
+  archivos    ArchivoImportado[]
+}
+
+model Cuenta {
+  id                 Int       @id @default(autoincrement())
+  sociedadId         Int
+  sociedad           Sociedad  @relation(fields: [sociedadId], references: [id])
+  numero             String // IBAN o número de cuenta (texto)
+  banco              String? // editable por Tesorería; "por confirmar" si no se confirmó
+  bancoPorConfirmar  Boolean   @default(true)
+  codigoBanco        String? // código del IBAN (0107, 0102, ...)
+  formato            String? // E1..E7
+  moneda             String?
+  monedaPorConfirmar Boolean   @default(true)
+  creadoEn           DateTime  @default(now())
+  actualizado        DateTime  @updatedAt
+  archivos           ArchivoImportado[]
+  movimientos        Movimiento[]
+
+  @@unique([sociedadId, numero])
+}
+
+model Categoria {
+  id           Int          @id @default(autoincrement())
+  nombre       String       @unique // Electricidad, Telecom, CCSS
+  creadoEn     DateTime     @default(now())
+  actualizado  DateTime     @updatedAt
+  obligaciones Obligacion[]
+}
+
+model Obligacion {
+  id               Int           @id @default(autoincrement())
+  sociedadId       Int
+  sociedad         Sociedad      @relation(fields: [sociedadId], references: [id])
+  categoriaId      Int
+  categoria        Categoria     @relation(fields: [categoriaId], references: [id])
+  proveedor        String
+  identificador    String // texto: conserva ceros a la izquierda
+  diaEsperadoPago  Int // día del mes (columna "Última fecha de pago", p. ej. "15 DIA")
+  frecuencia       String        @default("mensual") // SUPUESTO
+  montoEsperado    Int? // centavos; opcional
+  responsable      String?
+  activa           Boolean       @default(true)
+  creadoEn         DateTime      @default(now())
+  actualizado      DateTime      @updatedAt
+  vencimientos     Vencimiento[]
+
+  @@unique([sociedadId, proveedor, identificador])
+}
+
+model Vencimiento {
+  id            Int            @id @default(autoincrement())
+  obligacionId  Int
+  obligacion    Obligacion     @relation(fields: [obligacionId], references: [id])
+  fecha         DateTime // sin hora (medianoche UTC)
+  periodo       String // AAAA-MM
+  montoEsperado Int? // centavos; null = "monto sin definir"
+  // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion
+  estado        String         @default("proyectado")
+  creadoEn      DateTime       @default(now())
+  actualizado   DateTime       @updatedAt
+  conciliaciones Conciliacion[]
+  alertas       Alerta[]
+
+  @@unique([obligacionId, periodo])
+}
+
+model ArchivoImportado {
+  id          Int          @id @default(autoincrement())
+  ruta        String       @unique
+  hash        String
+  formato     String? // E1..E7
+  sociedadId  Int?
+  sociedad    Sociedad?    @relation(fields: [sociedadId], references: [id])
+  cuentaId    Int?
+  cuenta      Cuenta?      @relation(fields: [cuentaId], references: [id])
+  mes         String? // AAAA-MM (del nombre del archivo)
+  leidoEn     DateTime?
+  estado      String       @default("pendiente") // pendiente | leido | error
+  numMovimientos Int       @default(0) // movimientos leídos del archivo
+  numDuplicados  Int       @default(0) // omitidos por solaparse con otro archivo
+  error       String? // mensaje si estado = error (sin datos del contenido)
+  detalle     String? // JSON: advertencias, continuidad de saldo, discrepancias de nombre
+  creadoEn    DateTime     @default(now())
+  actualizado DateTime     @updatedAt
+  movimientos Movimiento[]
+}
+
+model Movimiento {
+  id            Int              @id @default(autoincrement())
+  cuentaId      Int
+  cuenta        Cuenta           @relation(fields: [cuentaId], references: [id])
+  archivoId     Int
+  archivo       ArchivoImportado @relation(fields: [archivoId], references: [id])
+  hoja          String
+  fila          Int
+  periodo       String // AAAA-MM del archivo (nombre)
+  fecha         DateTime
+  referencia    String?
+  codigo        String? // código de transacción (E2)
+  descripcion   String?
+  debito        Int // centavos
+  credito       Int // centavos
+  saldo         Int? // centavos
+  moneda        String?
+  idExtraido    String? // identificador de obligación extraído de la descripción
+  claveDedup    String           @unique // ver src/ingest/clave-dedup.ts
+  creadoEn      DateTime         @default(now())
+  actualizado   DateTime         @updatedAt
+  conciliaciones Conciliacion[]
+  alertas       Alerta[]
+
+  @@index([cuentaId, fecha])
+  @@index([periodo])
+}
+
+model Conciliacion {
+  id             Int         @id @default(autoincrement())
+  vencimientoId  Int
+  vencimiento    Vencimiento @relation(fields: [vencimientoId], references: [id])
+  movimientoId   Int         @unique // un movimiento solo puede pagar un vencimiento
+  movimiento     Movimiento  @relation(fields: [movimientoId], references: [id])
+  tipoCruce      String // automatico | manual
+  diferenciaMonto Int? // centavos
+  diferenciaDias Int?
+  estado         String // claro | en_revision | rechazado
+  revisadoPor    String?
+  creadoEn       DateTime    @default(now())
+  actualizado    DateTime    @updatedAt
+}
+
+model Alerta {
+  id             Int          @id @default(autoincrement())
+  tipo           String
+  vencimientoId  Int?
+  vencimiento    Vencimiento? @relation(fields: [vencimientoId], references: [id])
+  movimientoId   Int?
+  movimiento     Movimiento?  @relation(fields: [movimientoId], references: [id])
+  destinatarios  String? // lista separada por comas
+  canal          String       @default("borrador") // borrador | smtp
+  estado         String       @default("pendiente")
+  texto          String?
+  creadoEn       DateTime     @default(now())
+  actualizado    DateTime     @updatedAt
+}
+
+model Parametro {
+  id          Int      @id @default(autoincrement())
+  clave       String
+  valor       String
+  tipo        String // entero | texto | booleano
+  ambito      String   @default("global") // global | categoria
+  categoriaId Int      @default(0) // id de Categoria si ambito = categoria; 0 si es global
+  descripcion String?
+  creadoEn    DateTime @default(now())
+  actualizado DateTime @updatedAt
+
+  @@unique([clave, ambito, categoriaId])
+}
+
+// Previstos: en el piloto todos ven todo; la autenticación se define con TI.
+model Rol {
+  id       Int       @id @default(autoincrement())
+  nombre   String    @unique // Administrador | Tesoreria | Lectura
+  usuarios Usuario[]
+}
+
+model Usuario {
+  id          Int      @id @default(autoincrement())
+  correo      String   @unique
+  nombre      String?
+  rolId       Int
+  rol         Rol      @relation(fields: [rolId], references: [id])
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+  actualizado DateTime @updatedAt
+}
