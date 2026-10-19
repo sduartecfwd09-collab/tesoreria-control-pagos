@@ -98,9 +98,13 @@ model ArchivoImportado {
   sociedad    Sociedad?    @relation(fields: [sociedadId], references: [id])
   cuentaId    Int?
   cuenta      Cuenta?      @relation(fields: [cuentaId], references: [id])
-  mes         String? // AAAA-MM
+  mes         String? // AAAA-MM (del nombre del archivo)
   leidoEn     DateTime?
   estado      String       @default("pendiente") // pendiente | leido | error
+  numMovimientos Int       @default(0) // movimientos leídos del archivo
+  numDuplicados  Int       @default(0) // omitidos por solaparse con otro archivo
+  error       String? // mensaje si estado = error (sin datos del contenido)
+  detalle     String? // JSON: advertencias, continuidad de saldo, discrepancias de nombre
   creadoEn    DateTime     @default(now())
   actualizado DateTime     @updatedAt
   movimientos Movimiento[]
@@ -114,19 +118,24 @@ model Movimiento {
   archivo       ArchivoImportado @relation(fields: [archivoId], references: [id])
   hoja          String
   fila          Int
+  periodo       String // AAAA-MM del archivo (nombre)
   fecha         DateTime
   referencia    String?
+  codigo        String? // código de transacción (E2)
   descripcion   String?
   debito        Int // centavos
   credito       Int // centavos
   saldo         Int? // centavos
   moneda        String?
   idExtraido    String? // identificador de obligación extraído de la descripción
-  claveDedup    String           @unique
+  claveDedup    String           @unique // ver src/ingest/clave-dedup.ts
   creadoEn      DateTime         @default(now())
   actualizado   DateTime         @updatedAt
   conciliaciones Conciliacion[]
   alertas       Alerta[]
+
+  @@index([cuentaId, fecha])
+  @@index([periodo])
 }
 
 model Conciliacion {
