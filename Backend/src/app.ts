@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { env } from "./config/env.js";
+import { rutasImportaciones } from "./routes/importaciones.js";
 import { rutasParametros } from "./routes/parametros.js";
 
 export async function crearApp(opts: { logger?: boolean } = {}) {
@@ -11,6 +12,7 @@ export async function crearApp(opts: { logger?: boolean } = {}) {
 
   app.get("/api/salud", async () => ({ estado: "ok", hora: new Date().toISOString() }));
   await app.register(rutasParametros);
+  await app.register(rutasImportaciones);
 
   return app;
 }
