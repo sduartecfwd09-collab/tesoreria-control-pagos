@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/*
+  TOKENS DE COLOR (único lugar donde se definen los colores).
+  Paleta Garnier: verde, gris oscuro, gris claro, negro y blanco.
+  Los colores de estado (rojo y ámbar) quedan POR CONFIRMAR con Tesorería:
+  se cambian aquí y se verifican con `npm run contraste`.
+*/
+:root {
+  /* Paleta de marca */
+  --garnier-verde: #abd341;
+  --garnier-gris-oscuro: #58585a;
+  --garnier-gris-claro: #b9b9b9;
+  --garnier-negro: #000000;
+  --garnier-blanco: #ffffff;
+
+  /* Semánticos (derivados de la paleta) */
+  --fondo: var(--garnier-blanco);
+  --fondo-suave: #f4f4f4; /* tinte muy claro de gris claro */
+  --texto: var(--garnier-negro);
+  --texto-suave: var(--garnier-gris-oscuro);
+  --borde-decorativo: var(--garnier-gris-claro); /* solo divisores; no apto como borde de control */
+  --borde-control: var(--garnier-gris-oscuro);
+  --acento: var(--garnier-verde);
+  --texto-sobre-acento: var(--garnier-negro);
+  --cabecera: var(--garnier-negro);
+  --texto-sobre-cabecera: var(--garnier-blanco);
+
+  /* Estados — POR CONFIRMAR con Tesorería */
+  --estado-rojo: #b3261e;
+  --estado-rojo-fondo: #fde7e5;
+  --estado-ambar-fondo: #fbe7a1;
+  --estado-ambar-texto: var(--garnier-negro);
+}
+
+@theme inline {
+  --color-fondo: var(--fondo);
+  --color-fondo-suave: var(--fondo-suave);
+  --color-texto: var(--texto);
+  --color-suave: var(--texto-suave);
+  --color-divisor: var(--borde-decorativo);
+  --color-control: var(--borde-control);
+  --color-acento: var(--acento);
+  --color-sobre-acento: var(--texto-sobre-acento);
+  --color-cabecera: var(--cabecera);
+  --color-sobre-cabecera: var(--texto-sobre-cabecera);
+  --color-rojo: var(--estado-rojo);
+  --color-rojo-fondo: var(--estado-rojo-fondo);
+  --color-ambar-fondo: var(--estado-ambar-fondo);
+  --color-ambar-texto: var(--estado-ambar-texto);
+  --font-sans: Montserrat, Poppins, Arial, Helvetica, sans-serif;
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--font-sans);
+}
+
+/* El verde no contrasta contra blanco: el foco usa gris oscuro (7:1). */
+:focus-visible {
+  outline: 3px solid var(--garnier-gris-oscuro);
+  outline-offset: 2px;
+}
