@@ -3,7 +3,7 @@
 Dos aplicaciones independientes que se comunican por HTTP:
 
 - **Backend/** — Node.js + TypeScript, Fastify, Prisma + SQLite, zod, exceljs, vitest. API REST en `http://localhost:3001`.
-- **Frontend/** — Next.js (App Router) + TypeScript + Tailwind. Solo interfaz, en `http://localhost:3000`. Nunca toca la base de datos.
+- **Frontend/** — Next.js (App Router) + TypeScript + Tailwind, TanStack Table (tablas) y react-hook-form (formularios). Solo interfaz, en `http://localhost:3000`. Nunca toca la base de datos.
 
 ## Arranque
 
@@ -23,7 +23,7 @@ npm run dev                     # http://localhost:3001/api/salud
 cd Frontend
 npm install
 copy .env.local.example .env.local
-npm run dev                     # http://localhost:3000  (Archivos importados y Configuración)
+npm run dev                     # http://localhost:3000  (Obligaciones, Vencimientos, Archivos importados y Configuración)
 ```
 
 Pruebas: `cd Backend && npm test` · `cd Frontend && npm run lint && npm run typecheck && npm run contraste`.
@@ -45,6 +45,11 @@ Las pruebas de integración con datos reales (`tests/integracion-real.test.ts` y
 | `GET /api/obligaciones/resumen` | Conteos y alertas de calidad del catálogo |
 | `GET /api/obligaciones/:id` · `POST /api/obligaciones` · `PATCH /api/obligaciones/:id` | Alta manual y edición. 409 si ya existe; 422 si un valor no cumple la regla |
 | `POST /api/catalogo/importar` | Importa `CATALOGO_FILE`. 422 si no está configurada, no existe o no tiene la cabecera; 409 si ya hay una en curso |
+| `POST /api/vencimientos/generar` | Cuerpo `{ desde, hasta }` (AAAA-MM, máx. 24 meses). Devuelve creados, ya existentes, detalle por mes y obligaciones omitidas con su motivo |
+| `GET /api/vencimientos` | Filtros `sociedad`, `categoria`, `periodo` o `desde`/`hasta`, `q`, `pagina`, `porPagina`. Cada vencimiento trae `estado`, `conciliado` y `futuro` |
+| `GET /api/vencimientos/periodos` | Meses ya generados con su total |
+
+Al crear o editar una obligación (frecuencia, mes de arranque, día, monto o activa), la respuesta incluye `regeneracion` con lo que cambió en sus vencimientos futuros.
 
 Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones también `campo`, para marcarlo en el formulario); fechas ISO 8601; montos en centavos (enteros).
 **CORS:** el Backend solo acepta los orígenes de `CORS_ORIGINS` (por defecto `http://localhost:3000`). El Frontend lee la URL del API desde `NEXT_PUBLIC_API_URL`.
@@ -69,6 +74,21 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 - Nada se borra: se desactiva (`activa = false`). Sociedad, proveedor e identificador no se editan; si están mal, se desactiva y se crea otra.
 - **Alertas de calidad** (se recalculan siempre, sobre las activas): mismo identificador en una sociedad con distinto proveedor, identificador con formato de IBAN, sociedades sin obligaciones, y obligaciones sin monto, cuenta, responsable, día o mes de arranque.
 
+## Vencimientos (Hito 3)
+
+- Un vencimiento por obligación activa y periodo (`@@unique`): generar el mismo rango otra vez no duplica ni modifica nada.
+- Frecuencia como paso en meses (mensual 1, bimestral 2, trimestral 3, semestral 6, anual 12) contado desde el **mes de arranque**. Una frecuencia no mensual sin mes de arranque, o una obligación sin día, se omite y se reporta con su motivo.
+- Si el día no existe en el mes se usa el último día (31 → 30, o 28/29 en febrero). Sin ajuste por fines de semana ni feriados.
+- Todos nacen **proyectado**; los demás estados se calculan con el cruce (Hito 4).
+- **Regeneración al editar:** solo vencimientos de hoy en adelante y hasta el último mes ya generado. Se ajustan fecha y monto, se eliminan los que ya no corresponden (frecuencia distinta u obligación desactivada) y se crean los que faltan. Nunca se tocan los pasados ni los que tienen conciliación.
+- **Reloj inyectable:** `crearApp({ reloj })` recibe la fecha de hoy (las pruebas la fijan). "Hoy" es la fecha local del servidor.
+
+## Pantallas
+
+- **Obligaciones:** resumen de calidad (las tarjetas filtran la tabla), pendientes con Tesorería, filtros, tabla y formulario de alta y edición con ayudas visibles. En la edición solo se envían los campos cambiados; los supuestos se confirman con la casilla «Confirmada con Tesorería».
+- **Vencimientos:** aviso de estados, generación por rango de meses con confirmación previa y resumen del resultado, y tabla por periodo.
+- Las pestañas sin pantalla (Tablero, Conciliación, Inconsistencias, Avisos) muestran «Próximamente» con el hito en que llegan.
+
 ## Supuestos (por confirmar con Tesorería)
 
 - `tolerancia_pct = 10` por categoría y `frecuencia_defecto = mensual`. No se aplican aún (el monto no se valida en el piloto).
@@ -79,6 +99,7 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 - Frecuencias: mensual, bimestral, trimestral, semestral y anual. Las obligaciones nuevas toman `frecuencia_defecto` y quedan "por confirmar" hasta que Tesorería la edite.
 - Moneda de la obligación: CRC por defecto (la tabla no la trae), "por confirmar" hasta que se edite.
 - Identificador: se quitan los espacios internos (un IBAN escrito con espacios cuenta como el mismo).
+- Vencimientos: sin ajuste por fines de semana ni feriados; "futuro" = fecha de hoy en adelante.
 
 ## Pendientes y deuda técnica
 
@@ -89,4 +110,5 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 - **exceljs 4.4.0** no tiene versiones nuevas desde dic. 2024; no abre libros con dibujos incrustados (se resuelve con una copia en memoria sin dibujos, `src/ingest/quitar-dibujos.ts`).
 - **Autenticación y roles:** pendientes de definir con TI.
 - **Montos de 32 bits:** los campos de monto son `Int` de Prisma (máximo ₡21 474 836,47 en centavos). El API rechaza montos mayores con un mensaje claro; si Tesorería maneja montos mayores (p. ej. CCSS), migrar a `BigInt`.
+- **TanStack Table 8.21.3:** se eligió la línea 8 (madura) en vez de la 9, publicada en agosto de 2026 y aún con correcciones frecuentes. `npm run lint` muestra 2 advertencias del React Compiler («incompatible library») en las tablas: el compilador no optimiza esos componentes, pero funcionan bien.
 - **Alertas al vuelo:** `GET /api/obligaciones` recalcula los identificadores repetidos sobre todo el catálogo en cada consulta; es trivial con ~65 obligaciones, revisar si el catálogo crece mucho.

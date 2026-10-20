@@ -46,7 +46,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 |---|---|---|
 | 1 | Esqueleto, modelo, parámetros y Configuración | Integrado en `main` |
 | 2 | Importación de estados de cuenta y cobertura | Integrado en `main` (PR #1) |
-| 3 | Catálogo y generación de vencimientos | En curso |
+| 3 | Catálogo y generación de vencimientos | Terminado, por aprobar |
 | 4 | Cruce y cálculo de estados | Pendiente |
 | 5 | Inconsistencias, avisos y borradores de correo | Pendiente |
 | 6 | Tablero, proyección y revisión humana | Pendiente |
