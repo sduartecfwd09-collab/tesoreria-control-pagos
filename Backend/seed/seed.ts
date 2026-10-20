@@ -1,10 +1,14 @@
 import { DEFINICIONES } from "../src/domain/parametros.js";
 import { asegurarCategoria, asegurarParametro, contarParametros } from "../src/repositories/parametros.js";
+import { asegurarSociedad } from "../src/repositories/importaciones.js";
 import { prisma } from "../src/db.js";
 
-// Categorías conocidas de la tabla de pagos frecuentes (el catálogo completo llega en el Hito 3).
+// Categorías conocidas de la tabla de pagos frecuentes (la importación del catálogo agrega las que falten).
 const CATEGORIAS = ["Electricidad", "Telecom", "CCSS"];
+// Sociedades del piloto. Se crean aunque no tengan obligaciones (DM no tiene filas en la tabla de pagos).
+const SOCIEDADES = ["ZFL", "GGDI", "BONAVISTA", "WW", "MEMEMC", "DM"];
 
+for (const codigo of SOCIEDADES) await asegurarSociedad(codigo);
 const cats = [];
 for (const nombre of CATEGORIAS) cats.push(await asegurarCategoria(nombre));
 
@@ -17,5 +21,5 @@ for (const d of DEFINICIONES) {
     });
   }
 }
-console.log(`Parámetros listos: ${await contarParametros()}`);
+console.log(`Sociedades: ${SOCIEDADES.length} · parámetros listos: ${await contarParametros()}`);
 await prisma.$disconnect();

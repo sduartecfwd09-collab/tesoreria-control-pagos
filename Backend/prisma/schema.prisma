@@ -40,6 +40,7 @@ model Cuenta {
   actualizado        DateTime  @updatedAt
   archivos           ArchivoImportado[]
   movimientos        Movimiento[]
+  obligaciones       Obligacion[] // obligaciones que se esperan pagar desde esta cuenta
 
   @@unique([sociedadId, numero])
 }
@@ -60,11 +61,19 @@ model Obligacion {
   categoria        Categoria     @relation(fields: [categoriaId], references: [id])
   proveedor        String
   identificador    String // texto: conserva ceros a la izquierda
-  diaEsperadoPago  Int // día del mes (columna "Última fecha de pago", p. ej. "15 DIA")
-  frecuencia       String        @default("mensual") // SUPUESTO
+  diaEsperadoPago  Int? // día del mes (columna "Última fecha de pago", p. ej. "15 DIA"); null = falta o inválido
+  diaEditado       Boolean       @default(false) // true = Tesorería lo cambió a mano; la reimportación no lo pisa
+  frecuencia       String        @default("mensual") // mensual | bimestral | trimestral | semestral | anual (SUPUESTO)
+  frecuenciaPorConfirmar Boolean @default(true)
+  mesArranque      Int? // 1..12, solo para frecuencias no mensuales
   montoEsperado    Int? // centavos; opcional
+  moneda           String        @default("CRC") // SUPUESTO: la tabla de pagos no trae moneda
+  monedaPorConfirmar Boolean     @default(true)
+  cuentaEsperadaId Int?
+  cuentaEsperada   Cuenta?       @relation(fields: [cuentaEsperadaId], references: [id])
   responsable      String?
-  activa           Boolean       @default(true)
+  activa           Boolean       @default(true) // no se borra: se desactiva
+  origen           String        @default("catalogo") // catalogo | manual (la importación no toca las manuales)
   creadoEn         DateTime      @default(now())
   actualizado      DateTime      @updatedAt
   vencimientos     Vencimiento[]
