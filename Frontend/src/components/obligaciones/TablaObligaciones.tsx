@@ -39,7 +39,7 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
           </>
         ),
       }),
-      col.accessor("identificador", { header: "Identificador", cell: (c) => <span className="font-mono text-sm break-all">{c.getValue()}</span> }),
+      col.accessor("identificador", { header: "Identificador", cell: (c) => <span className="font-mono text-sm whitespace-nowrap">{c.getValue()}</span> }),
       col.display({
         id: "pago",
         header: "Pago",
