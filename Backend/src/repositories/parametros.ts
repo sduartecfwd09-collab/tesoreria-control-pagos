@@ -29,6 +29,12 @@ export async function obtenerParametro(id: number) {
   return prisma.parametro.findUnique({ where: { id } });
 }
 
+/** Valor de un parámetro global, o null si no existe. */
+export async function valorGlobal(clave: string): Promise<string | null> {
+  const p = await prisma.parametro.findUnique({ where: { clave_ambito_categoriaId: { clave, ambito: "global", categoriaId: 0 } } });
+  return p?.valor ?? null;
+}
+
 export async function actualizarValor(id: number, valor: string) {
   return prisma.parametro.update({ where: { id }, data: { valor } });
 }
