@@ -15,6 +15,11 @@ import {
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
+import type { Reloj } from "../domain/reloj.js";
+import { regenerarObligacion } from "../vencimientos/generar.js";
+
+// Campos que cambian los vencimientos: al editarlos se regeneran los futuros sin conciliación.
+const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "montoEsperado", "activa"];
 
 const consulta = z.object({
   sociedad: z.string().trim().min(1).transform((s) => s.toUpperCase()).optional(),
@@ -61,7 +66,7 @@ async function errorCuenta(cuentaId: number | null | undefined, sociedadId: numb
 
 const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.code(422).send({ error, ...(campo ? { campo } : {}) });
 
-export async function rutasObligaciones(app: FastifyInstance) {
+export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj }) {
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
     return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombre: x.nombre, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
@@ -129,7 +134,8 @@ export async function rutasObligaciones(app: FastifyInstance) {
       monedaPorConfirmar: d.monedaPorConfirmar ?? d.moneda === undefined,
       origen: "manual",
     });
-    return reply.code(201).send({ datos: aDto(o, await repetidosActuales()) });
+    const regeneracion = await regenerarObligacion(o.id, opts.reloj);
+    return reply.code(201).send({ datos: aDto(o, await repetidosActuales()), regeneracion });
   });
 
   app.patch("/api/obligaciones/:id", async (req, reply) => {
@@ -158,7 +164,8 @@ export async function rutasObligaciones(app: FastifyInstance) {
       ...(d.frecuencia !== undefined && d.frecuenciaPorConfirmar === undefined ? { frecuenciaPorConfirmar: false } : {}),
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
     });
-    return { datos: aDto(o, await repetidosActuales()) };
+    const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? await regenerarObligacion(o.id, opts.reloj) : null;
+    return { datos: aDto(o, await repetidosActuales()), regeneracion };
   });
 
   app.post("/api/catalogo/importar", async (_req, reply) => {
