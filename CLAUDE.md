@@ -26,18 +26,29 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 ## Decisiones tomadas
 - **Ventana de cruce:** ±3 días calendario alrededor de la fecha esperada, y puede cruzar de un mes a otro (parámetro `ventana_dias`).
 - **Monto sin definir:** el monto esperado es opcional; en el piloto no se valida el monto (`tolerancia_pct` existe pero no se aplica). Si falta, se muestra "monto sin definir".
-- **Pago repetido:** un vencimiento se concilia con un solo pago; un segundo pago que calce con el mismo vencimiento no lo duplica, se marca como alerta para revisión.
-- **sin_informacion:** si no hay estado de cuenta leído para la cuenta y el periodo, el vencimiento queda "sin información", no "vencido".
+- **Pago repetido:** un solo pago concilia el vencimiento. Dos pagos de la misma obligación en el mismo periodo son una inconsistencia: el vencimiento queda "pagado con inconsistencia" para revisión.
+- **sin_informacion:** no significa "pago no aparece" ni "vencido". Se muestra como un problema de cobertura de datos, no como alerta de pago.
+- **Avisos:** 3 días antes del vencimiento (parámetro `aviso_dias`). Llegan por tablero y por correo; el correo solo se genera como borrador, para todo el equipo de Tesorería.
+- **Acceso:** en el piloto todos ven todo; el campo "responsable" es opcional.
+- **Fuentes:** por ahora solo Excel. PDF y carpetas de OneDrive llegan después, con TI.
 - **Banco y moneda de la cuenta:** editables a mano por Tesorería; la importación ya no los pisa.
 - **Frecuencia por defecto:** mensual (supuesto, parámetro `frecuencia_defecto`).
-- **Estilo:** paleta Garnier, contraste verificado (`npm run contraste`), todo estado con etiqueta de texto además del color.
-- Los supuestos se marcan en código, README y pantalla ("Por confirmar con Tesorería").
+- **Estilo:** paleta Garnier, contraste verificado (`npm run contraste`), todo estado con etiqueta de texto además del color. El aplicativo debe ser muy intuitivo: alguien nuevo lo usa sin explicación.
+
+## Cómo trabajar
+- Responder en español y de forma concisa.
+- Marcar los supuestos en código, README y pantalla ("Por confirmar con Tesorería").
+- Si hay dudas, preguntar antes de suponer.
+- No empezar un hito sin aprobación.
 
 ## Hitos
 | Hito | Alcance | Estado |
 |---|---|---|
-| 1 | Esqueleto Backend/Frontend, modelo, parámetros y pantalla Configuración | Integrado en `main` |
-| 2 | Importación de estados de cuenta, cobertura y Archivos importados | Integrado en `main` (PR #1) |
-| 3 | Catálogo de obligaciones y generación de vencimientos | En curso |
-| 4 | Cruce pagos ↔ vencimientos y cálculo de estados | Pendiente |
-| 5+ | Avisos, autenticación y roles, despliegue con TI | Por definir |
+| 1 | Esqueleto, modelo, parámetros y Configuración | Integrado en `main` |
+| 2 | Importación de estados de cuenta y cobertura | Integrado en `main` (PR #1) |
+| 3 | Catálogo y generación de vencimientos | En curso |
+| 4 | Cruce y cálculo de estados | Pendiente |
+| 5 | Inconsistencias, avisos y borradores de correo | Pendiente |
+| 6 | Tablero, proyección y revisión humana | Pendiente |
+
+Después de los hitos, con TI: autenticación y roles, Docker, base de datos de producción y despliegue.
