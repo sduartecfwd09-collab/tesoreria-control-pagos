@@ -18,7 +18,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx seed/seed.ts",
     "db:setup": "prisma generate && prisma db push && tsx seed/seed.ts",
-    "importar": "tsx src/cli/importar.ts"
+    "importar": "tsx src/cli/importar.ts",
+    "catalogo": "tsx src/cli/catalogo.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",
