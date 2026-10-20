@@ -1,6 +1,6 @@
 import type {
   CambiosObligacion, Categoria, Cobertura, Cuenta, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
-  Parametro, Regeneracion, ResumenCatalogo, ResumenGeneracion, Sociedad, Vencimiento,
+  Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, ResumenGeneracion, Sociedad, Vencimiento,
 } from "./tipos";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
@@ -55,6 +55,8 @@ export const api = {
   listarCuentas: async () => (await pedir<{ datos: Cuenta[] }>("/api/cuentas")).datos,
 
   listarObligaciones: (f: FiltroObligaciones) => pedir<Pagina<Obligacion>>(`/api/obligaciones${consulta(f)}`),
+  importarCatalogo: async () =>
+    (await pedir<{ datos: ResultadoImportacionCatalogo }>("/api/catalogo/importar", { method: "POST" })).datos,
   resumenCatalogo: async () => (await pedir<{ datos: ResumenCatalogo }>("/api/obligaciones/resumen")).datos,
   crearObligacion: (c: CambiosObligacion) =>
     pedir<{ datos: Obligacion; regeneracion: Regeneracion }>("/api/obligaciones", { method: "POST", body: JSON.stringify(c) }),

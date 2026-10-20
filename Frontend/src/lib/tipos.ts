@@ -190,6 +190,15 @@ export interface ResumenCatalogo {
   porCategoria: Record<string, number>;
 }
 
+export interface ResultadoImportacionCatalogo {
+  filasLeidas: number;
+  creadas: number;
+  actualizadas: number;
+  sinCambios: number;
+  noEnArchivo: number;
+  problemas: { fila: number; motivo: string; importada: boolean }[];
+}
+
 export type EstadoVencimiento = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion";
 
 export interface Vencimiento {
