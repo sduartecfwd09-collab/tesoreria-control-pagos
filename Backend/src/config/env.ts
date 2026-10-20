@@ -12,6 +12,7 @@ const esquema = z.object({
     .preprocess(vacioAUndefined, z.string().default("http://localhost:3000"))
     .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean)),
   STATEMENTS_ROOT: opcional(z.string()),
+  CATALOGO_FILE: opcional(z.string()),
   MAIL_DRAFTS_DIR: z.preprocess(vacioAUndefined, z.string().default("./borradores")),
   SMTP_HOST: opcional(z.string()),
   SMTP_PORT: opcional(z.coerce.number().int().min(1).max(65535)),
