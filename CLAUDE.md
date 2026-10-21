@@ -13,6 +13,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - Se trabaja en la rama `sarai`. Se integra a `main` por PR con **merge commit**.
 - Commits pequeños, uno por tarea, con prefijo convencional en español (`feat(backend):`, `feat(frontend):`, `chore:`, `docs:`, `test:`).
 - `git status` antes de cada commit. **Push solo cuando se pida.**
+- **Sin atribución a Claude:** los commits no llevan `Co-Authored-By` y los PR no llevan «Generated with Claude Code».
 - Cada hito termina con reporte y espera aprobación antes del siguiente.
 
 ## Arquitectura
