@@ -28,8 +28,11 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - **Monto sin definir:** el monto esperado es opcional; en el piloto no se valida el monto (`tolerancia_pct` existe pero no se aplica). Si falta, se muestra "monto sin definir".
 - **Pago repetido:** un solo pago concilia el vencimiento. Dos pagos de la misma obligación en el mismo periodo son una inconsistencia: el vencimiento queda "pagado con inconsistencia" para revisión.
 - **sin_informacion:** no significa "pago no aparece" ni "vencido". Se muestra como un problema de cobertura de datos, no como alerta de pago.
-- **Avisos:** 3 días antes del vencimiento (parámetro `aviso_dias`). Llegan por tablero y por correo; el correo solo se genera como borrador, para todo el equipo de Tesorería.
-- **Acceso:** en el piloto todos ven todo; el campo "responsable" es opcional.
+- **Avisos:** 3 días antes del vencimiento (parámetro `aviso_dias`). Llegan por tablero y por correo (el correo solo como borrador) al responsable asignado y al encargado principal; sin responsable, solo al encargado.
+- **Roles:** Encargado principal (ve todo, asigna o cambia responsables, crea y desactiva obligaciones) y Responsable (ve y trabaja solo lo asignado: «Mis pagos»). El responsable se elige de la lista de usuarios, no es texto libre, y cada cambio queda en un historial. El inicio de sesión con las cuentas de la empresa se coordina con TI.
+- **Estados y colores (diseño B):** Vencido rojo `#B3261E`, Por vencer ámbar `#F2A900`, Pagado verde, Revisar verde con borde negro, Programado borde punteado; siempre con ícono y texto. Programado = faltan más de 7 días.
+- **Cambios manuales:** toda modificación hecha a mano pide confirmación mostrando el valor de antes y el de después.
+- **Catálogo:** sociedad y categoría admiten «Otra…» para crear una nueva desde el alta.
 - **Fuentes:** por ahora solo Excel. PDF y carpetas de OneDrive llegan después, con TI.
 - **Banco y moneda de la cuenta:** editables a mano por Tesorería; la importación ya no los pisa.
 - **Frecuencia por defecto:** mensual (supuesto, parámetro `frecuencia_defecto`).
