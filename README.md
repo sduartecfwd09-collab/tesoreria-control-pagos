@@ -109,6 +109,9 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 - **Vulnerabilidades:** `eslint-config-next` (5 altas, solo desarrollo) y `uuid` transitiva de exceljs (2 moderadas); revisar antes de entregar a TI. No usar `npm audit fix --force`.
 - **exceljs 4.4.0** no tiene versiones nuevas desde dic. 2024; no abre libros con dibujos incrustados (se resuelve con una copia en memoria sin dibujos, `src/ingest/quitar-dibujos.ts`).
 - **Autenticación y roles:** pendientes de definir con TI.
-- **Montos de 32 bits:** los campos de monto son `Int` de Prisma (máximo ₡21 474 836,47 en centavos). El API rechaza montos mayores con un mensaje claro; si Tesorería maneja montos mayores (p. ej. CCSS), migrar a `BigInt`.
+- **Montos de 32 bits (confirmado, se resuelve en el próximo hito):** los campos de monto son `Int` de Prisma (máximo ₡21 474 836,47 en centavos) y Tesorería confirmó que hay montos mayores. Hay que migrar montos de movimientos, obligaciones, vencimientos y conciliaciones a `BigInt` antes del cruce automático.
+- **Proveedor duplicado en el catálogo:** «JASEC Internet» es el mismo proveedor que «JASEC». Falta unificarlo en la importación (alias de proveedor).
+- **Aviso de n.º de servicio repetido al guardar:** hoy se detecta y se muestra en el resumen; falta advertirlo al crear o editar una obligación antes de guardar.
+- **Diseño nuevo pendiente de aplicar:** las pantallas actuales todavía muestran textos internos («pronto», «Por confirmar con Tesorería») y el botón «Generar vencimientos»; se reemplazan con el diseño aprobado en la maqueta (ver `CLAUDE.md`).
 - **TanStack Table 8.21.3:** se eligió la línea 8 (madura) en vez de la 9, publicada en agosto de 2026 y aún con correcciones frecuentes. `npm run lint` muestra 2 advertencias del React Compiler («incompatible library») en las tablas: el compilador no optimiza esos componentes, pero funcionan bien.
 - **Alertas al vuelo:** `GET /api/obligaciones` recalcula los identificadores repetidos sobre todo el catálogo en cada consulta; es trivial con ~65 obligaciones, revisar si el catálogo crece mucho.

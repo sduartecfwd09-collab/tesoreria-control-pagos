@@ -25,7 +25,9 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 
 ## Decisiones tomadas
 - **Ventana de cruce:** ±3 días calendario alrededor de la fecha esperada, y puede cruzar de un mes a otro (parámetro `ventana_dias`).
-- **Monto:** el monto a pagar lo digita Tesorería (opcional); en el piloto no se valida contra el pago (`tolerancia_pct` existe pero no se aplica). Si falta, se muestra "Sin monto".
+- **Monto:** el monto a pagar lo digita Tesorería (opcional); en el piloto no se valida contra el pago (`tolerancia_pct` existe pero no se aplica). Si falta, se muestra "Sin monto". **Hay montos mayores a ₡21,4 millones:** los campos de monto pasan de `Int` a `BigInt` antes del cruce automático.
+- **Proveedores:** «JASEC Internet» es el mismo proveedor que «JASEC»; se unifican en la importación.
+- **N.º de servicio repetido:** Tesorería a veces repite un número sin notarlo; el aviso debe ser visible (Obligaciones e Inicio) y advertir al crear o editar una obligación antes de guardar.
 - **Calendario automático:** el sistema mantiene solo los vencimientos (mes actual y siguientes); no hay botón «Generar vencimientos».
 - **Pago repetido:** un solo pago concilia el vencimiento. Dos pagos de la misma obligación en el mismo periodo son una inconsistencia: el vencimiento queda en «Revisar» y se resuelve en su ficha eligiendo el pago correcto.
 - **sin_informacion:** no significa "pago no aparece" ni "vencido". Se muestra como un problema de cobertura de datos, no como alerta de pago.
@@ -52,11 +54,11 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 |---|---|---|
 | 1 | Esqueleto, modelo, parámetros y Configuración | Integrado en `main` |
 | 2 | Importación de estados de cuenta y cobertura | Integrado en `main` (PR #1) |
-| 3 | Catálogo y generación de vencimientos | Terminado, por aprobar |
-| 4 | Diseño aprobado en Pagos del mes y Obligaciones; cruce automático y estados, con ficha del pago | Pendiente |
+| 3 | Catálogo y generación de vencimientos | Aprobado; PR a `main` |
+| 4 | Diseño aprobado en Pagos del mes y Obligaciones; montos a `BigInt`; cruce automático y estados, con ficha del pago | Siguiente |
 | 5 | Avisos (campana) y borradores de correo; Estados de cuenta con movimientos sin obligación | Pendiente |
 | 6 | Inicio (tablero), proyección y Configuración con el diseño nuevo | Pendiente |
 
-Diseño de referencia: maqueta local en `Escritorio\Maqueta Control de pagos` (fuera del repositorio, datos de ejemplo).
+Diseño de referencia: maqueta local en `Escritorio\Maqueta Control de pagos` (fuera del repositorio, datos de ejemplo). El porqué de cada decisión, con fecha: `docs/registro-de-decisiones.md`.
 
 Después de los hitos, con TI: autenticación y roles, Docker, base de datos de producción y despliegue.
