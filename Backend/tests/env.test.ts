@@ -3,10 +3,11 @@ import { leerEnv } from "../src/config/env.js";
 
 describe("leerEnv", () => {
   it("acepta SMTP_* vacío y aplica valores por defecto", () => {
-    const e = leerEnv({ DATABASE_URL: "file:./x.db", SMTP_HOST: "", SMTP_PORT: "", STATEMENTS_ROOT: "" });
+    const e = leerEnv({ DATABASE_URL: "file:./x.db", SMTP_HOST: "", SMTP_PORT: "", STATEMENTS_ROOT: "", CATALOGO_FILE: "" });
     expect(e.SMTP_HOST).toBeUndefined();
     expect(e.SMTP_PORT).toBeUndefined();
     expect(e.STATEMENTS_ROOT).toBeUndefined();
+    expect(e.CATALOGO_FILE).toBeUndefined();
     expect(e.PORT).toBe(3001);
     expect(e.CORS_ORIGINS).toEqual(["http://localhost:3000"]);
   });

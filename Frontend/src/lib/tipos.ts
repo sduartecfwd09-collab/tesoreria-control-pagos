@@ -69,3 +69,169 @@ export interface Importaciones {
   resumen: { archivos: number; leidos: number; conError: number; movimientos: number };
   enCurso: boolean;
 }
+
+export interface Pagina<T> {
+  datos: T[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+export interface Sociedad {
+  id: number;
+  codigo: string;
+  nombre: string | null;
+  obligaciones: number;
+  cuentas: number;
+}
+
+export interface Categoria {
+  id: number;
+  nombre: string;
+  obligaciones: number;
+}
+
+export interface Cuenta {
+  id: number;
+  sociedad: string;
+  numero: string;
+  banco: string | null;
+  moneda: string | null;
+}
+
+export type Frecuencia = "mensual" | "bimestral" | "trimestral" | "semestral" | "anual";
+export type Moneda = "CRC" | "USD";
+
+export type CodigoEtiqueta =
+  | "falta_dia" | "falta_monto" | "falta_cuenta" | "falta_responsable" | "falta_mes_arranque"
+  | "por_confirmar" | "id_repetido" | "formato_iban";
+
+export interface EtiquetaObligacion {
+  codigo: CodigoEtiqueta;
+  texto: string;
+  ayuda: string;
+}
+
+export interface Obligacion {
+  id: number;
+  sociedadId: number;
+  sociedad: string;
+  categoriaId: number;
+  categoria: string;
+  proveedor: string;
+  identificador: string;
+  diaEsperadoPago: number | null;
+  diaEditado: boolean;
+  frecuencia: Frecuencia;
+  frecuenciaPorConfirmar: boolean;
+  mesArranque: number | null;
+  montoEsperado: number | null; // centavos
+  moneda: Moneda;
+  monedaPorConfirmar: boolean;
+  cuentaEsperada: { id: number; numero: string; banco: string | null } | null;
+  responsable: string | null;
+  activa: boolean;
+  origen: "catalogo" | "manual";
+  actualizado: string;
+  etiquetas: EtiquetaObligacion[];
+}
+
+/** Campos que se envían al crear o editar (en la edición solo los que cambiaron). */
+export interface CambiosObligacion {
+  sociedad?: string;
+  categoriaId?: number;
+  proveedor?: string;
+  identificador?: string;
+  diaEsperadoPago?: number | null;
+  frecuencia?: Frecuencia;
+  frecuenciaPorConfirmar?: boolean;
+  mesArranque?: number | null;
+  montoEsperado?: number | null;
+  moneda?: Moneda;
+  monedaPorConfirmar?: boolean;
+  cuentaEsperadaId?: number | null;
+  responsable?: string | null;
+  activa?: boolean;
+}
+
+export interface Regeneracion {
+  creados: number;
+  actualizados: number;
+  eliminados: number;
+  protegidos: number;
+}
+
+export interface FiltroObligaciones {
+  sociedad?: string;
+  categoria?: number;
+  activa?: boolean;
+  q?: string;
+  falta?: "monto" | "cuenta" | "responsable" | "dia";
+  pagina: number;
+  porPagina: number;
+}
+
+export interface ResumenCatalogo {
+  total: number;
+  activas: number;
+  inactivas: number;
+  sinDia: number;
+  sinMonto: number;
+  sinCuenta: number;
+  sinResponsable: number;
+  sinMesArranque: number;
+  frecuenciaPorConfirmar: number;
+  monedaPorConfirmar: number;
+  identificadoresRepetidos: { sociedad: string; identificador: string; proveedores: string[]; obligaciones: number[] }[];
+  formatoIban: { id: number; sociedad: string; proveedor: string; identificador: string }[];
+  sociedadesSinObligaciones: string[];
+  porSociedad: Record<string, number>;
+  porCategoria: Record<string, number>;
+}
+
+export interface ResultadoImportacionCatalogo {
+  filasLeidas: number;
+  creadas: number;
+  actualizadas: number;
+  sinCambios: number;
+  noEnArchivo: number;
+  problemas: { fila: number; motivo: string; importada: boolean }[];
+}
+
+export type EstadoVencimiento = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion";
+
+export interface Vencimiento {
+  id: number;
+  obligacionId: number;
+  sociedad: string;
+  categoria: string;
+  proveedor: string;
+  identificador: string;
+  frecuencia: Frecuencia;
+  periodo: string;
+  fecha: string;
+  montoEsperado: number | null;
+  moneda: Moneda;
+  estado: EstadoVencimiento;
+  conciliado: boolean;
+  futuro: boolean;
+}
+
+export interface FiltroVencimientos {
+  sociedad?: string;
+  categoria?: number;
+  periodo?: string;
+  q?: string;
+  pagina: number;
+  porPagina: number;
+}
+
+export interface ResumenGeneracion {
+  desde: string;
+  hasta: string;
+  creados: number;
+  yaExistentes: number;
+  porPeriodo: { periodo: string; creados: number; yaExistentes: number }[];
+  omitidas: { obligacionId: number; motivo: string; sociedad: string; proveedor: string; identificador: string; texto: string }[];
+}

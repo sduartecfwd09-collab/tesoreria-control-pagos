@@ -1,0 +1,166 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { crearApp } from "../src/app.js";
+import { env } from "../src/config/env.js";
+import { prisma } from "../src/db.js";
+import { catalogo } from "./helpers/catalogo.js";
+import { vaciarImportaciones } from "./helpers/db.js";
+
+let app: Awaited<ReturnType<typeof crearApp>>;
+let dir: string;
+const original = env.CATALOGO_FILE;
+type Ob = { id: number; identificador: string; proveedor: string; sociedad: string; etiquetas: { codigo: string }[] } & Record<string, unknown>;
+
+const listar = async (qs = "") => (await app.inject(`/api/obligaciones${qs}`)).json() as { datos: Ob[]; total: number; paginas: number };
+const porId = async (identificador: string, proveedor?: string) =>
+  (await listar("?porPagina=500")).datos.find((o) => o.identificador === identificador && (!proveedor || o.proveedor === proveedor))!;
+const patch = (id: number, payload: object) => app.inject({ method: "PATCH", url: `/api/obligaciones/${id}`, payload });
+
+beforeAll(async () => {
+  await vaciarImportaciones();
+  await prisma.sociedad.create({ data: { codigo: "DM" } }); // sociedad sin obligaciones
+  dir = mkdtempSync(path.join(tmpdir(), "catalogo-api-"));
+  writeFileSync(path.join(dir, "catalogo.xlsx"), await catalogo());
+  writeFileSync(path.join(dir, "sin-cabecera.xlsx"), await catalogo([], { cabecera: ["Otra", "Cosa"] }));
+  app = await crearApp();
+});
+afterAll(async () => {
+  env.CATALOGO_FILE = original;
+  await app.close();
+  rmSync(dir, { recursive: true, force: true });
+  await vaciarImportaciones();
+});
+
+describe("POST /api/catalogo/importar", () => {
+  it("responde 422 si CATALOGO_FILE falta, no existe o no tiene la cabecera", async () => {
+    const importar = () => app.inject({ method: "POST", url: "/api/catalogo/importar" });
+    env.CATALOGO_FILE = undefined;
+    expect((await importar()).json()).toEqual({ error: "CATALOGO_FILE no está configurada en el servidor" });
+    env.CATALOGO_FILE = path.join(dir, "no-existe.xlsx");
+    expect((await importar()).statusCode).toBe(422);
+    env.CATALOGO_FILE = path.join(dir, "sin-cabecera.xlsx");
+    expect((await importar()).json().error).toMatch(/No se encontró la cabecera/);
+  });
+
+  it("importa el catálogo y reimportar no duplica", async () => {
+    env.CATALOGO_FILE = path.join(dir, "catalogo.xlsx");
+    const r1 = await app.inject({ method: "POST", url: "/api/catalogo/importar" });
+    expect(r1.statusCode).toBe(200);
+    expect(r1.json().datos).toMatchObject({ creadas: 6, porSociedad: { AAA: 4, BBB: 2 } });
+    const r2 = (await app.inject({ method: "POST", url: "/api/catalogo/importar" })).json();
+    expect(r2.datos).toMatchObject({ creadas: 0, sinCambios: 6 });
+  });
+});
+
+describe("catálogo: lectura", () => {
+  it("GET /api/sociedades incluye las que no tienen obligaciones y GET /api/categorias cuenta", async () => {
+    const s = (await app.inject("/api/sociedades")).json().datos;
+    expect(s.map((x: { codigo: string }) => x.codigo)).toEqual(["AAA", "BBB", "DM"]);
+    expect(s.find((x: { codigo: string }) => x.codigo === "DM").obligaciones).toBe(0);
+    const c = (await app.inject("/api/categorias")).json().datos;
+    expect(c.find((x: { nombre: string }) => x.nombre === "Electricidad").obligaciones).toBe(3);
+  });
+
+  it("GET /api/obligaciones filtra por sociedad, categoría, activa, búsqueda y faltantes, y pagina", async () => {
+    expect((await listar("?sociedad=aaa")).total).toBe(4);
+    const tel = (await app.inject("/api/categorias")).json().datos.find((x: { nombre: string }) => x.nombre === "Telecom");
+    expect((await listar(`?categoria=${tel.id}`)).total).toBe(2);
+    expect((await listar("?q=luz")).total).toBe(3);
+    expect((await listar("?q=0001234")).total).toBe(2);
+    expect((await listar("?falta=monto")).total).toBe(6);
+    expect((await listar("?activa=false")).total).toBe(0);
+    const pag = await listar("?porPagina=4&pagina=2");
+    expect(pag).toMatchObject({ total: 6, paginas: 2 });
+    expect(pag.datos).toHaveLength(2);
+  });
+
+  it("valida los filtros", async () => {
+    for (const qs of ["?activa=si", "?categoria=abc", "?falta=todo", "?pagina=0", "?porPagina=1000"]) {
+      const r = await app.inject(`/api/obligaciones${qs}`);
+      expect(r.statusCode, qs).toBe(400);
+      expect(r.json().error).toEqual(expect.any(String));
+    }
+  });
+
+  it("cada obligación trae sus etiquetas, incluidas las alertas por confirmar con Tesorería", async () => {
+    const o = await porId("00012345");
+    expect(o).toMatchObject({ sociedad: "AAA", diaEsperadoPago: 15, frecuencia: "mensual", moneda: "CRC", montoEsperado: null, cuentaEsperada: null });
+    expect(o.etiquetas.map((e) => e.codigo)).toEqual(["falta_monto", "falta_cuenta", "falta_responsable", "por_confirmar"]);
+    expect((await porId("77777777", "Fono Uno")).etiquetas.map((e) => e.codigo)).toContain("id_repetido");
+    expect((await porId("CR12000000000000000001")).etiquetas.map((e) => e.codigo)).toContain("formato_iban");
+  });
+
+  it("GET /api/obligaciones/resumen reporta las alertas de calidad", async () => {
+    const r = (await app.inject("/api/obligaciones/resumen")).json().datos;
+    expect(r).toMatchObject({
+      total: 6, activas: 6, sinMonto: 6, sinCuenta: 6, sinResponsable: 6, sinDia: 0,
+      sociedadesSinObligaciones: ["DM"], porSociedad: { AAA: 4, BBB: 2, DM: 0 },
+      porCategoria: { Electricidad: 3, Telecom: 2, CCSS: 1 },
+    });
+    expect(r.identificadoresRepetidos).toEqual([expect.objectContaining({ sociedad: "AAA", identificador: "77777777", proveedores: ["Fono Uno", "Fono Dos"] })]);
+    expect(r.formatoIban).toEqual([expect.objectContaining({ sociedad: "BBB", proveedor: "Luz Dos" })]);
+  });
+});
+
+describe("catálogo: edición y alta", () => {
+  it("PATCH guarda los campos editables, confirma los supuestos y protege el día de la reimportación", async () => {
+    const o = await porId("00012346");
+    const r = await patch(o.id, { frecuencia: "trimestral", mesArranque: 2, diaEsperadoPago: 28, montoEsperado: 1_500_000, moneda: "USD", responsable: " Ana " });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().datos).toMatchObject({
+      frecuencia: "trimestral", frecuenciaPorConfirmar: false, mesArranque: 2, diaEsperadoPago: 28, diaEditado: true,
+      montoEsperado: 1_500_000, moneda: "USD", monedaPorConfirmar: false, responsable: "Ana",
+    });
+    await app.inject({ method: "POST", url: "/api/catalogo/importar" });
+    expect(await porId("00012346")).toMatchObject({ diaEsperadoPago: 28, frecuencia: "trimestral", montoEsperado: 1_500_000, responsable: "Ana" });
+    // al volver a mensual se limpia el mes de arranque
+    expect((await patch(o.id, { frecuencia: "mensual" })).json().datos.mesArranque).toBeNull();
+  });
+
+  it("PATCH desactiva sin borrar, y al desactivar una del par repetido la alerta desaparece", async () => {
+    const o = await porId("77777777", "Fono Dos");
+    expect((await patch(o.id, { activa: false })).json().datos.activa).toBe(false);
+    expect((await listar("?activa=false")).total).toBe(1);
+    expect((await app.inject("/api/obligaciones/resumen")).json().datos.identificadoresRepetidos).toEqual([]);
+    await patch(o.id, { activa: true });
+  });
+
+  it("PATCH valida con mensajes claros y el campo afectado", async () => {
+    const o = await porId("00012345");
+    const otra = await prisma.sociedad.findUniqueOrThrow({ where: { codigo: "BBB" } });
+    const ajena = await prisma.cuenta.create({ data: { sociedadId: otra.id, numero: "CR00000000000000000077" } });
+    const casos: [object, number, string, RegExp][] = [
+      [{ proveedor: "Otro" }, 422, "proveedor", /no se puede editar/],
+      [{ diaEsperadoPago: 0 }, 422, "diaEsperadoPago", /1 a 31/],
+      [{ mesArranque: 4 }, 422, "mesArranque", /solo aplica/],
+      [{ cuentaEsperadaId: ajena.id }, 422, "cuentaEsperadaId", /otra sociedad/],
+      [{ cuentaEsperadaId: 999_999 }, 422, "cuentaEsperadaId", /no existe/],
+      [{ montoEsperado: "mucho" }, 422, "montoEsperado", /número/],
+    ];
+    for (const [payload, codigo, campo, msg] of casos) {
+      const r = await patch(o.id, payload);
+      expect(r.statusCode, JSON.stringify(payload)).toBe(codigo);
+      expect(r.json()).toMatchObject({ campo, error: expect.stringMatching(msg) });
+    }
+    expect((await patch(o.id, {})).json().error).toBe("No se indicó ningún cambio");
+    expect((await patch(999_999, { activa: true })).statusCode).toBe(404);
+    expect((await patch(0, { activa: true })).statusCode).toBe(400);
+  });
+
+  it("POST crea una obligación manual y rechaza duplicados y datos inválidos", async () => {
+    const cat = (await app.inject("/api/categorias")).json().datos[0];
+    const crear = (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload });
+    const r = await crear({ sociedad: "dm", categoriaId: cat.id, proveedor: "Agua Uno", identificador: "000555", diaEsperadoPago: 5 });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().datos).toMatchObject({ sociedad: "DM", identificador: "000555", origen: "manual", frecuencia: "mensual", frecuenciaPorConfirmar: true });
+    expect((await app.inject("/api/obligaciones/resumen")).json().datos.sociedadesSinObligaciones).toEqual([]);
+
+    const dup = await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "AGUA UNO", identificador: "000555" });
+    expect(dup.statusCode).toBe(409);
+    expect((await crear({ sociedad: "XYZ", categoriaId: cat.id, proveedor: "P", identificador: "1" })).json()).toMatchObject({ campo: "sociedad" });
+    expect((await crear({ sociedad: "DM", categoriaId: 999_999, proveedor: "P", identificador: "1" })).json()).toMatchObject({ campo: "categoriaId" });
+    expect((await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "P" })).json()).toMatchObject({ campo: "identificador" });
+  });
+});

@@ -1,0 +1,35 @@
+# Registro de decisiones · Control de pagos de Tesorería
+
+Qué se decidió, cuándo y por qué. Las reglas vigentes, en resumen, están en `CLAUDE.md`.
+Sin datos reales: no se anotan identificadores, montos ni descripciones de movimientos.
+
+## Hito 3 · Catálogo y vencimientos (cerrado el 2026-10-21)
+
+| Fecha | Decisión | Motivo |
+|---|---|---|
+| 2026-10-20 | El catálogo se importa desde la tabla de pagos frecuentes; reimportar no duplica ni pisa lo editado por Tesorería. | Tesorería completa a mano frecuencia, monto, cuenta y responsable. |
+| 2026-10-20 | Un día de pago inválido no descarta la fila: se importa sin día y se reporta. | No perder obligaciones en silencio. |
+| 2026-10-20 | Frecuencia no mensual sin mes de arranque: no genera vencimientos y se avisa; el mes se puede cambiar a mano. | Evitar fechas inventadas. |
+| 2026-10-20 | Resultado del catálogo real: 65 obligaciones, 6 sociedades, 3 categorías; agosto y septiembre 2026 = 130 vencimientos, igual que la Fase 1. | Verificación contra el conteo manual. |
+| 2026-10-20 | La interfaz no muestra referencias internas (hitos, «pronto», «por confirmar», mensajes técnicos). | Se presenta al equipo de Tesorería; es una herramienta, no un archivo de información. |
+| 2026-10-20 | Rediseño con maqueta aprobada antes de tocar el código. | Que el equipo quiera usarla; validar antes de construir. |
+| 2026-10-20 | Colores del diseño B: Vencido rojo, Por vencer ámbar, Pagado verde, Revisar con borde negro, Programado punteado; siempre con ícono y texto. | Lo urgente debe llamar la atención; accesibilidad. |
+| 2026-10-20 | Calendario de vencimientos automático, sin botón «Generar». | Era un paso técnico que Tesorería no debería hacer. |
+| 2026-10-20 | El monto a pagar lo digita Tesorería. | Ningún archivo trae el monto de la factura. |
+| 2026-10-20 | Pagos del mes muestra primero lo urgente; al detectarse el pago en el estado de cuenta pasa solo a «Pagado». | Automatizar el seguimiento. |
+| 2026-10-20 | Toda modificación manual pide confirmación con el valor de antes y el de después. | Evitar cambios por error. |
+| 2026-10-20 | Roles: encargado principal (ve todo y asigna) y responsable (solo lo suyo, «Mis pagos»); responsable elegido de una lista, con historial. Inicio de sesión con TI. | Que lo asignado le llegue a la persona correcta y evitar conflictos. |
+| 2026-10-20 | Avisos al responsable y al encargado principal, no a todo el equipo. | Mismo motivo que los roles. |
+| 2026-10-20 | Sociedad y categoría admiten «Otra…» al crear una obligación. | Pueden aparecer servicios o empresas nuevas. |
+| 2026-10-21 | Se desactiva el servicio (no la factura), en tres niveles: por servicio, por proveedor (en todas las sociedades o en una) y por sociedad. | Un proveedor como el ICE da varios servicios y se puede quitar uno sin quitar los demás. |
+| 2026-10-21 | El estado del pago se calcula con la fecha real y se puede cambiar a mano con motivo obligatorio; queda marcado «Manual» y se puede volver a automático. | El sistema puede equivocarse (pago no detectado o rechazado por el banco). |
+| 2026-10-21 | Tocar una fila abre su ficha flotante, con una sola opción «Cambiar estado»; el menú se puede plegar. | Una sola forma de trabajar en toda la plataforma y más espacio para las tablas. |
+| 2026-10-21 | Menú: Inicio · Pagos del mes · Obligaciones · Estados de cuenta · Configuración, con avisos en una campana. Sin sección de Conciliación. | La conciliación repetía lo de Pagos del mes; el cruce corre por detrás y se corrige en la ficha del pago. |
+| 2026-10-21 | Hay montos mayores a ₡21,4 millones: los montos pasan a `BigInt` antes del cruce automático. | Confirmado por Tesorería. |
+| 2026-10-21 | «JASEC Internet» es el mismo proveedor que «JASEC». | Confirmado por Tesorería. |
+| 2026-10-21 | El aviso de n.º de servicio repetido debe ser visible y advertir al guardar. | Tesorería a veces repite un número sin notarlo. |
+
+## Pendientes con Tesorería
+
+- Cuál es el número correcto en el identificador repetido de GGDI y en el de JASEC (ZFL) con formato de IBAN.
+- Completar monto, cuenta de pago y responsable de las obligaciones.
