@@ -32,7 +32,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - **Roles:** Encargado principal (ve todo, asigna o cambia responsables, crea y desactiva obligaciones) y Responsable (ve y trabaja solo lo asignado: «Mis pagos»). El responsable se elige de la lista de usuarios, no es texto libre, y cada cambio queda en un historial. El inicio de sesión con las cuentas de la empresa se coordina con TI.
 - **Estados y colores (diseño B):** Vencido rojo `#B3261E`, Por vencer ámbar `#F2A900`, Pagado verde, Revisar verde con borde negro, Programado borde punteado; siempre con ícono y texto. Programado = faltan más de 7 días.
 - **Cambios manuales:** toda modificación hecha a mano pide confirmación mostrando el valor de antes y el de después.
-- **Catálogo:** sociedad y categoría admiten «Otra…» para crear una nueva desde el alta. Lo que se activa o desactiva es el servicio (no la factura); además, el encargado puede desactivar o reactivar todos los servicios de un proveedor de una vez.
+- **Catálogo:** sociedad y categoría admiten «Otra…» para crear una nueva desde el alta. Lo que se activa o desactiva es el servicio (no la factura), en tres niveles: por servicio, por proveedor (en todas las sociedades o solo en una) y por sociedad; los dos últimos los hace el encargado.
 - **Fuentes:** por ahora solo Excel. PDF y carpetas de OneDrive llegan después, con TI.
 - **Banco y moneda de la cuenta:** editables a mano por Tesorería; la importación ya no los pisa.
 - **Frecuencia por defecto:** mensual (supuesto, parámetro `frecuencia_defecto`).
