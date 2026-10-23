@@ -28,6 +28,7 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-21 | Hay montos mayores a ₡21,4 millones: los montos pasan a `BigInt` antes del cruce automático. | Confirmado por Tesorería. |
 | 2026-10-21 | «JASEC Internet» es el mismo proveedor que «JASEC». | Confirmado por Tesorería. |
 | 2026-10-21 | El aviso de n.º de servicio repetido debe ser visible y advertir al guardar. | Tesorería a veces repite un número sin notarlo. |
+| 2026-10-23 | CLAUDE.md unificado con las decisiones del 21 y 22 de octubre. | Un solo documento coherente, con lo pendiente de aprobar en una sección aparte. |
 
 ## Pendientes con Tesorería
 

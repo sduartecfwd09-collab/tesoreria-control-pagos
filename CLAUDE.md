@@ -34,16 +34,16 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - **Fecha del catálogo:** el día del catálogo («15 DIA») es la fecha normal de pago aproximada, no el vencimiento.
 - **Calendario automático:** el sistema mantiene solo los vencimientos (mes actual y siguientes); no hay botón «Generar vencimientos».
 - **Pago repetido:** un solo pago concilia el vencimiento. Dos pagos de la misma obligación en el mismo periodo son una inconsistencia: el vencimiento queda en «Revisar» y se resuelve en su ficha eligiendo el pago correcto.
-- **Sin información:** el estado «Sin información» no significa «pago no aparece» ni «vencido». Se muestra como un problema de cobertura de datos, no como alerta de pago. Existe además el estado «Pagado con atraso».
+- **Cobertura:** si no hay estado de cuenta de esa cuenta y mes, el vencimiento queda «Sin información». Este estado no significa «pago no aparece» ni «vencido».
 - **Proveedores:** «JASEC Internet» es el mismo proveedor que «JASEC»; se unifican en la importación.
 - **N.º de servicio repetido:** Tesorería a veces repite un número sin notarlo; el aviso debe ser visible (Obligaciones e Inicio) y advertir al crear o editar una obligación antes de guardar.
 - **Responsable y permisos:** el responsable es un campo de la obligación y se elige de la lista de usuarios (no es texto libre); cada cambio queda en un historial. «Ver todo» es un permiso, no una persona; el encargado principal es quien lo tiene. Quien no lo tiene ve y trabaja solo lo asignado («Mis pagos»). El filtro se aplica en el servidor. El inicio de sesión con las cuentas de la empresa se coordina con TI.
-- **Avisos:** cada usuario elige sus días de anticipación; `aviso_dias` queda solo como valor por defecto para quien no configure el suyo. Llegan por tablero (campana) y por correo, al responsable asignado y a quien tiene «Ver todo»; sin responsable, solo a esta última. El correo semanal sale los viernes a las 9:00 (hora de Costa Rica). Tesorería usa Outlook: HTML con tablas, estilos en línea, ~600 px de ancho y logo incrustado. En el piloto el correo es solo un borrador (`.eml` o HTML), no se envía.
-- **Fuentes:** por ahora solo Excel y CSV (sin PDF). Se configuran una o varias carpetas con la sociedad asignada por carpeta, sin estructura fija; se lee por contenido y se recorren las subcarpetas, con vista previa y exclusión de archivos antes de confirmar. Las carpetas de OneDrive llegan después, con TI. La carpeta de muestra es pequeña a propósito: el catálogo real tiene otra forma (una pestaña por sociedad, columnas por mes), así que el importador no asume la estructura de la muestra.
+- **Avisos:** cada usuario elige sus días de anticipación; `aviso_dias` queda como valor por defecto para quien no configure el suyo. Hay tablero con campana y un correo semanal fijo los viernes a las 9:00 (hora de Costa Rica). Tesorería usa Outlook: HTML con tablas, estilos en línea, ~600 px de ancho y logo incrustado. En el piloto el correo es solo un borrador (`.eml` o HTML), no se envía.
+- **Fuentes:** por ahora solo Excel y CSV (sin PDF). Se configuran una o varias carpetas con la sociedad asignada por carpeta, sin estructura fija; se lee por contenido y se recorren las subcarpetas, con vista previa y exclusión de archivos antes de confirmar. Piloto y demo: carpeta de OneDrive sincronizada en el computador. Producción: cada persona conecta su OneDrive (con TI). La carpeta de muestra es pequeña a propósito: el catálogo real tiene otra forma (una pestaña por sociedad, columnas por mes), así que el importador no asume la estructura de la muestra.
 - **Banco y moneda de la cuenta:** editables a mano por Tesorería; la importación ya no los pisa.
 - **Cambios manuales:** toda modificación hecha a mano pide confirmación mostrando el valor de antes y el de después.
 - **Catálogo:** sociedad y categoría admiten «Otra…» para crear una nueva desde el alta. Lo que se activa o desactiva es el servicio (no la factura), en tres niveles: por servicio, por proveedor (en todas las sociedades o solo en una) y por sociedad; los dos últimos los hace quien tiene «Ver todo».
-- **Estados y colores (diseño B):** Vencido, Por vencer, Pagado, Revisar y Programado, siempre con ícono y texto. Valores de trabajo, por confirmar: Vencido rojo `#B3261E`, Por vencer ámbar `#F2A900`, Pagado verde, Revisar verde con borde negro, Programado borde punteado. Programado = faltan más de 7 días.
+- **Estados y colores (diseño B):** Vencido, Por vencer, Pagado, Pagado con atraso, Revisar, Programado y Sin información, siempre con ícono y etiqueta de texto, nunca solo color. Valores de trabajo, por confirmar: Vencido rojo `#B3261E`, Por vencer ámbar `#F2A900`, Pagado verde, Pagado con atraso verde con borde ámbar `#F2A900`, Revisar verde con borde negro, Programado borde punteado, Sin información gris oscuro Garnier `#58585a` sobre fondo suave `#f4f4f4`. Programado: faltan más días que los días de aviso del usuario. «Sin información» es un problema de cobertura de datos, no una alerta de pago.
 - **Menú:** Inicio · Pagos del mes · Obligaciones · Estados de cuenta · Configuración, y avisos en una campana. No hay sección de Conciliación: el cruce corre por detrás y su resultado se ve y corrige en la ficha del pago (pago encontrado, unir a mano, quitar). Los movimientos del banco sin obligación se revisan en Estados de cuenta. Tocar una fila abre su ficha flotante; el menú se puede plegar.
 - **Estilo:** paleta Garnier, contraste verificado (`npm run contraste`), todo estado con etiqueta de texto además del color. El aplicativo debe ser muy intuitivo: alguien nuevo lo usa sin explicación.
 
@@ -59,7 +59,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 | Hito | Alcance | Estado |
 |---|---|---|
 | 1 | Esqueleto, modelo, parámetros y Configuración | Integrado en `main` |
-| 2 | Importación de estados de cuenta y cobertura | Integrado en `main` (PR #1) |
+| 2 | Importación de estados de cuenta y reporte de lectura por sociedad, cuenta y mes (leído, con error o falta) | Integrado en `main` (PR #1) |
 | 3 | Catálogo y generación de vencimientos | Aprobado; PR a `main` |
 | 4 | Diseño aprobado en Pagos del mes y Obligaciones; montos a `BigInt`; cruce automático y estados, con ficha del pago | Siguiente |
 | 5 | Avisos (campana) y borradores de correo; Estados de cuenta con movimientos sin obligación | Pendiente |
@@ -73,7 +73,11 @@ Después de los hitos, con TI: autenticación y roles, Docker, base de datos de 
 Nada de esta sección es una decisión vigente.
 - **Modelo de permisos:** «Ver todo» como permiso (siempre al menos una persona lo tiene) y filtro en el servidor. En el piloto, usuarios simulados con «Ver como».
 - **«Vencido»:** definición por decidir. Posible estado «Atrasado», con el margen como parámetro (supuesto).
-- **Colores de Vencido y Por vencer:** confirmar los valores de trabajo `#B3261E` y `#F2A900`.
-- **Cobertura de estados:** si la fecha esperada más la ventana cae después del último movimiento cargado de esa cuenta y mes, queda «sin información hasta <fecha>», no «pago no aparece».
+- **Colores de estado:** confirmar los valores de trabajo (Vencido, Por vencer, Pagado con atraso y Sin información).
+- **Umbral de «Programado»:** valor exacto de «faltan más días que los días de aviso del usuario» (por ejemplo, si es estrictamente mayor o si hay un mínimo).
+- **A quién avisa cada cosa:** propuesta: los vencimientos por vencer o atrasados, al responsable; las obligaciones «Sin asignar», a quien tiene «Ver todo».
+- **Correo individual:** si hay un correo el día del aviso de cada usuario, o si los días de anticipación aplican solo al tablero.
+- **`frecuencia_defecto`:** parámetro que existe en la base (supuesto, valor mensual). Uso propuesto: solo valor preseleccionado al crear una obligación; una obligación importada sin frecuencia no se asume mensual y va a revisión.
+- **Extensión de la cobertura:** si la fecha esperada más la ventana cae después del último movimiento cargado de esa cuenta y mes, queda «Sin información hasta <fecha>», no «pago no aparece».
 - **Subcarpetas:** profundidad máxima de lectura (supuesto: 5 niveles).
 - **Parámetro `tolerancia_pct`:** decidir si se oculta o se elimina de Configuración.
