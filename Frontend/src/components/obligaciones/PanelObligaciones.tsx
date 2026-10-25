@@ -172,8 +172,8 @@ export function PanelObligaciones() {
             <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedad ?? ""} onChange={(e) => cambiarFiltro({ sociedad: e.target.value || undefined })}>
               <option value="">Todas</option>
               {catalogos.sociedades.map((s) => (
-                <option key={s.id} value={s.codigo}>
-                  {s.codigo} ({s.obligaciones})
+                <option key={s.id} value={s.codigo ?? ""}>
+                  {s.codigo ?? s.nombreLargo} ({s.obligaciones})
                 </option>
               ))}
             </select>

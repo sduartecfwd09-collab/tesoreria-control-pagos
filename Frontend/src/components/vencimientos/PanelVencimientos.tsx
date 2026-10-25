@@ -115,7 +115,7 @@ export function PanelVencimientos() {
                 <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedad ?? ""} onChange={(e) => cambiar({ sociedad: e.target.value || undefined })}>
                   <option value="">Todas</option>
                   {base.sociedades.map((s) => (
-                    <option key={s.id} value={s.codigo}>{s.codigo}</option>
+                    <option key={s.id} value={s.codigo ?? ""}>{s.codigo ?? s.nombreLargo}</option>
                   ))}
                 </select>
               </label>

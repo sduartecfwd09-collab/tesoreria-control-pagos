@@ -166,7 +166,7 @@ export function FormularioObligacion({
                 <select id="f-sociedad" className={`${claseControl} w-full`} aria-describedby={desc("sociedad", false)} {...register("sociedad", { required: "Elija la sociedad" })}>
                   <option value="">Elija una sociedad…</option>
                   {sociedades.map((s) => (
-                    <option key={s.id} value={s.codigo}>{s.codigo}</option>
+                    <option key={s.id} value={s.codigo ?? ""}>{s.codigo ?? s.nombreLargo}</option>
                   ))}
                 </select>
               </Campo>

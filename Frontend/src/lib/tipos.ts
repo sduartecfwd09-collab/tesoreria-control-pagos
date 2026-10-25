@@ -80,8 +80,9 @@ export interface Pagina<T> {
 
 export interface Sociedad {
   id: number;
-  codigo: string;
-  nombre: string | null;
+  codigo: string | null; // abreviatura interna; puede faltar
+  nombreLargo: string;
+  activa: boolean;
   obligaciones: number;
   cuentas: number;
 }
