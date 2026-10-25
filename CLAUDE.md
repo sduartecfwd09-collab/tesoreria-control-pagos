@@ -54,6 +54,11 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - **Menú:** Inicio · Pagos del mes · Obligaciones · Estados de cuenta · Configuración, y avisos en una campana. No hay sección de Conciliación: el cruce corre por detrás y su resultado se ve y corrige en la ficha del pago (pago encontrado, unir a mano, quitar). Los movimientos del banco sin obligación se revisan en Estados de cuenta. Tocar una fila abre su ficha flotante; el menú se puede plegar.
 - **Estilo:** paleta Garnier, contraste verificado (`npm run contraste`), todo estado con etiqueta de texto además del color. El aplicativo debe ser muy intuitivo: alguien nuevo lo usa sin explicación.
 
+## Fidelidad a la maqueta (regla firme)
+- El diseño de `Maqueta Control de pagos` está aprobado y es lo que se mostró a Tesorería. El aplicativo real debe coincidir con ella: colores, tipografía, tarjetas, tablas, etiquetas de estado, nombres de menú y distribución.
+- Los cambios de lógica (p. ej. un filtro) no alteran la apariencia.
+- Si algo visual del proyecto real difiere de la maqueta, no se cambia ni se corrige: se describe (qué difiere y dónde) y se espera la decisión de la persona.
+
 ## Cómo trabajar
 - Responder en español y de forma concisa.
 - **Sin emojis ni pictogramas** (marcas de verificación, cruces, flechas decorativas) en el código, los comentarios, los mensajes de commit ni los textos de la interfaz. Los estados se señalan con etiqueta de texto (y, si hace falta, un ícono SVG del sistema de diseño).
