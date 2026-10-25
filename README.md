@@ -54,6 +54,15 @@ npm run reimportar       # lee la carpeta y llena tesoreria_dev
 - **Qué imprime:** solo conteos: la base usada, archivos leídos, sin cambios y con error (incluidos los no reconocidos), los motivos de error agrupados y con números enmascarados, movimientos importados y duplicados, y tablas por sociedad y mes y por sociedad. Nunca rutas ni nombres de archivo (llevan el IBAN), cuentas, montos, beneficiarios ni descripciones, así que esa salida se puede pegar tal cual.
 - **No usar `npm run importar` para compartir resultados:** su informe sí imprime rutas y números de cuenta. Es solo para revisar en la propia terminal.
 
+### Verificar las fechas de lo importado
+
+```
+cd Backend
+npm run db:verificar-datos
+```
+
+Solo lee la base (no escribe nada) e imprime agregados por sociedad y mes del archivo: movimientos, fecha mínima, fecha máxima, cuántos movimientos caen fuera del mes del archivo con tolerancia de un día y el mayor desvío en días. No imprime montos, cuentas, descripciones ni nombres. Sirve para detectar a tiempo un desfase de fechas (zona horaria, formato día/mes o año mal leído) antes de construir el cruce encima. Cómo leerlo: cada fecha mínima y máxima debería caer en el mes del archivo o a un día de sus bordes (un estado puede traer el cierre del mes anterior o el primer día del siguiente); «fuera de tolerancia» debería ser 0, y si no lo es, el «desvío máximo» orienta: 1 a 2 días sugiere un corte de periodo, 28 a 31 sugiere un mes mal leído, 365 un año mal leído.
+
 ## Arranque
 
 Requiere Node 20 o superior y un MySQL local (desarrollo: 9.2.0; producción: MySQL, versión por confirmar con TI). Antes de arrancar hay que crear las bases y el `.env` (sección «Base de datos»). Dos terminales:
