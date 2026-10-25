@@ -140,7 +140,7 @@ export function FormularioObligacion({
             )}
           </div>
           <button type="button" onClick={() => dialogo.current?.close()} className={claseBotonSecundario} aria-label="Cerrar sin guardar">
-            ✕ Cerrar
+            Cerrar
           </button>
         </div>
 
@@ -196,7 +196,7 @@ export function FormularioObligacion({
             <Campo
               id="f-diaEsperadoPago"
               etiqueta="Día esperado de pago"
-              ayuda="Día del mes (1 a 31). Si el mes no tiene ese día, se usa el último día del mes (p. ej. 31 → 28 de febrero)."
+              ayuda="Día del mes (1 a 31). Si el mes no tiene ese día, se usa el último día del mes (p. ej. el 31 pasa al 28 de febrero)."
               error={errors.diaEsperadoPago?.message}
             >
               <input

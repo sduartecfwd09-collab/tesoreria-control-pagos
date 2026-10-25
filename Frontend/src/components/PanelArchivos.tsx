@@ -28,7 +28,6 @@ function Celda({ c }: { c: CeldaCobertura }) {
   if (c.estado === "error") {
     return (
       <div title={c.error ?? "Error al leer el archivo"} className="rounded border-2 border-rojo bg-rojo-fondo px-2 py-1.5 text-rojo">
-        <span aria-hidden="true">✕ </span>
         <span className="font-semibold">Error</span>
         <span className="block text-xs">ver detalle abajo</span>
       </div>
@@ -36,7 +35,6 @@ function Celda({ c }: { c: CeldaCobertura }) {
   }
   return (
     <div className="rounded border border-control px-2 py-1.5">
-      <span aria-hidden="true">✓ </span>
       <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
       <span className="block text-xs text-suave">
         Formato {c.formato ?? "?"}
@@ -78,7 +76,7 @@ function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda:
       </h3>
       <p className="mt-1 text-sm text-suave max-w-2xl">{ayuda}</p>
       {filas.length === 0 ? (
-        <p className="mt-2 text-sm">✓ {vacio}</p>
+        <p className="mt-2 text-sm">{vacio}</p>
       ) : (
         <ul className="mt-3 divide-y divide-divisor border border-divisor rounded">
           {filas.map((f, i) => (

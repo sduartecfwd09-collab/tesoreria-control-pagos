@@ -39,13 +39,13 @@ export function Paginador({ pagina, paginas, total, unidad, alCambiar }: { pagin
   return (
     <nav aria-label="Paginación" className="mt-4 flex flex-wrap items-center gap-3 text-sm">
       <button type="button" className={claseBotonSecundario} disabled={pagina <= 1} onClick={() => alCambiar(pagina - 1)}>
-        ← Anterior
+        Anterior
       </button>
       <span aria-live="polite">
         Página <strong>{pagina}</strong> de {paginas} · {total.toLocaleString("es-CR")} {unidad}
       </span>
       <button type="button" className={claseBotonSecundario} disabled={pagina >= paginas} onClick={() => alCambiar(pagina + 1)}>
-        Siguiente →
+        Siguiente
       </button>
     </nav>
   );

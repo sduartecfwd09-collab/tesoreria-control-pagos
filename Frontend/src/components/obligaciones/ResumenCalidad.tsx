@@ -62,7 +62,7 @@ export function ResumenCalidad({
           Pendientes con Tesorería <span className="font-normal text-suave">({pendientes})</span>
         </h3>
         {pendientes === 0 ? (
-          <p className="mt-2 text-sm">✓ No hay pendientes.</p>
+          <p className="mt-2 text-sm">No hay pendientes.</p>
         ) : (
           <ul className="mt-2 divide-y divide-divisor text-sm">
             {r.identificadoresRepetidos.map((g) => (

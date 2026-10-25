@@ -121,7 +121,6 @@ export function PanelObligaciones() {
       {aviso && (
         <div role="status" className="mt-6 flex flex-wrap items-start justify-between gap-3 rounded border-2 border-control bg-fondo-suave p-4">
           <p>
-            <span aria-hidden="true">✓ </span>
             {aviso}
           </p>
           <button type="button" className="text-sm underline" onClick={() => setAviso(null)}>

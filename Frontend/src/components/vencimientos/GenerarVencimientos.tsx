@@ -103,7 +103,6 @@ export function GenerarVencimientos({ activas, alGenerar }: { activas: number; a
       {resultado && (
         <div role="status" className="mt-4">
           <p className="font-semibold">
-            <span aria-hidden="true">✓ </span>
             Listo: {resultado.creados.toLocaleString("es-CR")} creados · {resultado.yaExistentes.toLocaleString("es-CR")} ya existían
           </p>
           <table className="mt-2 text-sm">
