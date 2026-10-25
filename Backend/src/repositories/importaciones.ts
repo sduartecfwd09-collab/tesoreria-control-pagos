@@ -1,9 +1,16 @@
 import { prisma } from "../db.js";
 import type { MovimientoLeido } from "../ingest/tipos.js";
 
-/** Si la sociedad no existe se crea; sin nombre largo conocido se usa la abreviatura como nombre provisional. */
+/**
+ * Si la sociedad no existe se crea; sin nombre largo conocido se usa la abreviatura como nombre provisional.
+ * Un nombre largo que ya fue completado (distinto de la abreviatura) no se pisa.
+ */
 export async function asegurarSociedad(codigo: string, nombreLargo?: string) {
-  return prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: nombreLargo ?? codigo }, update: {} });
+  const s = await prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: nombreLargo ?? codigo }, update: {} });
+  if (nombreLargo && s.nombreLargo === codigo && nombreLargo !== codigo) {
+    return prisma.sociedad.update({ where: { id: s.id }, data: { nombreLargo } });
+  }
+  return s;
 }
 
 export interface DatosCuenta {
