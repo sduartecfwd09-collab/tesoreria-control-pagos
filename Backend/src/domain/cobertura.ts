@@ -4,7 +4,8 @@ export interface ArchivoCobertura {
   ruta: string;
   sociedad: string | null;
   mes: string | null;
-  estado: string;
+  estado: string; // leido | error | en_revision | pendiente
+  motivo?: string | null; // motivo fijo si el archivo quedó en revisión
   numMovimientos: number;
   numDuplicados: number;
   banco: string | null;
@@ -63,7 +64,7 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
     const sociedad = a.sociedad ?? a.ruta.split("/")[0] ?? "";
     const mes = a.mes ?? nombre?.periodo ?? null;
     if (!nombre || !mes) {
-      sinUbicar.push({ ruta: a.ruta, error: a.error ?? null });
+      sinUbicar.push({ ruta: a.ruta, error: a.error ?? a.motivo ?? null });
       continue;
     }
     meses.add(mes);
@@ -77,13 +78,14 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       fila.monedaPorConfirmar = a.monedaPorConfirmar;
     }
     fila.celdas[mes] = {
-      estado: a.estado === "error" ? "error" : "leido",
+      // un archivo en revisión no aportó datos: se muestra como celda con problema, nunca como leído
+      estado: a.estado === "error" || a.estado === "en_revision" ? "error" : "leido",
       archivo: a.ruta,
       formato: a.formato,
       movimientos: a.numMovimientos,
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
-      error: a.error ?? null,
+      error: a.error ?? a.motivo ?? null,
     };
     filas.set(k, fila);
   }

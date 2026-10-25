@@ -21,7 +21,7 @@ if (base.endsWith("_test")) {
 const r = await importarCarpeta(env.STATEMENTS_ROOT);
 const porArchivo = await contarMovimientosPorArchivo();
 const filas = (await listarArchivos()).map((a) => ({
-  sociedad: a.sociedad, mes: a.mes, estado: a.estado, error: a.error, movimientos: porArchivo.get(a.id) ?? 0,
+  sociedad: a.sociedad, mes: a.mes, estado: a.estado, error: a.error, motivo: a.motivo, movimientos: porArchivo.get(a.id) ?? 0,
 }));
 console.log(informeConteos(base, r, filas));
 await prisma.$disconnect();

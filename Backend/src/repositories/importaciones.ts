@@ -2,15 +2,19 @@ import { prisma } from "../db.js";
 import type { MovimientoLeido } from "../ingest/tipos.js";
 
 /**
- * Si la sociedad no existe se crea; sin nombre largo conocido se usa la abreviatura como nombre provisional.
- * Un nombre largo que ya fue completado (distinto de la abreviatura) no se pisa.
+ * Sociedad ya existente cuya abreviatura coincide con el nombre de la carpeta. Nunca crea nada: el importador
+ * solo asigna a sociedades que ya existen (la asociación carpeta-sociedad es explícita, no se adivina).
  */
-export async function asegurarSociedad(codigo: string, nombreLargo?: string) {
-  const s = await prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: nombreLargo ?? codigo }, update: {} });
-  if (nombreLargo && s.nombreLargo === codigo && nombreLargo !== codigo) {
-    return prisma.sociedad.update({ where: { id: s.id }, data: { nombreLargo } });
-  }
-  return s;
+export async function buscarSociedadPorCodigo(codigo: string) {
+  return prisma.sociedad.findUnique({ where: { codigo } });
+}
+
+/**
+ * Crea la sociedad con su abreviatura y nombre largo si no existe (la abreviatura es la clave). No pisa un
+ * nombre largo existente. Solo para el seed y las pruebas: el importador no puede crear sociedades.
+ */
+export async function sembrarSociedad(codigo: string, nombreLargo: string) {
+  return prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo }, update: {} });
 }
 
 export interface DatosCuenta {
@@ -72,8 +76,21 @@ export interface ArchivoParaGuardar {
 }
 
 export async function guardarArchivoConError(a: ArchivoParaGuardar, error: string, detalle: unknown) {
-  const datos = { ...a, estado: "error", error, detalle: JSON.stringify(detalle), leidoEn: new Date(), numMovimientos: 0, numDuplicados: 0 };
+  const datos = { ...a, estado: "error", motivo: null, error, detalle: JSON.stringify(detalle), leidoEn: new Date(), numMovimientos: 0, numDuplicados: 0 };
   return prisma.archivoImportado.upsert({ where: { ruta: a.ruta }, create: datos, update: datos });
+}
+
+/**
+ * Registra un archivo que no se importó porque requiere una decisión humana. El motivo es un texto fijo del
+ * sistema (nunca datos del archivo). Si el archivo ya tenía movimientos de una lectura anterior, no se tocan.
+ */
+export async function guardarArchivoEnRevision(a: ArchivoParaGuardar, motivo: string) {
+  const base = { ...a, estado: "en_revision", motivo, error: null, detalle: null, leidoEn: new Date() };
+  return prisma.archivoImportado.upsert({
+    where: { ruta: a.ruta },
+    create: { ...base, numMovimientos: 0, numDuplicados: 0 },
+    update: base,
+  });
 }
 
 export class ArchivoConConciliaciones extends Error {}
@@ -103,7 +120,7 @@ export async function guardarArchivoLeido(
     }
     const nuevos = movs.filter((m) => !existentes.has(m.claveDedup));
     const datos = {
-      ...a, estado: "leido", error: null, leidoEn: new Date(),
+      ...a, estado: "leido", motivo: null, error: null, leidoEn: new Date(),
       numMovimientos: movs.length, numDuplicados: movs.length - nuevos.length,
       detalle: JSON.stringify(extra.detalle),
     };

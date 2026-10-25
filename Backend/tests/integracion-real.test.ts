@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { env } from "../src/config/env.js";
 import { importarCarpeta } from "../src/ingest/importar-carpeta.js";
+import { sembrarSociedad } from "../src/repositories/importaciones.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 const raiz = env.STATEMENTS_ROOT;
@@ -22,13 +23,19 @@ function contarXlsx(base: string): number {
 }
 
 describe.skipIf(!hayCarpeta)("importación de la carpeta real", () => {
-  beforeAll(vaciarImportaciones);
+  beforeAll(async () => {
+    await vaciarImportaciones();
+    // Base de pruebas: una sociedad por carpeta (el importador no crea sociedades).
+    for (const d of readdirSync(raiz!, { withFileTypes: true })) {
+      if (d.isDirectory() && d.name.toLowerCase() !== "resultados" && !d.name.startsWith(".")) await sembrarSociedad(d.name.toUpperCase(), d.name.toUpperCase());
+    }
+  });
   afterAll(vaciarImportaciones);
 
   it("procesa todos los archivos, deja cada error marcado y es idempotente", async () => {
     const esperados = contarXlsx(raiz!);
     const r = await importarCarpeta(raiz!);
-    expect(r.leidos + r.conError).toBe(esperados);
+    expect(r.leidos + r.conError + r.enRevision).toBe(esperados);
     const archivos = await prisma.archivoImportado.findMany();
     expect(archivos).toHaveLength(esperados);
     for (const a of archivos.filter((x) => x.estado === "error")) expect(a.error).toBeTruthy();

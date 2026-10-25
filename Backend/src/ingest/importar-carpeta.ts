@@ -6,11 +6,15 @@ import { ErrorLectura, LECTOR_VERSION, leerEstadoDeCuenta, leerLibro } from "./l
 import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
 import type { ResultadoLectura } from "./tipos.js";
 import {
-  ArchivoConConciliaciones, asegurarSociedad, buscarArchivoPorRuta,
-  guardarArchivoConError, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
+  ArchivoConConciliaciones, buscarArchivoPorRuta, buscarSociedadPorCodigo,
+  guardarArchivoConError, guardarArchivoEnRevision, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
 } from "../repositories/importaciones.js";
 
-export type EstadoArchivo = "leido" | "error" | "sin_cambios";
+export type EstadoArchivo = "leido" | "error" | "sin_cambios" | "en_revision";
+
+// Motivos fijos por los que un archivo queda "en revisión" (texto del sistema, nunca datos del archivo).
+export const MOTIVO_CARPETA_SIN_SOCIEDAD = "carpeta sin sociedad asignada";
+export const MOTIVO_NOMBRE_NO_COINCIDE = "nombre de archivo no coincide con la carpeta";
 export type OrigenMoneda = "archivo" | "iban" | "otro_mes" | "desconocida";
 
 export interface ResumenArchivo {
@@ -27,6 +31,7 @@ export interface ResumenImportacion {
   archivos: ResumenArchivo[];
   leidos: number;
   conError: number;
+  enRevision: number;
   sinCambios: number;
   movimientos: number;
   duplicados: number;
@@ -61,6 +66,7 @@ export async function listarCandidatos(raiz: string): Promise<Candidato[]> {
 
 interface Lectura {
   cand: Candidato;
+  sociedadId: number;
   hash: string;
   resultado?: ResultadoLectura;
   error?: string;
@@ -78,11 +84,22 @@ export async function importarCarpeta(raiz: string): Promise<ResumenImportacion>
 
 async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   const candidatos = await listarCandidatos(raiz);
-  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, sinCambios: 0, movimientos: 0, duplicados: 0 };
+  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, enRevision: 0, sinCambios: 0, movimientos: 0, duplicados: 0 };
 
-  // Fase 1: hash y lectura. Un archivo con error se marca y se sigue con los demás.
+  // Fase 1: sociedad, hash y lectura. La sociedad y el nombre se comprueban ANTES de abrir el archivo.
+  // Un archivo con error se marca y se sigue con los demás.
   const lecturas: Lectura[] = [];
+  const sociedades = new Map<string, Awaited<ReturnType<typeof buscarSociedadPorCodigo>>>();
   for (const cand of candidatos) {
+    if (!sociedades.has(cand.carpeta)) sociedades.set(cand.carpeta, await buscarSociedadPorCodigo(cand.carpeta));
+    const sociedad = sociedades.get(cand.carpeta) ?? null;
+    const enRevision = async (motivo: string) => {
+      await guardarArchivoEnRevision({ ruta: cand.ruta, hash: "", formato: null, mes: cand.nombre?.periodo ?? null, sociedadId: sociedad?.id ?? null, cuentaId: null }, motivo);
+      resumen.enRevision++;
+      resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: null, estado: "en_revision", movimientos: 0, duplicados: 0, error: motivo });
+    };
+    if (!sociedad) { await enRevision(MOTIVO_CARPETA_SIN_SOCIEDAD); continue; }
+    if (cand.nombre && cand.nombre.sociedad !== cand.carpeta) { await enRevision(MOTIVO_NOMBRE_NO_COINCIDE); continue; }
     let hash = "";
     try {
       const contenido = await readFile(cand.rutaAbsoluta);
@@ -95,9 +112,9 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
       }
       if (!cand.nombre) throw new ErrorLectura("El nombre no cumple la convención «<IBAN> <MMAA> <SOCIEDAD>.xlsx»");
       const resultado = leerEstadoDeCuenta(await leerLibro(contenido), cand.nombre);
-      lecturas.push({ cand, hash, resultado });
+      lecturas.push({ cand, sociedadId: sociedad.id, hash, resultado });
     } catch (e) {
-      lecturas.push({ cand, hash, error: e instanceof ErrorLectura ? e.message : "Error inesperado al leer el archivo" });
+      lecturas.push({ cand, sociedadId: sociedad.id, hash, error: e instanceof ErrorLectura ? e.message : "Error inesperado al leer el archivo" });
     }
   }
 
@@ -114,8 +131,8 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   for (const l of lecturas) {
     const { cand, hash } = l;
     const base = { ruta: cand.ruta, hash, formato: l.resultado?.formato ?? null, mes: cand.nombre?.periodo ?? null };
-    const sociedad = await asegurarSociedad(cand.carpeta);
-    const archivoBase: ArchivoParaGuardar = { ...base, sociedadId: sociedad.id, cuentaId: null };
+    const sociedadId = l.sociedadId;
+    const archivoBase: ArchivoParaGuardar = { ...base, sociedadId, cuentaId: null };
     if (l.error || !l.resultado || !cand.nombre) {
       await guardarArchivoConError(archivoBase, l.error ?? "Error desconocido", { discrepancias: [], advertencias: [] });
       resumen.conError++;
@@ -126,9 +143,6 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     const nombre = cand.nombre;
     const advertencias = [...r.advertencias];
     const discrepancias = [...r.discrepancias];
-    if (nombre.sociedad !== cand.carpeta) {
-      discrepancias.push({ tipo: "sociedad", mensaje: `La sociedad del nombre (${nombre.sociedad}) no coincide con la carpeta (${cand.carpeta}); se usó la carpeta` });
-    }
 
     // moneda de este archivo y de la cuenta
     const explicitas = explicitaPorCuenta.get(clave(cand)) ?? new Set<string>();
@@ -146,7 +160,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     const monedaCuenta = (explicitas.size > 0 ? ([...explicitas][0] as "CRC" | "USD") : porIban) ?? null;
 
     const cuenta = await guardarCuenta({
-      sociedadId: sociedad.id, numero: nombre.cuenta, codigoBanco: nombre.codigoBanco, formato: r.formato,
+      sociedadId, numero: nombre.cuenta, codigoBanco: nombre.codigoBanco, formato: r.formato,
       bancoArchivo: r.bancoArchivo, moneda: monedaCuenta, monedaPorConfirmar: explicitas.size === 0,
     });
     const claves = clavesDeDeduplicacion(cuenta.id, r.movimientos);

@@ -18,6 +18,7 @@ export interface ArchivoFila {
   numMovimientos: number;
   numDuplicados: number;
   error: string | null;
+  motivo: string | null;
   detalle: unknown;
   leidoEn: Date | null;
 }
@@ -33,7 +34,7 @@ export async function listarArchivos(): Promise<ArchivoFila[]> {
     banco: a.cuenta?.banco ?? null, bancoPorConfirmar: a.cuenta?.bancoPorConfirmar ?? null,
     moneda: a.cuenta?.moneda ?? null, monedaPorConfirmar: a.cuenta?.monedaPorConfirmar ?? null,
     formato: a.formato, mes: a.mes, estado: a.estado,
-    numMovimientos: a.numMovimientos, numDuplicados: a.numDuplicados, error: a.error,
+    numMovimientos: a.numMovimientos, numDuplicados: a.numDuplicados, error: a.error, motivo: a.motivo,
     detalle: a.detalle ? safeJson(a.detalle) : null, leidoEn: a.leidoEn,
   }));
 }

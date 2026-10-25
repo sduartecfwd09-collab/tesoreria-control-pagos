@@ -11,5 +11,6 @@ export async function vaciarImportaciones() {
   await prisma.vencimiento.deleteMany();
   await prisma.obligacion.deleteMany();
   await prisma.cuenta.deleteMany();
+  await prisma.sociedadTesoreroHistorial.deleteMany();
   await prisma.sociedad.deleteMany();
 }

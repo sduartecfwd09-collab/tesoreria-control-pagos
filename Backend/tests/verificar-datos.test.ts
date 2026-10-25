@@ -2,13 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { fechasPorSociedadYMes } from "../src/repositories/consultas.js";
 import { informeFechas } from "../src/ingest/informe-fechas.js";
-import { asegurarSociedad } from "../src/repositories/importaciones.js";
+import { sembrarSociedad } from "../src/repositories/importaciones.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 describe("verificación de fechas de los movimientos", () => {
   beforeAll(async () => {
     await vaciarImportaciones();
-    const s = await asegurarSociedad("AAA");
+    const s = await sembrarSociedad("AAA", "AAA");
     const cuenta = await prisma.cuenta.create({ data: { sociedadId: s.id, numero: "CUENTA-INVENTADA" } });
     const archivo = await prisma.archivoImportado.create({ data: { ruta: "inventado", hash: "h", mes: "2026-03" } });
     // Mes del archivo: marzo de 2026. Dentro: 1 y 31 de marzo. A un dia: 28 de feb y 1 de abril. Fuera: 27 de feb y 5 de abril.

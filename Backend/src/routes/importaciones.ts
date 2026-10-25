@@ -44,7 +44,7 @@ export async function rutasImportaciones(app: FastifyInstance) {
       const d = (a.detalle ?? {}) as DetalleArchivo;
       return {
         id: a.id, ruta: a.ruta, sociedad: a.sociedad, cuenta: a.cuenta, formato: a.formato, mes: a.mes,
-        estado: a.estado, movimientos: a.numMovimientos, duplicados: a.numDuplicados, error: a.error,
+        estado: a.estado, movimientos: a.numMovimientos, duplicados: a.numDuplicados, error: a.error, motivo: a.motivo,
         advertencias: d.advertencias ?? [], discrepancias: d.discrepancias ?? [],
         continuidad: d.continuidad ?? null, monedaOrigen: d.monedaOrigen ?? null,
         leidoEn: a.leidoEn?.toISOString() ?? null,
@@ -56,6 +56,7 @@ export async function rutasImportaciones(app: FastifyInstance) {
         archivos: datos.length,
         leidos: datos.filter((a) => a.estado === "leido").length,
         conError: datos.filter((a) => a.estado === "error").length,
+        enRevision: datos.filter((a) => a.estado === "en_revision").length,
         movimientos: datos.reduce((s, a) => s + a.movimientos, 0),
       },
       enCurso: hayImportacionEnCurso(),

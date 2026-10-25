@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { importarCarpeta } from "../src/ingest/importar-carpeta.js";
-import { actualizarCuentaManual } from "../src/repositories/importaciones.js";
+import { actualizarCuentaManual, sembrarSociedad } from "../src/repositories/importaciones.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
@@ -22,6 +22,8 @@ const sept = (movs: M.Mov[]) => movs.map((m) => ({ ...m, m: 9 }));
 
 beforeAll(async () => {
   await vaciarImportaciones();
+  // El importador solo asigna a sociedades que ya existen (nunca las crea).
+  for (const codigo of ["ZFL", "WW", "DM"]) await sembrarSociedad(codigo, `Sociedad inventada ${codigo}`);
   raiz = mkdtempSync(path.join(tmpdir(), "estados-sinteticos-"));
   poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1()); // sin moneda en el archivo
   poner(`ZFL/${IBAN_BCT} 0926 ZFL.xlsx`, await M.e1({ moneda: "USD", mes: 9, apertura: 699, movs: M.MOVS_BASE.slice(2) })); // solapa 2 movimientos de agosto

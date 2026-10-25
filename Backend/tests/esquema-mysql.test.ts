@@ -3,7 +3,7 @@ import { prisma } from "../src/db.js";
 import { exigirBaseDePruebas } from "../src/config/proteccion-pruebas.js";
 import { aNumero } from "../src/domain/montos.js";
 import { asegurarCategoria } from "../src/repositories/parametros.js";
-import { asegurarSociedad } from "../src/repositories/importaciones.js";
+import { sembrarSociedad } from "../src/repositories/importaciones.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 describe("protección de la base de pruebas", () => {
@@ -36,7 +36,7 @@ describe("modelo sobre MySQL", () => {
   afterAll(vaciarImportaciones);
 
   it("guarda montos mayores a 32 bits y la fecha del vencimiento sin desfase", async () => {
-    const s = await asegurarSociedad("AAA");
+    const s = await sembrarSociedad("AAA", "AAA");
     const c = await asegurarCategoria("Prueba");
     const o = await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "P", identificador: "1", montoEsperado: 3_000_000_000n } });
     for (const [i, f] of ["2026-03-01", "2026-12-31"].entries()) {

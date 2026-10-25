@@ -170,7 +170,7 @@ export function PanelArchivos() {
         <p className="font-semibold">Todavía no se ha importado ninguna carpeta.</p>
         <p className="mt-2 text-sm text-suave">
           La importación lee la carpeta de estados de cuenta configurada en el servidor (STATEMENTS_ROOT). Se ejecuta desde el Backend con{" "}
-          <span className="font-mono">npm run importar</span> o llamando a <span className="font-mono">POST /api/importaciones</span>. Luego recargue
+          <span className="font-mono">npm run reimportar</span> o llamando a <span className="font-mono">POST /api/importaciones</span>. Luego recargue
           esta página.
         </p>
       </div>
