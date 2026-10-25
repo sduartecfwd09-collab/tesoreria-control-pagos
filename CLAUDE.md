@@ -59,6 +59,12 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - Los cambios de lógica (p. ej. un filtro) no alteran la apariencia.
 - Si algo visual del proyecto real difiere de la maqueta, no se cambia ni se corrige: se describe (qué difiere y dónde) y se espera la decisión de la persona.
 
+## Rutas privadas (regla firme)
+- Toda ruta de la API y toda página del Frontend es privada por defecto (negar por defecto). Solo pueden ser públicas: el inicio de sesión, el retorno de Microsoft y una ruta de estado que no devuelva datos.
+- La autorización se aplica en el servidor según el rol y las sociedades del usuario, nunca solo ocultando pantallas.
+- Ninguna respuesta ni mensaje de error expone rutas de archivos, cuentas, identificadores completos ni datos de otras sociedades.
+- Toda ruta nueva nace pensada como privada. El control de acceso llega con el inicio de sesión de Microsoft; hasta entonces no se implementa.
+
 ## Cómo trabajar
 - Responder en español y de forma concisa.
 - **Sin emojis ni pictogramas** (marcas de verificación, cruces, flechas decorativas) en el código, los comentarios, los mensajes de commit ni los textos de la interfaz. Los estados se señalan con etiqueta de texto (y, si hace falta, un ícono SVG del sistema de diseño).
