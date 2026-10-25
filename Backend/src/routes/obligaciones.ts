@@ -1,4 +1,6 @@
 import { stat } from "node:fs/promises";
+import { aNumero } from "../domain/montos.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { env } from "../config/env.js";
@@ -33,17 +35,17 @@ const consulta = z.object({
 
 const idParam = z.coerce.number().int().positive();
 
-const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({ ...o, sociedad: o.sociedad.codigo });
+const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({ ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad) });
 
 function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>) {
   return {
     id: o.id,
-    sociedadId: o.sociedadId, sociedad: o.sociedad.codigo,
+    sociedadId: o.sociedadId, sociedad: etiquetaSociedad(o.sociedad),
     categoriaId: o.categoriaId, categoria: o.categoria.nombre,
     proveedor: o.proveedor, identificador: o.identificador,
     diaEsperadoPago: o.diaEsperadoPago, diaEditado: o.diaEditado,
     frecuencia: o.frecuencia, frecuenciaPorConfirmar: o.frecuenciaPorConfirmar, mesArranque: o.mesArranque,
-    montoEsperado: o.montoEsperado, moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
+    montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
     cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: o.cuentaEsperada.numero, banco: o.cuentaEsperada.banco } : null,
     responsable: o.responsable, activa: o.activa, origen: o.origen,
     actualizado: o.actualizado.toISOString(),
@@ -69,7 +71,7 @@ const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.c
 export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj }) {
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
-    return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombre: x.nombre, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
+    return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
   });
 
   app.get("/api/categorias", async () => {
@@ -93,8 +95,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const contar = (xs: string[]) => xs.reduce<Record<string, number>>((m, x) => ({ ...m, [x]: (m[x] ?? 0) + 1 }), {});
     return {
       datos: {
-        ...calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => s.codigo)),
-        porSociedad: { ...Object.fromEntries(sociedades.map((s) => [s.codigo, 0])), ...contar(activas.map((o) => o.sociedad.codigo)) },
+        ...calidadCatalogo(obs.map(aCalidad), sociedades.map(etiquetaSociedad)),
+        porSociedad: { ...Object.fromEntries(sociedades.map((s) => [etiquetaSociedad(s), 0])), ...contar(activas.map((o) => etiquetaSociedad(o.sociedad))) },
         porCategoria: contar(activas.map((o) => o.categoria.nombre)),
       },
     };
@@ -116,7 +118,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     if (!sociedad) return invalido(reply, `La sociedad «${d.sociedad}» no existe`, "sociedad");
     if (!(await obtenerCategoria(d.categoriaId))) return invalido(reply, "La categoría no existe", "categoriaId");
     if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador)) {
-      return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador en ${sociedad.codigo}`, campo: "identificador" });
+      return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
     }
     const defecto = (await valorGlobal("frecuencia_defecto")) ?? "mensual";
     const frecuencia = d.frecuencia ?? (FRECUENCIAS.includes(defecto) ? defecto : "mensual");

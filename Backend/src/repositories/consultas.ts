@@ -1,4 +1,6 @@
 import { prisma } from "../db.js";
+import { aNumero } from "../domain/montos.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 
 export interface ArchivoFila {
   id: number;
@@ -26,7 +28,7 @@ export async function listarArchivos(): Promise<ArchivoFila[]> {
     orderBy: { ruta: "asc" },
   });
   return filas.map((a) => ({
-    id: a.id, ruta: a.ruta, sociedad: a.sociedad?.codigo ?? null,
+    id: a.id, ruta: a.ruta, sociedad: a.sociedad ? etiquetaSociedad(a.sociedad) : null,
     cuentaId: a.cuentaId, cuenta: a.cuenta?.numero ?? null,
     banco: a.cuenta?.banco ?? null, bancoPorConfirmar: a.cuenta?.bancoPorConfirmar ?? null,
     moneda: a.cuenta?.moneda ?? null, monedaPorConfirmar: a.cuenta?.monedaPorConfirmar ?? null,
@@ -74,7 +76,7 @@ export async function listarMovimientos(f: FiltroMovimientos) {
     total,
     datos: filas.map((m) => ({
       id: m.id,
-      sociedad: m.cuenta.sociedad.codigo,
+      sociedad: etiquetaSociedad(m.cuenta.sociedad),
       cuenta: m.cuenta.numero,
       moneda: m.moneda,
       periodo: m.periodo,
@@ -82,9 +84,9 @@ export async function listarMovimientos(f: FiltroMovimientos) {
       referencia: m.referencia,
       codigo: m.codigo,
       descripcion: m.descripcion,
-      debito: m.debito,
-      credito: m.credito,
-      saldo: m.saldo,
+      debito: aNumero(m.debito),
+      credito: aNumero(m.credito),
+      saldo: aNumero(m.saldo),
       archivo: m.archivo.ruta,
       hoja: m.hoja,
       fila: m.fila,

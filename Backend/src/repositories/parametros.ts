@@ -1,4 +1,5 @@
 import { prisma } from "../db.js";
+import { normalizar } from "../ingest/utiles.js";
 
 export interface ParametroFila {
   id: number;
@@ -50,8 +51,10 @@ export async function asegurarParametro(d: {
   });
 }
 
+/** "Cable" y "CABLE" son la misma categoria: se busca por el nombre normalizado y se conserva la primera forma. */
 export async function asegurarCategoria(nombre: string) {
-  return prisma.categoria.upsert({ where: { nombre }, create: { nombre }, update: {} });
+  const nombreNormalizado = normalizar(nombre);
+  return prisma.categoria.upsert({ where: { nombreNormalizado }, create: { nombre, nombreNormalizado }, update: {} });
 }
 
 export async function contarParametros() {

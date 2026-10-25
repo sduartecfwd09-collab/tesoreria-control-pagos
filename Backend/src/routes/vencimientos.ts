@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { aNumero } from "../domain/montos.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 import { z } from "zod";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { esPeriodo, MAX_MESES_GENERACION, periodosEntre } from "../domain/vencimientos.js";
@@ -48,14 +50,14 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
       datos: datos.map((v) => ({
         id: v.id,
         obligacionId: v.obligacionId,
-        sociedad: v.obligacion.sociedad.codigo,
+        sociedad: etiquetaSociedad(v.obligacion.sociedad),
         categoria: v.obligacion.categoria.nombre,
         proveedor: v.obligacion.proveedor,
         identificador: v.obligacion.identificador,
         frecuencia: v.obligacion.frecuencia,
         periodo: v.periodo,
         fecha: v.fecha.toISOString().slice(0, 10),
-        montoEsperado: v.montoEsperado,
+        montoEsperado: aNumero(v.montoEsperado),
         moneda: v.obligacion.moneda,
         estado: v.estado,
         conciliado: v._count.conciliaciones > 0,

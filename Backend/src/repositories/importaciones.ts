@@ -1,8 +1,9 @@
 import { prisma } from "../db.js";
 import type { MovimientoLeido } from "../ingest/tipos.js";
 
-export async function asegurarSociedad(codigo: string) {
-  return prisma.sociedad.upsert({ where: { codigo }, create: { codigo }, update: {} });
+/** Si la sociedad no existe se crea; sin nombre largo conocido se usa la abreviatura como nombre provisional. */
+export async function asegurarSociedad(codigo: string, nombreLargo?: string) {
+  return prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: nombreLargo ?? codigo }, update: {} });
 }
 
 export interface DatosCuenta {

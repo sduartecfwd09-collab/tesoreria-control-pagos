@@ -1,6 +1,8 @@
 // Generación y regeneración de vencimientos. Todos nacen "proyectado": los demás estados llegan con el
 // cruce (Hito 4). Un vencimiento con conciliación nunca se toca.
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
+import { aNumero } from "../domain/montos.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 import { periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
 import {
   aplicarCambios, crearFaltantes, describirObligaciones, horizonte, obligacionesParaPlan, obligacionParaPlan,
@@ -46,7 +48,7 @@ export async function generarVencimientos(desde: string, hasta: string): Promise
       porPeriodo,
       omitidas: omitidas.map((o) => {
         const d = info.get(o.obligacionId)!;
-        return { ...o, sociedad: d.sociedad.codigo, proveedor: d.proveedor, identificador: d.identificador, texto: TEXTO_OMISION[o.motivo] };
+        return { ...o, sociedad: etiquetaSociedad(d.sociedad), proveedor: d.proveedor, identificador: d.identificador, texto: TEXTO_OMISION[o.motivo] };
       }),
     };
   } finally {
@@ -86,7 +88,7 @@ export async function regenerarObligacion(obligacionId: number, reloj: Reloj): P
     if (v._count.conciliaciones > 0 || v._count.alertas > 0) { r.protegidos++; continue; }
     const d = deseados.get(v.periodo);
     if (!d) { eliminar.push(v.id); continue; }
-    if (d.fecha.getTime() !== v.fecha.getTime() || d.montoEsperado !== v.montoEsperado) {
+    if (d.fecha.getTime() !== v.fecha.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
       actualizar.push({ id: v.id, fecha: d.fecha, montoEsperado: d.montoEsperado });
     }
   }

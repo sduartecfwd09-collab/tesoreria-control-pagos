@@ -1,17 +1,21 @@
 import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
+import { aNumero } from "../domain/montos.js";
 import type { ObligacionPlan, VencimientoPlan } from "../domain/vencimientos.js";
 
 const clave = (obligacionId: number, periodo: string) => `${obligacionId}|${periodo}`;
 
 const camposPlan = { id: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true } as const;
 
+const aPlan = (o: { montoEsperado: bigint | null } & Omit<ObligacionPlan, "montoEsperado">): ObligacionPlan => ({ ...o, montoEsperado: aNumero(o.montoEsperado) });
+
 export async function obligacionesParaPlan(): Promise<ObligacionPlan[]> {
-  return prisma.obligacion.findMany({ select: camposPlan, orderBy: { id: "asc" } });
+  return (await prisma.obligacion.findMany({ select: camposPlan, orderBy: { id: "asc" } })).map(aPlan);
 }
 
 export async function obligacionParaPlan(id: number): Promise<ObligacionPlan | null> {
-  return prisma.obligacion.findUnique({ where: { id }, select: camposPlan });
+  const o = await prisma.obligacion.findUnique({ where: { id }, select: camposPlan });
+  return o ? aPlan(o) : null;
 }
 
 /** Datos para mostrar las obligaciones omitidas (proveedor, sociedad e identificador). */

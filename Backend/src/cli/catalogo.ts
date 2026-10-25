@@ -1,4 +1,6 @@
 import { env } from "../config/env.js";
+import { aNumero } from "../domain/montos.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 import { importarCatalogo } from "../catalogo/importar.js";
 import { calidadCatalogo } from "../domain/obligaciones.js";
 import { listarSociedades, todasLasObligaciones } from "../repositories/obligaciones.js";
@@ -20,7 +22,7 @@ console.log(r.variantes.length ? `Variantes del mismo nombre:\n${r.variantes.map
 console.log(r.problemas.length ? `Filas con problemas (${r.problemas.length}):\n${r.problemas.map((p) => `  fila ${p.fila}: ${p.motivo}`).join("\n")}` : "Filas con problemas: ninguna");
 
 const [obs, sociedades] = await Promise.all([todasLasObligaciones(), listarSociedades()]);
-const c = calidadCatalogo(obs.map((o) => ({ ...o, sociedad: o.sociedad.codigo })), sociedades.map((s) => s.codigo));
+const c = calidadCatalogo(obs.map((o) => ({ ...o, sociedad: etiquetaSociedad(o.sociedad), montoEsperado: aNumero(o.montoEsperado) })), sociedades.map(etiquetaSociedad));
 console.log("Alertas de calidad:");
 for (const g of c.identificadoresRepetidos) console.log(`  ${g.sociedad}: 1 identificador con ${g.proveedores.length} proveedores (${g.proveedores.join(", ")})`);
 for (const o of c.formatoIban) console.log(`  ${o.sociedad}: identificador con formato de IBAN (${o.proveedor})`);

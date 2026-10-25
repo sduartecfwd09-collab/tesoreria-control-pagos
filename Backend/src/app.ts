@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { env } from "./config/env.js";
+import { aNumero } from "./domain/montos.js";
 import { relojSistema, type Reloj } from "./domain/reloj.js";
 import { rutasImportaciones } from "./routes/importaciones.js";
 import { rutasObligaciones } from "./routes/obligaciones.js";
@@ -11,6 +12,9 @@ import { rutasVencimientos } from "./routes/vencimientos.js";
 export async function crearApp(opts: { logger?: boolean; reloj?: Reloj } = {}) {
   const app = Fastify({ logger: opts.logger ?? false });
   const reloj = opts.reloj ?? relojSistema;
+
+  // JSON no admite BigInt: las rutas convierten los montos, y esta red de seguridad evita que un BigInt olvidado rompa la respuesta.
+  app.setReplySerializer((payload) => JSON.stringify(payload, (_clave, v) => (typeof v === "bigint" ? aNumero(v) : v)));
 
   // CORS: solo los orígenes del Frontend configurados en CORS_ORIGINS.
   await app.register(cors, { origin: env.CORS_ORIGINS, methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] });

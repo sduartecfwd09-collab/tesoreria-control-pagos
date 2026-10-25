@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { env } from "../config/env.js";
@@ -77,7 +78,7 @@ export async function rutasImportaciones(app: FastifyInstance) {
     const cuentas = await listarCuentas();
     return {
       datos: cuentas.map((c) => ({
-        id: c.id, sociedad: c.sociedad.codigo, numero: c.numero, banco: c.banco, bancoPorConfirmar: c.bancoPorConfirmar,
+        id: c.id, sociedad: etiquetaSociedad(c.sociedad), numero: c.numero, banco: c.banco, bancoPorConfirmar: c.bancoPorConfirmar,
         codigoBanco: c.codigoBanco, formato: c.formato, moneda: c.moneda, monedaPorConfirmar: c.monedaPorConfirmar,
       })),
     };

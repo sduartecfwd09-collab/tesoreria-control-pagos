@@ -27,12 +27,12 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
   return prisma.$transaction(async (tx) => {
     const sociedades = new Map<string, number>();
     for (const codigo of new Set(filas.map((f) => f.sociedad))) {
-      const s = await tx.sociedad.upsert({ where: { codigo }, create: { codigo }, update: {} });
+      const s = await tx.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: codigo }, update: {} });
       sociedades.set(codigo, s.id);
     }
     const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveNombre(c.nombre), c.id]));
     for (const nombre of new Set(filas.map((f) => f.categoria))) {
-      if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre } })).id);
+      if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre, nombreNormalizado: claveNombre(nombre) } })).id);
     }
 
     const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador), o]));
