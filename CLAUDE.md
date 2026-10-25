@@ -56,6 +56,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 
 ## Cómo trabajar
 - Responder en español y de forma concisa.
+- **Sin emojis ni pictogramas** (p. ej. ✓ ✕) en el código, los comentarios, los mensajes de commit ni los textos de la interfaz. Los estados se señalan con etiqueta de texto (y, si hace falta, un ícono SVG del sistema de diseño).
 - «SUPUESTO» se usa solo en documentos, respuestas y comentarios de código, **nunca en la interfaz**: la pantalla usa lenguaje de producto (sin hitos, «pronto», «por confirmar» ni mensajes técnicos).
 - Inspeccionar un archivo antes de suponer su estructura.
 - Antes de rediseñar o crear una pantalla, proponer una maqueta para aprobación.
