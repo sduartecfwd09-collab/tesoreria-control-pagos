@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { calcularCobertura } from "../src/domain/cobertura.js";
+import { sembrarSociedad } from "../src/repositories/importaciones.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
@@ -14,6 +15,7 @@ const original = env.STATEMENTS_ROOT;
 
 beforeAll(async () => {
   await vaciarImportaciones();
+  await sembrarSociedad("ZFL", "Sociedad inventada ZFL"); // el importador no crea sociedades
   raiz = mkdtempSync(path.join(tmpdir(), "estados-api-"));
   const poner = (rel: string, c: Buffer | string) => {
     mkdirSync(path.dirname(path.join(raiz, rel)), { recursive: true });
@@ -22,6 +24,7 @@ beforeAll(async () => {
   poner("ZFL/CR91010710102200000001 0826 ZFL.xlsx", await M.e1());
   poner("ZFL/CR91010710102200000001 0926 ZFL.xlsx", "roto");
   poner("ZFL/CR97015107510000000007 0926 ZFL.xlsx", await M.e7());
+  poner("SINSOC/CR91010710102200000009 0826 SINSOC.xlsx", await M.e1({ iban: "CR91010710102200000009" })); // carpeta sin sociedad: en revisión
   app = await crearApp();
 });
 afterAll(async () => {
@@ -43,11 +46,13 @@ describe("API de importaciones", () => {
     env.STATEMENTS_ROOT = raiz;
     const post = await app.inject({ method: "POST", url: "/api/importaciones" });
     expect(post.statusCode).toBe(200);
-    expect(post.json().datos).toMatchObject({ leidos: 2, conError: 1, movimientos: 8 });
+    expect(post.json().datos).toMatchObject({ leidos: 2, conError: 1, enRevision: 1, movimientos: 8 });
 
     const get = (await app.inject("/api/importaciones")).json();
-    expect(get.resumen).toEqual({ archivos: 3, leidos: 2, conError: 1, movimientos: 8 });
-    const e1 = get.datos.find((a: { ruta: string }) => a.ruta.includes("0826"));
+    expect(get.resumen).toEqual({ archivos: 4, leidos: 2, conError: 1, enRevision: 1, movimientos: 8 });
+    const revisado = get.datos.find((a: { estado: string }) => a.estado === "en_revision");
+    expect(revisado).toMatchObject({ motivo: "carpeta sin sociedad asignada", movimientos: 0, sociedad: null });
+    const e1 = get.datos.find((a: { ruta: string }) => a.ruta.includes("ZFL/") && a.ruta.includes("0826"));
     expect(e1).toMatchObject({ formato: "E1", estado: "leido", sociedad: "ZFL", mes: "2026-08", movimientos: 4 });
     expect(e1.continuidad.estado).toBe("cuadra");
     const roto = get.datos.find((a: { ruta: string }) => a.ruta.includes("0926") && a.ruta.includes("CR91"));
