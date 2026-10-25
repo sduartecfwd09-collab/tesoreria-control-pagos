@@ -26,11 +26,12 @@ Formato: `mysql://USUARIO:CLAVE@127.0.0.1:3306/NOMBRE_BASE`. Siempre `127.0.0.1`
 | `npm run db:migrar:crear` | Tras cambiar `schema.prisma`: genera una migración nueva y la aplica en `dev` (usa la base sombra). Se revisa el SQL antes de versionarlo. |
 | `npm run db:migrar` | Aplica las migraciones pendientes (`prisma migrate deploy`). Es la que se usa en producción. |
 | `npm run db:estado` | Dice si la base está al día con las migraciones. |
-| `npm run db:seed` | Siembra (idempotente): las 5 sociedades del piloto, las categorías y los parámetros. Roles y usuarios quedan sin sembrar. |
+| `npm run db:seed` | Siembra (idempotente): los roles Jefatura y Usuario, las 5 sociedades del piloto, las categorías y los parámetros. Los usuarios no se siembran: se cargan con `usuarios:cargar`. |
 | `npm run db:setup` | Desde cero: genera el cliente, aplica las migraciones y siembra. |
+| `npm run db:reiniciar` | Borra y recrea `tesoreria_dev` (migraciones y seed). Se niega a correr contra una base `_test`, contra cualquier base que no termine en `_dev` y contra un servidor que no sea 127.0.0.1. |
 | `npm run db:preparar-test` | Reinicia `tesoreria_test` (la vacía, migra y siembra). `npm test` ya lo hace solo. |
 
-Los datos no se migran entre motores: tras cambiar de base se vuelven a importar (`npm run importar`, `npm run catalogo`).
+Los datos no se migran entre motores: tras cambiar de base se vuelven a importar (`npm run reimportar`, `npm run catalogo`).
 
 **Fechas y zona horaria (Costa Rica, UTC-6).** La fecha de un vencimiento es un día del calendario, no un instante: la columna es `DATE` y no guarda hora. Para que nunca se corra un día: (1) se escribe siempre como medianoche UTC (`new Date(Date.UTC(a, m, d))`); (2) se lee siempre con `toISOString().slice(0, 10)` y getters UTC, nunca con `getDate()` ni `toLocaleDateString()` en hora local; (3) las demás fechas son `DATETIME(3)` y guardan el instante en UTC. Se probó contra MySQL con el servidor en UTC-6: 1 de marzo, 31 de diciembre y 15 de marzo entran y salen iguales.
 
@@ -38,21 +39,31 @@ Los datos no se migran entre motores: tras cambiar de base se vuelven a importar
 
 **Collation.** Las tablas se crean con `utf8mb4_0900_ai_ci` (declarada en la migración, no depende del servidor): no distingue mayúsculas ni tildes. Efecto en los índices únicos de texto: `Cable` y `CABLE` son el mismo valor (también `Cablé`), lo que se quiere para sociedades, categorías, proveedores y correos. El único índice que debe ser exacto es `Movimiento.claveDedup`, pero es un hash hexadecimal en minúsculas (`CHAR(40)`), así que no hay ambigüedad. `ArchivoImportado.ruta` también es insensible a mayúsculas, coherente con rutas de Windows.
 
-**Sociedades y categorías.** `Sociedad.codigo` (abreviatura interna) es opcional y único: cuando falta se guarda `NULL`, nunca una cadena vacía (dos vacíos chocarían). `nombreLargo` es el que muestra el aplicativo. Las categorías se identifican por `nombreNormalizado` (sin mayúsculas, tildes ni espacios sobrantes) y se desactivan, no se borran.
+**Sociedades y categorías.** `Sociedad.codigo` (abreviatura interna) es opcional y único: cuando falta se guarda `NULL`, nunca una cadena vacía (dos vacíos chocarían). `nombreLargo` es el que muestra el aplicativo. Cada sociedad puede tener un tesorero vigente (`tesoreroId`, un usuario) y la tabla `SociedadTesoreroHistorial` guarda quién lo fue, desde y hasta cuándo y por qué cambió. Los roles son «Jefatura» (ve todo y administra) y «Usuario» (ve solo sus sociedades); por ahora solo se modelan, el control de acceso llega con el inicio de sesión. Un usuario tiene correo de empresa obligatorio y único (en minúsculas) y un nombre normalizado único para reconocer al tesorero por nombre. Las categorías se identifican por `nombreNormalizado` (sin mayúsculas, tildes ni espacios sobrantes) y se desactivan, no se borran.
 
-## Reimportar los estados de cuenta en MySQL
+## Orden de ejecución con datos reales (desde cero)
 
-Los datos no se migran desde SQLite: se vuelven a importar desde la copia local de los estados de cuenta (`STATEMENTS_ROOT`, solo lectura). Lo ejecuta la persona que opera, en su terminal, porque lee datos reales:
+Lo ejecuta la persona que opera, en su terminal, porque lee datos reales (el asistente nunca los abre). El orden importa: cada paso necesita lo que dejó el anterior.
 
 ```
 cd Backend
-npm run db:estado        # confirma que tesoreria_dev tiene las migraciones aplicadas
-npm run reimportar       # lee la carpeta y llena tesoreria_dev
+npm run db:estado          # confirma que tesoreria_dev tiene las migraciones aplicadas
+npm run db:reiniciar       # 1
+npm run usuarios:cargar    # 2
+npm run sociedades:cargar  # 3
+npm run reimportar         # 4
 ```
 
-- **Qué hace:** lee cada `.xlsx` por contenido, crea sociedades, cuentas y movimientos en `DATABASE_URL` y no modifica ni mueve ningún archivo de origen. Se puede repetir sin duplicar: los archivos sin cambios se omiten y los movimientos repetidos se detectan con `claveDedup`. Se niega a correr si `DATABASE_URL` apunta a una base `_test`.
-- **Qué imprime:** solo conteos: la base usada, archivos leídos, sin cambios y con error (incluidos los no reconocidos), los motivos de error agrupados y con números enmascarados, movimientos importados y duplicados, y tablas por sociedad y mes y por sociedad. Nunca rutas ni nombres de archivo (llevan el IBAN), cuentas, montos, beneficiarios ni descripciones, así que esa salida se puede pegar tal cual.
-- **No usar `npm run importar` para compartir resultados:** su informe sí imprime rutas y números de cuenta. Es solo para revisar en la propia terminal.
+1. **`db:reiniciar`**: borra y recrea `tesoreria_dev` con las migraciones y el seed (roles, 5 sociedades del piloto, categorías, parámetros). *Por qué:* partir de una base limpia asegura que nada quede de importaciones hechas con las reglas anteriores (por ejemplo, sociedades creadas automáticamente por el importador). *Para qué:* que la base solo contenga lo que las reglas nuevas permiten. Se niega a correr contra `_test` y contra bases que no terminen en `_dev` (producción incluida).
+2. **`usuarios:cargar`**: lee el Excel de `USUARIOS_FILE` (hoja 1, encabezados `Nombre`, `Correo`, `Rol` en la fila 1, datos desde la fila 2) y crea los usuarios. *Por qué:* el tesorero de cada sociedad es un usuario del sistema y el correo de empresa será la identidad del inicio de sesión de Microsoft y el destino de avisos; no se inventan correos. *Para qué:* que `sociedades:cargar` encuentre a cada tesorero. Una fila sin correo, con correo mal formado o con un rol que no sea «Jefatura» o «Usuario» se ignora con su motivo. Imprime solo conteos.
+3. **`sociedades:cargar`**: lee el Excel de `SOCIEDADES_FILE` (hoja 1, encabezados en la fila 4, datos desde la fila 5), reconoce las sociedades que ya existen (por nombre normalizado o por alias de `src/config/alias-sociedades.ts`), crea las que faltan sin abreviatura y asigna el tesorero con su historial. *Por qué:* la lista maestra de Tesorería es la fuente de las 66 sociedades y de quién atiende cada una; el importador ya no crea sociedades. *Para qué:* que cada carpeta de estados de cuenta tenga una sociedad existente a la cual asignarse, y que cada tesorero vea solo las suyas cuando llegue el inicio de sesión. Imprime solo conteos (sociedades encontradas y creadas, tesoreros encontrados, tesoreros sin usuario y sociedades por tesorero sin nombres).
+4. **`reimportar`**: lee la carpeta `STATEMENTS_ROOT` (solo lectura) y llena `tesoreria_dev`. *Por qué:* es el único comando de importación (`npm run importar` se retiró porque su informe imprimía rutas con IBAN). *Para qué:* tener movimientos reales ya asignados a sociedades conocidas.
+
+Cada comando se puede repetir sin duplicar. Los tres de carga se niegan a correr si `DATABASE_URL` apunta a una base `_test`.
+
+**Asignación carpeta-sociedad.** Es explícita, nunca se adivina: una carpeta se asigna solo a una sociedad que ya existe y cuya abreviatura (`codigo`) coincide con el nombre de la carpeta. Nunca se crea una sociedad al importar. Un archivo queda **en revisión** (no se importa ningún movimiento y se registra el motivo) cuando: la carpeta no tiene sociedad asignada («carpeta sin sociedad asignada», p. ej. DM, que no está en el piloto) o la sociedad del nombre del archivo no coincide con la de su carpeta («nombre de archivo no coincide con la carpeta»). Estas dos comprobaciones se hacen antes de abrir el archivo. Un archivo en revisión no cuenta como leído en la cobertura. Cuando una persona de Jefatura asigne la abreviatura a la sociedad, el siguiente `reimportar` importa la carpeta pendiente.
+
+**Qué imprime `reimportar`:** solo conteos: la base usada, archivos leídos, sin cambios, con error y en revisión; los motivos de error agrupados y con números enmascarados; los archivos en revisión agrupados por motivo; movimientos importados y duplicados, y tablas por sociedad y mes y por sociedad. Nunca rutas ni nombres de archivo (llevan el IBAN), cuentas, montos, beneficiarios ni descripciones, así que esa salida se puede pegar tal cual. Se niega a correr si `DATABASE_URL` apunta a una base `_test`.
 
 ### Verificar las fechas de lo importado
 
@@ -71,10 +82,12 @@ Requiere Node 20 o superior y un MySQL local (desarrollo: 9.2.0; producción: My
 # Terminal 1 — Backend (primera vez: instala, crea la base y carga parámetros iniciales)
 cd Backend
 npm install
-copy .env.example .env          # luego escriba las tres direcciones de MySQL, STATEMENTS_ROOT y CATALOGO_FILE
+copy .env.example .env          # luego escriba las tres direcciones de MySQL, STATEMENTS_ROOT, CATALOGO_FILE, USUARIOS_FILE y SOCIEDADES_FILE
 npm run db:verificar            # dice «conectó» o «falló» para cada base, sin mostrar credenciales
 npm run db:setup                # genera el cliente, aplica las migraciones y siembra
-npm run importar                # lee la carpeta e informa conteos (no imprime descripciones)
+npm run usuarios:cargar         # con datos reales: ver «Orden de ejecución con datos reales»
+npm run sociedades:cargar
+npm run reimportar              # lee la carpeta e informa solo conteos
 npm run catalogo                # importa la tabla de pagos frecuentes y muestra las alertas de calidad
 npm run dev                     # http://localhost:3001/api/salud
 
@@ -95,17 +108,17 @@ Las pruebas de integración con datos reales (`tests/integracion-real.test.ts` y
 | `GET /api/salud` | Estado del servidor |
 | `GET /api/parametros` · `PUT /api/parametros/:id` | Parámetros (valor, ayuda, rango, `supuesto`). 422 si el valor no cumple la regla |
 | `POST /api/importaciones` | Importa `STATEMENTS_ROOT`. 422 si no está configurada o no existe; 409 si ya hay una importación en curso |
-| `GET /api/importaciones` | Archivos con estado, formato, error, advertencias, discrepancias y continuidad del saldo |
+| `GET /api/importaciones` | Archivos con estado (`leido`, `error` o `en_revision`), formato, error, motivo (si está en revisión), advertencias, discrepancias y continuidad del saldo |
 | `GET /api/cobertura` | Cobertura por sociedad, cuenta y mes (`leido` / `error` / `falta`) |
 | `GET /api/movimientos` | Filtros `sociedad`, `cuenta`, `periodo` (AAAA-MM), `pagina`, `porPagina` (máx. 500) |
 | `GET /api/cuentas` · `PATCH /api/cuentas/:id` | Tesorería edita a mano `banco` y/o `moneda` (la importación ya no los pisa) |
 | `GET /api/sociedades` · `GET /api/categorias` | Con conteo de obligaciones (y de cuentas, en sociedades) |
-| `GET /api/obligaciones` | Filtros `sociedad`, `categoria` (id), `activa` (true/false), `q` (proveedor, identificador o responsable), `falta` (monto/cuenta/responsable/dia), `pagina`, `porPagina`. Cada obligación trae `etiquetas` |
+| `GET /api/obligaciones` | Filtros `sociedad` (abreviatura) o `sociedadId`, `categoria` (id), `activa` (true/false), `q` (proveedor, identificador o responsable), `falta` (monto/cuenta/responsable/dia), `pagina`, `porPagina`. Cada obligación trae `etiquetas` |
 | `GET /api/obligaciones/resumen` | Conteos y alertas de calidad del catálogo |
 | `GET /api/obligaciones/:id` · `POST /api/obligaciones` · `PATCH /api/obligaciones/:id` | Alta manual y edición. 409 si ya existe; 422 si un valor no cumple la regla |
 | `POST /api/catalogo/importar` | Importa `CATALOGO_FILE`. 422 si no está configurada, no existe o no tiene la cabecera; 409 si ya hay una en curso |
 | `POST /api/vencimientos/generar` | Cuerpo `{ desde, hasta }` (AAAA-MM, máx. 24 meses). Devuelve creados, ya existentes, detalle por mes y obligaciones omitidas con su motivo |
-| `GET /api/vencimientos` | Filtros `sociedad`, `categoria`, `periodo` o `desde`/`hasta`, `q`, `pagina`, `porPagina`. Cada vencimiento trae `estado`, `conciliado` y `futuro` |
+| `GET /api/vencimientos` | Filtros `sociedad` (abreviatura) o `sociedadId`, `categoria`, `periodo` o `desde`/`hasta`, `q`, `pagina`, `porPagina`. Cada vencimiento trae `estado`, `conciliado` y `futuro` |
 | `GET /api/vencimientos/periodos` | Meses ya generados con su total |
 
 Al crear o editar una obligación (frecuencia, mes de arranque, día, monto o activa), la respuesta incluye `regeneracion` con lo que cambió en sus vencimientos futuros.
