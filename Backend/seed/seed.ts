@@ -1,6 +1,7 @@
 import { DEFINICIONES } from "../src/domain/parametros.js";
 import { asegurarCategoria, asegurarParametro, contarParametros } from "../src/repositories/parametros.js";
 import { sembrarSociedad } from "../src/repositories/importaciones.js";
+import { asegurarRoles } from "../src/repositories/usuarios.js";
 import { prisma } from "../src/db.js";
 
 // Categorías conocidas de la tabla de pagos frecuentes (la importación del catálogo agrega las que falten).
@@ -14,6 +15,9 @@ const SOCIEDADES = [
   { codigo: "WW", nombreLargo: "WW Costa Rica" },
   { codigo: "ZFL", nombreLargo: "ZONA FRANCA LA LIMA, S.R.L." },
 ];
+
+// Roles: Jefatura (ve todo y administra) y Usuario (ve solo sus sociedades). Los usuarios se cargan con npm run usuarios:cargar.
+await asegurarRoles();
 
 for (const { codigo, nombreLargo } of SOCIEDADES) await sembrarSociedad(codigo, nombreLargo);
 const cats = [];

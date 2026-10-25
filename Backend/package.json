@@ -24,7 +24,9 @@
     "db:setup": "prisma generate && prisma migrate deploy && tsx seed/seed.ts",
     "db:preparar-test": "tsx scripts/preparar-test.ts",
     "catalogo": "tsx src/cli/catalogo.ts",
-    "reimportar": "tsx src/cli/reimportar.ts"
+    "reimportar": "tsx src/cli/reimportar.ts",
+    "usuarios:cargar": "tsx src/cli/usuarios-cargar.ts",
+    "sociedades:cargar": "tsx src/cli/sociedades-cargar.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",

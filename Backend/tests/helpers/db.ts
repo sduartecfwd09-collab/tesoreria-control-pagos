@@ -14,3 +14,11 @@ export async function vaciarImportaciones() {
   await prisma.sociedadTesoreroHistorial.deleteMany();
   await prisma.sociedad.deleteMany();
 }
+
+/** Deja sin usuarios la base de pruebas (quita antes el vínculo con las sociedades). Los roles se conservan. */
+export async function vaciarUsuarios() {
+  exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
+  await prisma.sociedadTesoreroHistorial.deleteMany();
+  await prisma.sociedad.updateMany({ data: { tesoreroId: null } });
+  await prisma.usuario.deleteMany();
+}
