@@ -21,15 +21,33 @@ datasource db {
 }
 
 model Sociedad {
-  id           Int                @id @default(autoincrement())
-  codigo       String?            @unique @db.VarChar(30) // abreviatura interna (ZFL, GGDI...); puede ser null; nunca "" (dos vacíos chocarían)
-  nombreLargo  String             @unique @db.VarChar(200) // el que muestra el aplicativo
-  activa       Boolean            @default(true)
-  creadoEn     DateTime           @default(now()) @db.DateTime(3)
-  actualizado  DateTime           @updatedAt @db.DateTime(3)
-  cuentas      Cuenta[]
-  obligaciones Obligacion[]
-  archivos     ArchivoImportado[]
+  id                Int                         @id @default(autoincrement())
+  codigo            String?                     @unique @db.VarChar(30) // abreviatura interna (ZFL, GGDI...); puede ser null; nunca "" (dos vacíos chocarían)
+  nombreLargo       String                      @unique @db.VarChar(200) // el que muestra el aplicativo
+  activa            Boolean                     @default(true)
+  creadoEn          DateTime                    @default(now()) @db.DateTime(3)
+  actualizado       DateTime                    @updatedAt @db.DateTime(3)
+  tesoreroId        Int? // tesorero vigente (usuario del sistema); null = sin tesorero asignado
+  tesorero          Usuario?                    @relation("TesoreroDeSociedad", fields: [tesoreroId], references: [id])
+  cuentas           Cuenta[]
+  obligaciones      Obligacion[]
+  archivos          ArchivoImportado[]
+  historialTesorero SociedadTesoreroHistorial[]
+}
+
+// Quién fue tesorero de cada sociedad y por qué cambió. hasta = null: es el vigente.
+model SociedadTesoreroHistorial {
+  id         Int       @id @default(autoincrement())
+  sociedadId Int
+  sociedad   Sociedad  @relation(fields: [sociedadId], references: [id])
+  usuarioId  Int
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id])
+  desde      DateTime  @db.DateTime(3)
+  hasta      DateTime? @db.DateTime(3)
+  motivo     String?   @db.VarChar(200)
+
+  @@index([sociedadId])
+  @@index([usuarioId])
 }
 
 model Cuenta {
@@ -118,7 +136,8 @@ model ArchivoImportado {
   cuenta         Cuenta?      @relation(fields: [cuentaId], references: [id])
   mes            String?      @db.VarChar(7) // AAAA-MM (del nombre del archivo)
   leidoEn        DateTime?    @db.DateTime(3)
-  estado         String       @default("pendiente") @db.VarChar(20) // pendiente | leido | error
+  estado         String       @default("pendiente") @db.VarChar(20) // pendiente | leido | error | en_revision
+  motivo         String?      @db.VarChar(200) // si estado = en_revision: texto fijo del sistema (nunca datos del archivo)
   numMovimientos Int          @default(0) // movimientos leídos del archivo
   numDuplicados  Int          @default(0) // omitidos por solaparse con otro archivo
   error          String?      @db.VarChar(1000) // mensaje si estado = error (sin datos del contenido)
@@ -200,20 +219,23 @@ model Parametro {
   @@unique([clave, ambito, categoriaId])
 }
 
-// Previstos: en el piloto todos ven todo; la autenticación se define con TI.
+// Por ahora solo se modela: el control de acceso por sesión llega con el inicio de sesión de Microsoft.
 model Rol {
   id       Int       @id @default(autoincrement())
-  nombre   String    @unique @db.VarChar(50) // Administrador | Tesorería | Lectura
+  nombre   String    @unique @db.VarChar(50) // Jefatura (ve todo y administra) | Usuario (ve solo sus sociedades)
   usuarios Usuario[]
 }
 
 model Usuario {
-  id          Int      @id @default(autoincrement())
-  correo      String   @unique @db.VarChar(254)
-  nombre      String?  @db.VarChar(150)
-  rolId       Int
-  rol         Rol      @relation(fields: [rolId], references: [id])
-  activo      Boolean  @default(true)
-  creadoEn    DateTime @default(now()) @db.DateTime(3)
-  actualizado DateTime @updatedAt @db.DateTime(3)
+  id                   Int                         @id @default(autoincrement())
+  correo               String                      @unique @db.VarChar(254) // correo de empresa, en minúsculas y sin espacios: identidad del inicio de sesión y destino de avisos
+  nombre               String                      @db.VarChar(150)
+  nombreNormalizado    String                      @unique @db.VarChar(150) // sin mayúsculas, tildes ni espacios sobrantes: reconoce al tesorero por nombre
+  rolId                Int
+  rol                  Rol                         @relation(fields: [rolId], references: [id])
+  activo               Boolean                     @default(true)
+  creadoEn             DateTime                    @default(now()) @db.DateTime(3)
+  actualizado          DateTime                    @updatedAt @db.DateTime(3)
+  sociedadesATesoreria Sociedad[]                  @relation("TesoreroDeSociedad")
+  historialTesorero    SociedadTesoreroHistorial[]
 }
