@@ -10,6 +10,13 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - Rutas a datos reales solo en variables de entorno (`.env`), con su ejemplo vacío en `.env.example`.
 - Los archivos originales de las fuentes nunca se modifican ni se mueven.
 
+### Datos reales y secretos (reglas para Claude)
+1. No abrir, imprimir ni resumir el contenido de archivos de datos reales (estados de cuenta, catálogo de obligaciones, listas de sociedades). Solo encabezados y número de filas, y únicamente si la persona lo pide expresamente.
+2. Los comandos que leen datos reales los ejecuta la persona en su terminal. Claude prepara y documenta el comando; la persona pega solo conteos y patrones enmascarados.
+3. No abrir `Backend/.env` ni imprimir credenciales o variables con secretos. `.env.example` lleva valores vacíos. Para comprobar la conexión a la base se usa un script que solo dice «conectó» o «falló» (con el tipo de error, sin credenciales).
+4. No configurar el proyecto contra la carpeta compartida de José (`OneDrive - Garnier\Jose Mena's files - PASANTES`) ni leerla. `STATEMENTS_ROOT` (copia local) queda como está; esos datos entrarán después solo por el inicio de sesión y la conexión con Microsoft.
+5. Si una tarea parece requerir leer contenido real, detenerse y preguntar.
+
 ## Git
 - Se trabaja en la rama `sarai`. Se integra a `main` por PR con **merge commit**.
 - Commits pequeños, uno por tarea, con prefijo convencional en español (`feat(backend):`, `feat(frontend):`, `chore:`, `docs:`, `test:`).
