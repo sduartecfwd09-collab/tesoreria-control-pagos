@@ -22,6 +22,7 @@
     "db:estado": "prisma migrate status",
     "db:seed": "tsx seed/seed.ts",
     "db:setup": "prisma generate && prisma migrate deploy && tsx seed/seed.ts",
+    "db:reiniciar": "tsx scripts/reiniciar-dev.ts",
     "db:preparar-test": "tsx scripts/preparar-test.ts",
     "catalogo": "tsx src/cli/catalogo.ts",
     "reimportar": "tsx src/cli/reimportar.ts",
