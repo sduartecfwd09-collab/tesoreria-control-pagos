@@ -1,5 +1,5 @@
 // Prueba de integración OPCIONAL: usa la carpeta real de STATEMENTS_ROOT (solo lectura).
-// Se omite si la variable no está definida o la carpeta no existe. Escribe únicamente en test.db
+// Se omite si la variable no está definida o la carpeta no existe. Escribe únicamente en la base de pruebas (_test)
 // y solo afirma sobre conteos y estructura: no imprime ni compara descripciones de movimientos.
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";

@@ -3,7 +3,7 @@ import { leerEnv } from "../src/config/env.js";
 
 describe("leerEnv", () => {
   it("acepta SMTP_* vacío y aplica valores por defecto", () => {
-    const e = leerEnv({ DATABASE_URL: "file:./x.db", SMTP_HOST: "", SMTP_PORT: "", STATEMENTS_ROOT: "", CATALOGO_FILE: "" });
+    const e = leerEnv({ DATABASE_URL: "mysql://u:c@127.0.0.1:3306/x", SMTP_HOST: "", SMTP_PORT: "", STATEMENTS_ROOT: "", CATALOGO_FILE: "" });
     expect(e.SMTP_HOST).toBeUndefined();
     expect(e.SMTP_PORT).toBeUndefined();
     expect(e.STATEMENTS_ROOT).toBeUndefined();
@@ -15,6 +15,6 @@ describe("leerEnv", () => {
     expect(() => leerEnv({})).toThrow(/DATABASE_URL/);
   });
   it("rechaza un puerto SMTP inválido", () => {
-    expect(() => leerEnv({ DATABASE_URL: "file:./x.db", SMTP_PORT: "abc" })).toThrow(/SMTP_PORT/);
+    expect(() => leerEnv({ DATABASE_URL: "mysql://u:c@127.0.0.1:3306/x", SMTP_PORT: "abc" })).toThrow(/SMTP_PORT/);
   });
 });

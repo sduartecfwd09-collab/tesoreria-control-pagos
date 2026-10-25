@@ -9,8 +9,8 @@ const generar = (payload: object) => app.inject({ method: "POST", url: "/api/ven
 
 beforeAll(async () => {
   await vaciarImportaciones();
-  const s = await prisma.sociedad.create({ data: { codigo: "AAA" } });
-  const b = await prisma.sociedad.create({ data: { codigo: "BBB" } });
+  const s = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } });
+  const b = await prisma.sociedad.create({ data: { codigo: "BBB", nombreLargo: "Sociedad BBB" } });
   const c = await prisma.categoria.findFirstOrThrow({ where: { nombre: "Telecom" } });
   mensual = (await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "Fono", identificador: "0001", diaEsperadoPago: 15 } })).id;
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "Otro", identificador: "0002", diaEsperadoPago: 31 } });

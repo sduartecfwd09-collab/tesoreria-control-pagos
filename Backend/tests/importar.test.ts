@@ -81,7 +81,7 @@ describe("importarCarpeta", () => {
 
   it("guarda sociedad, cuenta, formato, periodo, moneda y trazabilidad del movimiento", async () => {
     const m = await prisma.movimiento.findFirst({ where: { cuenta: { numero: IBAN_BNCR } }, include: { cuenta: { include: { sociedad: true } }, archivo: true }, orderBy: { fila: "asc" } });
-    expect(m).toMatchObject({ periodo: "2026-09", hoja: "Estado de Cuenta", fila: 13, debito: 15050, credito: 0 });
+    expect(m).toMatchObject({ periodo: "2026-09", hoja: "Estado de Cuenta", fila: 13, debito: 15050n, credito: 0n });
     expect(m!.cuenta.sociedad.codigo).toBe("ZFL");
     expect(m!.archivo).toMatchObject({ formato: "E7", mes: "2026-09" });
   });
@@ -111,7 +111,7 @@ describe("importarCarpeta", () => {
   it("no reimporta un archivo cambiado si ya tiene conciliaciones", async () => {
     const mov = (await prisma.movimiento.findFirst({ where: { archivo: { ruta: `ZFL/${IBAN_BCT} 0826 ZFL.xlsx` } } }))!;
     const sociedad = (await prisma.sociedad.findFirst({ where: { codigo: "ZFL" } }))!;
-    const categoria = await prisma.categoria.upsert({ where: { nombre: "Prueba" }, create: { nombre: "Prueba" }, update: {} });
+    const categoria = await prisma.categoria.upsert({ where: { nombreNormalizado: "prueba" }, create: { nombre: "Prueba", nombreNormalizado: "prueba" }, update: {} });
     const ob = await prisma.obligacion.create({ data: { sociedadId: sociedad.id, categoriaId: categoria.id, proveedor: "P", identificador: "001", diaEsperadoPago: 15 } });
     const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08" } });
     await prisma.conciliacion.create({ data: { vencimientoId: ven.id, movimientoId: mov.id, tipoCruce: "automatico", estado: "claro" } });

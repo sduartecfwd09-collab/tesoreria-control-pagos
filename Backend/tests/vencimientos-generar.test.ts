@@ -14,7 +14,7 @@ async function fechas(obligacionId: number) {
 
 beforeEach(async () => {
   await vaciarImportaciones();
-  const s = await prisma.sociedad.create({ data: { codigo: "AAA" } });
+  const s = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } });
   const c = await prisma.categoria.findFirstOrThrow();
   const crear = async (proveedor: string, data: object) =>
     (await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor, identificador: proveedor, ...data } })).id;
@@ -38,7 +38,7 @@ describe("generarVencimientos", () => {
     expect(await fechas(ids.trimestral)).toEqual(["2026-08:2026-08-31"]);
     expect(await fechas(ids.inactiva)).toEqual([]);
     const v = await prisma.vencimiento.findFirstOrThrow({ where: { obligacionId: ids.mensual } });
-    expect(v).toMatchObject({ estado: "proyectado", montoEsperado: 1000 });
+    expect(v).toMatchObject({ estado: "proyectado", montoEsperado: 1000n });
   });
 
   it("es idempotente: repetir el rango no duplica y ampliarlo solo agrega lo nuevo", async () => {
@@ -63,7 +63,7 @@ describe("regenerarObligacion (reloj inyectado)", () => {
     expect(r).toEqual({ creados: 0, actualizados: 2, eliminados: 0, protegidos: 0 });
     expect(await fechas(ids.mensual)).toEqual(["2026-08:2026-08-15", "2026-09:2026-09-20", "2026-10:2026-10-20"]);
     const ago = await prisma.vencimiento.findFirstOrThrow({ where: { obligacionId: ids.mensual, periodo: "2026-08" } });
-    expect(ago.montoEsperado).toBe(1000); // el pasado conserva su monto
+    expect(ago.montoEsperado).toBe(1000n); // el pasado conserva su monto
   });
 
   it("un vencimiento futuro se mueve aunque el nuevo día ya haya pasado en el mes", async () => {

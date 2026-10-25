@@ -20,7 +20,7 @@ const patch = (id: number, payload: object) => app.inject({ method: "PATCH", url
 
 beforeAll(async () => {
   await vaciarImportaciones();
-  await prisma.sociedad.create({ data: { codigo: "DM" } }); // sociedad sin obligaciones
+  await prisma.sociedad.create({ data: { codigo: "DM", nombreLargo: "Sociedad DM" } }); // sociedad sin obligaciones
   dir = mkdtempSync(path.join(tmpdir(), "catalogo-api-"));
   writeFileSync(path.join(dir, "catalogo.xlsx"), await catalogo());
   writeFileSync(path.join(dir, "sin-cabecera.xlsx"), await catalogo([], { cabecera: ["Otra", "Cosa"] }));

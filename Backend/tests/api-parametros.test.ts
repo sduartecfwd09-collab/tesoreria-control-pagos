@@ -15,7 +15,7 @@ describe("API de parámetros", () => {
     expect(d.find((p) => p.clave === "aviso_dias")?.valor).toBe("3");
     expect(d.find((p) => p.clave === "frecuencia_defecto")?.valor).toBe("mensual");
     const tol = d.filter((p) => p.clave === "tolerancia_pct");
-    expect(tol.map((p) => p.categoria).sort()).toEqual(["CCSS", "Electricidad", "Telecom"]);
+    expect(tol.map((p) => p.categoria).sort()).toEqual(["CCSS", "Cable", "Electricidad", "Internet", "Teléfono"]);
     expect(tol.every((p) => p.valor === "10")).toBe(true);
   });
 

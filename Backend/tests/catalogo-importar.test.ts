@@ -43,7 +43,7 @@ describe("importarCatalogo", () => {
     const r = await importarCatalogo(archivo());
     expect(r).toMatchObject({ creadas: 0, actualizadas: 0, sinCambios: 6 });
     expect(await prisma.obligacion.count()).toBe(6);
-    expect(await buscar("00012345")).toMatchObject(editado);
+    expect(await buscar("00012345")).toMatchObject({ ...editado, montoEsperado: BigInt(editado.montoEsperado) });
   });
 
   it("actualiza el día si cambió en el archivo y no fue editado; si viene inválido conserva el anterior", async () => {
@@ -75,7 +75,7 @@ describe("importarCatalogo", () => {
   });
 
   it("no toca las obligaciones creadas a mano aunque coincidan con una fila", async () => {
-    const s = await prisma.sociedad.create({ data: { codigo: "AAA" } });
+    const s = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } });
     const c = await prisma.categoria.findFirstOrThrow({ where: { nombre: "Electricidad" } });
     await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "LUZ UNO", identificador: "00012345", diaEsperadoPago: 3, origen: "manual" } });
     const r = await importarCatalogo(archivo());
