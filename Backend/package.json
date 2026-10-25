@@ -23,7 +23,8 @@
     "db:setup": "prisma generate && prisma migrate deploy && tsx seed/seed.ts",
     "db:preparar-test": "tsx scripts/preparar-test.ts",
     "importar": "tsx src/cli/importar.ts",
-    "catalogo": "tsx src/cli/catalogo.ts"
+    "catalogo": "tsx src/cli/catalogo.ts",
+    "reimportar": "tsx src/cli/reimportar.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",

@@ -40,6 +40,20 @@ Los datos no se migran entre motores: tras cambiar de base se vuelven a importar
 
 **Sociedades y categorías.** `Sociedad.codigo` (abreviatura interna) es opcional y único: cuando falta se guarda `NULL`, nunca una cadena vacía (dos vacíos chocarían). `nombreLargo` es el que muestra el aplicativo. Las categorías se identifican por `nombreNormalizado` (sin mayúsculas, tildes ni espacios sobrantes) y se desactivan, no se borran.
 
+## Reimportar los estados de cuenta en MySQL
+
+Los datos no se migran desde SQLite: se vuelven a importar desde la copia local de los estados de cuenta (`STATEMENTS_ROOT`, solo lectura). Lo ejecuta la persona que opera, en su terminal, porque lee datos reales:
+
+```
+cd Backend
+npm run db:estado        # confirma que tesoreria_dev tiene las migraciones aplicadas
+npm run reimportar       # lee la carpeta y llena tesoreria_dev
+```
+
+- **Qué hace:** lee cada `.xlsx` por contenido, crea sociedades, cuentas y movimientos en `DATABASE_URL` y no modifica ni mueve ningún archivo de origen. Se puede repetir sin duplicar: los archivos sin cambios se omiten y los movimientos repetidos se detectan con `claveDedup`. Se niega a correr si `DATABASE_URL` apunta a una base `_test`.
+- **Qué imprime:** solo conteos: la base usada, archivos leídos, sin cambios y con error (incluidos los no reconocidos), los motivos de error agrupados y con números enmascarados, movimientos importados y duplicados, y tablas por sociedad y mes y por sociedad. Nunca rutas ni nombres de archivo (llevan el IBAN), cuentas, montos, beneficiarios ni descripciones, así que esa salida se puede pegar tal cual.
+- **No usar `npm run importar` para compartir resultados:** su informe sí imprime rutas y números de cuenta. Es solo para revisar en la propia terminal.
+
 ## Arranque
 
 Requiere Node 20 o superior y un MySQL local (desarrollo: 9.2.0; producción: MySQL, versión por confirmar con TI). Antes de arrancar hay que crear las bases y el `.env` (sección «Base de datos»). Dos terminales:
