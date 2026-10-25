@@ -4,7 +4,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 
 ## Confidencialidad (no negociable)
 - La carpeta PASANTES (estados de cuenta y tabla de pagos frecuentes) es **solo lectura**: nunca se escribe, mueve ni copia al repositorio.
-- Nunca se versionan datos financieros (`.xlsx`, `.csv`, `.eml`, resultados), `.env` ni bases de datos (`*.db`). El `.gitignore` ya los excluye; revisar `git status` antes de cada commit.
+- Nunca se versionan datos financieros (`.xlsx`, `.csv`, `.eml`, resultados), `.env` ni bases de datos (`*.db`, volcados `.sql` con datos). El `.gitignore` ya los excluye; revisar `git status` antes de cada commit.
 - Consola, logs y errores muestran solo conteos y estados, nunca descripciones, montos, identificadores ni filas reales.
 - Las pruebas usan archivos sintéticos generados por código. Las de integración con datos reales se omiten solas si la ruta no existe.
 - Rutas a datos reales solo en variables de entorno (`.env`), con su ejemplo vacío en `.env.example`.
@@ -25,7 +25,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - Cada hito termina con reporte y espera aprobación antes del siguiente.
 
 ## Arquitectura
-- `Backend/` (Node + TypeScript, Fastify, Prisma + SQLite, zod, vitest; puerto 3001) y `Frontend/` (Next.js App Router + Tailwind; puerto 3000) son aplicaciones separadas que hablan solo por HTTP. El Frontend nunca toca la base.
+- `Backend/` (Node + TypeScript, Fastify, Prisma + MySQL, zod, vitest; puerto 3001) y `Frontend/` (Next.js App Router + Tailwind; puerto 3000) son aplicaciones separadas que hablan solo por HTTP. El Frontend nunca toca la base.
 - Los **repositorios** (`Backend/src/repositories`) son la única capa que usa Prisma; rutas y dominio no importan Prisma directamente.
 - Los **parámetros de negocio viven en la base** (tabla Parametro, editables en Configuración), no en el código; los umbrales son siempre parámetros. Los que son supuesto se marcan `supuesto: true`.
 - Montos en centavos (enteros); fechas ISO 8601; errores `{ "error": "texto" }` en español claro.
@@ -34,7 +34,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - Modelo de datos: el responsable es un campo de la obligación; cada vencimiento guarda una copia de los datos de la obligación, su fecha original y su fecha vigente; las obligaciones se desactivan, no se borran; hay usuarios, roles y preferencias de aviso.
 
 ## Decisiones vigentes
-- **Monto:** el monto esperado lo digita Tesorería y es opcional, así que el campo admite nulo. En el piloto no se valida contra el pago: `tolerancia_pct` existe como parámetro pero no se aplica. Si falta, se muestra «Sin monto». **Hay montos mayores a ₡21,4 millones:** los campos de monto pasan de `Int` a `BigInt` antes del cruce automático.
+- **Monto:** el monto esperado lo digita Tesorería y es opcional, así que el campo admite nulo. En el piloto no se valida contra el pago: `tolerancia_pct` existe como parámetro pero no se aplica. Si falta, se muestra «Sin monto». **Hay montos mayores a ₡21,4 millones:** los campos de monto son `BigInt` (centavos) y la API los envía como número.
 - **Cruce:** por identificador, sociedad, cuenta y fecha. Ventana de ±3 días calendario alrededor de la fecha esperada, que puede cruzar de un mes a otro (parámetro `ventana_dias`). Es automático solo si el resultado es claro; lo dudoso va a revisión humana. El extractor de identificador reconoce varios patrones (p. ej. `Pago:JASEC <8 dígitos>`, SINPE con «CONTRATO <9 dígitos>»).
 - **Frecuencias:** mensual, bimestral, trimestral, semestral y anual, con los meses de pago marcados. La proyección es el próximo mes marcado.
 - **«Control desde» (mes) por obligación:** antes de ese mes no se generan vencimientos. No hay mes de inicio global.

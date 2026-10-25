@@ -2,19 +2,55 @@
 
 Dos aplicaciones independientes que se comunican por HTTP:
 
-- **Backend/** — Node.js + TypeScript, Fastify, Prisma + SQLite, zod, exceljs, vitest. API REST en `http://localhost:3001`.
+- **Backend/** — Node.js + TypeScript, Fastify, Prisma + MySQL, zod, exceljs, vitest. API REST en `http://localhost:3001`.
 - **Frontend/** — Next.js (App Router) + TypeScript + Tailwind, TanStack Table (tablas) y react-hook-form (formularios). Solo interfaz, en `http://localhost:3000`. Nunca toca la base de datos.
+
+## Base de datos (MySQL)
+
+Prisma se conecta con el adaptador `@prisma/adapter-mariadb` (sirve para MySQL y MariaDB). La documentación de Prisma lista MySQL 5.6 o superior y no menciona la 9.x; en desarrollo se comprobó que la 9.2.0 funciona. El esquema evita funciones exclusivas de la 9.x para correr también en MySQL 8.0 y 8.4 (la collation `utf8mb4_0900_ai_ci` existe desde la 8.0).
+
+**Bases del entorno de desarrollo** (en producción hay una sola):
+
+| Variable | Base | Para qué sirve |
+|---|---|---|
+| `DATABASE_URL` | `tesoreria_dev` | Datos de trabajo: la API y la importación. |
+| `TEST_DATABASE_URL` | `tesoreria_test` | Pruebas automáticas. Cada corrida la borra por completo, por eso el nombre debe terminar en `_test`: si no, las pruebas se niegan a correr. |
+| `SHADOW_DATABASE_URL` | `tesoreria_shadow` | Base temporal que Prisma usa solo al crear migraciones, para comparar el esquema sin tocar `dev`. |
+
+Formato: `mysql://USUARIO:CLAVE@127.0.0.1:3306/NOMBRE_BASE`. Siempre `127.0.0.1` (con `localhost` puede resolverse por IPv6 y fallar). Si la clave tiene caracteres especiales (`@`, `:`, `/`), se escriben codificados (`@` = `%40`). La clave solo vive en el `.env`, que no se versiona.
+
+**Migraciones** (reemplazan a `db push`: dejan historia revisable y son lo que se aplica en producción):
+
+| Comando | Qué hace |
+|---|---|
+| `npm run db:migrar:crear` | Tras cambiar `schema.prisma`: genera una migración nueva y la aplica en `dev` (usa la base sombra). Se revisa el SQL antes de versionarlo. |
+| `npm run db:migrar` | Aplica las migraciones pendientes (`prisma migrate deploy`). Es la que se usa en producción. |
+| `npm run db:estado` | Dice si la base está al día con las migraciones. |
+| `npm run db:seed` | Siembra (idempotente): las 5 sociedades del piloto, las categorías y los parámetros. Roles y usuarios quedan sin sembrar. |
+| `npm run db:setup` | Desde cero: genera el cliente, aplica las migraciones y siembra. |
+| `npm run db:preparar-test` | Reinicia `tesoreria_test` (la vacía, migra y siembra). `npm test` ya lo hace solo. |
+
+Los datos no se migran entre motores: tras cambiar de base se vuelven a importar (`npm run importar`, `npm run catalogo`).
+
+**Fechas y zona horaria (Costa Rica, UTC-6).** La fecha de un vencimiento es un día del calendario, no un instante: la columna es `DATE` y no guarda hora. Para que nunca se corra un día: (1) se escribe siempre como medianoche UTC (`new Date(Date.UTC(a, m, d))`); (2) se lee siempre con `toISOString().slice(0, 10)` y getters UTC, nunca con `getDate()` ni `toLocaleDateString()` en hora local; (3) las demás fechas son `DATETIME(3)` y guardan el instante en UTC. Se probó contra MySQL con el servidor en UTC-6: 1 de marzo, 31 de diciembre y 15 de marzo entran y salen iguales.
+
+**Montos.** Se guardan en centavos como `BIGINT` (hay montos mayores a ₡21,4 millones, el límite de un entero de 32 bits en centavos). JSON no admite BigInt: la API los envía como número (`src/domain/montos.ts`) y falla en voz alta si alguno no cabe sin perder precisión.
+
+**Collation.** Las tablas se crean con `utf8mb4_0900_ai_ci` (declarada en la migración, no depende del servidor): no distingue mayúsculas ni tildes. Efecto en los índices únicos de texto: `Cable` y `CABLE` son el mismo valor (también `Cablé`), lo que se quiere para sociedades, categorías, proveedores y correos. El único índice que debe ser exacto es `Movimiento.claveDedup`, pero es un hash hexadecimal en minúsculas (`CHAR(40)`), así que no hay ambigüedad. `ArchivoImportado.ruta` también es insensible a mayúsculas, coherente con rutas de Windows.
+
+**Sociedades y categorías.** `Sociedad.codigo` (abreviatura interna) es opcional y único: cuando falta se guarda `NULL`, nunca una cadena vacía (dos vacíos chocarían). `nombreLargo` es el que muestra el aplicativo. Las categorías se identifican por `nombreNormalizado` (sin mayúsculas, tildes ni espacios sobrantes) y se desactivan, no se borran.
 
 ## Arranque
 
-Requiere Node 20 o superior. Dos terminales:
+Requiere Node 20 o superior y un MySQL local (desarrollo: 9.2.0; producción: MySQL, versión por confirmar con TI). Antes de arrancar hay que crear las bases y el `.env` (sección «Base de datos»). Dos terminales:
 
 ```
 # Terminal 1 — Backend (primera vez: instala, crea la base y carga parámetros iniciales)
 cd Backend
 npm install
-copy .env.example .env          # luego edite STATEMENTS_ROOT y CATALOGO_FILE (solo lectura)
-npm run db:setup
+copy .env.example .env          # luego escriba las tres direcciones de MySQL, STATEMENTS_ROOT y CATALOGO_FILE
+npm run db:verificar            # dice «conectó» o «falló» para cada base, sin mostrar credenciales
+npm run db:setup                # genera el cliente, aplica las migraciones y siembra
 npm run importar                # lee la carpeta e informa conteos (no imprime descripciones)
 npm run catalogo                # importa la tabla de pagos frecuentes y muestra las alertas de calidad
 npm run dev                     # http://localhost:3001/api/salud
@@ -104,12 +140,11 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 ## Pendientes y deuda técnica
 
 - **Tipos compartidos:** `Frontend/src/lib/tipos.ts` replica el contrato a mano. Evaluar OpenAPI generado más adelante.
-- **SQL Server:** al ir a producción, verificar el soporte de SQL Server con Prisma 7.10.1 (hoy se usa SQLite).
+- **MySQL de producción:** confirmar con TI la versión exacta y verificar que el esquema y las migraciones corren en ella (se evitan funciones exclusivas de la 9.x).
 - **Docker / despliegue:** Dockerfile y compose se preparan antes de entregar a TI.
 - **Vulnerabilidades:** `eslint-config-next` (5 altas, solo desarrollo) y `uuid` transitiva de exceljs (2 moderadas); revisar antes de entregar a TI. No usar `npm audit fix --force`.
 - **exceljs 4.4.0** no tiene versiones nuevas desde dic. 2024; no abre libros con dibujos incrustados (se resuelve con una copia en memoria sin dibujos, `src/ingest/quitar-dibujos.ts`).
 - **Autenticación y roles:** pendientes de definir con TI.
-- **Montos de 32 bits (confirmado, se resuelve en el próximo hito):** los campos de monto son `Int` de Prisma (máximo ₡21 474 836,47 en centavos) y Tesorería confirmó que hay montos mayores. Hay que migrar montos de movimientos, obligaciones, vencimientos y conciliaciones a `BigInt` antes del cruce automático.
 - **Proveedor duplicado en el catálogo:** «JASEC Internet» es el mismo proveedor que «JASEC». Falta unificarlo en la importación (alias de proveedor).
 - **Aviso de n.º de servicio repetido al guardar:** hoy se detecta y se muestra en el resumen; falta advertirlo al crear o editar una obligación antes de guardar.
 - **Diseño nuevo pendiente de aplicar:** las pantallas actuales todavía muestran textos internos («pronto», «Por confirmar con Tesorería») y el botón «Generar vencimientos»; se reemplazan con el diseño aprobado en la maqueta (ver `CLAUDE.md`).
