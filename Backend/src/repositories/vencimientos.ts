@@ -63,7 +63,8 @@ export async function aplicarCambios(c: CambiosVencimientos) {
 }
 
 export interface FiltroVencimientos {
-  sociedad?: string;
+  sociedad?: string; // abreviatura
+  sociedadId?: number; // identificador: sirve también para sociedades sin abreviatura
   categoria?: number;
   periodo?: string;
   desde?: string;
@@ -83,6 +84,7 @@ export async function listarVencimientos(f: FiltroVencimientos) {
     ...(Object.keys(periodo).length ? { periodo } : {}),
     obligacion: {
       ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
+      ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
       ...(f.categoria ? { categoriaId: f.categoria } : {}),
       ...(f.q ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }] } : {}),
     },

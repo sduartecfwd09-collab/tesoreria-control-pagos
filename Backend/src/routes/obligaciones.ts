@@ -25,6 +25,7 @@ const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "m
 
 const consulta = z.object({
   sociedad: z.string().trim().min(1).transform((s) => s.toUpperCase()).optional(),
+  sociedadId: z.coerce.number({ error: "La sociedad debe ser un número" }).int().positive("La sociedad debe ser un número").optional(),
   categoria: z.coerce.number({ error: "La categoría debe ser un número" }).int().positive("La categoría debe ser un número").optional(),
   activa: z.enum(["true", "false"], { error: "«activa» debe ser true o false" }).transform((v) => v === "true").optional(),
   q: z.string().trim().min(1).max(80, "La búsqueda admite como máximo 80 caracteres").optional(),

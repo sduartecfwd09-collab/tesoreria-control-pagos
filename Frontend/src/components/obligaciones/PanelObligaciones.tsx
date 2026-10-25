@@ -114,7 +114,7 @@ export function PanelObligaciones() {
       </p>
     );
 
-  const hayFiltros = filtro.sociedad || filtro.categoria || filtro.activa !== true || filtro.q || filtro.falta;
+  const hayFiltros = filtro.sociedadId || filtro.categoria || filtro.activa !== true || filtro.q || filtro.falta;
 
   return (
     <>
@@ -146,7 +146,9 @@ export function PanelObligaciones() {
           alFiltrarFalta={(falta) => cambiarFiltro({ falta: filtro.falta === falta ? undefined : falta })}
           alBuscar={(sociedad, q) => {
             setTexto(q);
-            cambiarFiltro({ sociedad, q, activa: true, falta: undefined, categoria: undefined });
+            // El aviso de calidad trae la sociedad como texto (abreviatura o nombre largo): se busca su identificador.
+            const encontrada = catalogos?.sociedades.find((s) => (s.codigo ?? s.nombreLargo) === sociedad);
+            cambiarFiltro({ sociedadId: encontrada?.id, q, activa: true, falta: undefined, categoria: undefined });
           }}
         />
       )}
@@ -169,10 +171,10 @@ export function PanelObligaciones() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
           <label className="text-sm font-medium">
             Sociedad
-            <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedad ?? ""} onChange={(e) => cambiarFiltro({ sociedad: e.target.value || undefined })}>
+            <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedadId ?? ""} onChange={(e) => cambiarFiltro({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
               <option value="">Todas</option>
               {catalogos.sociedades.map((s) => (
-                <option key={s.id} value={s.codigo ?? ""}>
+                <option key={s.id} value={s.id}>
                   {s.codigo ?? s.nombreLargo} ({s.obligaciones})
                 </option>
               ))}

@@ -66,7 +66,8 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
 }
 
 export interface FiltroObligaciones {
-  sociedad?: string;
+  sociedad?: string; // abreviatura
+  sociedadId?: number; // identificador: sirve también para sociedades sin abreviatura
   categoria?: number;
   activa?: boolean;
   q?: string;
@@ -85,6 +86,7 @@ const FALTA: Record<NonNullable<FiltroObligaciones["falta"]>, Prisma.ObligacionW
 export async function listarObligaciones(f: FiltroObligaciones) {
   const where: Prisma.ObligacionWhereInput = {
     ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
+    ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
     ...(f.categoria ? { categoriaId: f.categoria } : {}),
     ...(f.activa !== undefined ? { activa: f.activa } : {}),
     ...(f.falta ? FALTA[f.falta] : {}),

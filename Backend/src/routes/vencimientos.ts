@@ -11,6 +11,7 @@ const periodo = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-M
 
 const consulta = z.object({
   sociedad: z.string().trim().min(1).transform((s) => s.toUpperCase()).optional(),
+  sociedadId: z.coerce.number({ error: "La sociedad debe ser un número" }).int().positive("La sociedad debe ser un número").optional(),
   categoria: z.coerce.number({ error: "La categoría debe ser un número" }).int().positive("La categoría debe ser un número").optional(),
   periodo: periodo("el periodo").optional(),
   desde: periodo("el mes inicial").optional(),

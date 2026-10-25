@@ -164,7 +164,7 @@ export interface Regeneracion {
 }
 
 export interface FiltroObligaciones {
-  sociedad?: string;
+  sociedadId?: number;
   categoria?: number;
   activa?: boolean;
   q?: string;
@@ -220,7 +220,7 @@ export interface Vencimiento {
 }
 
 export interface FiltroVencimientos {
-  sociedad?: string;
+  sociedadId?: number;
   categoria?: number;
   periodo?: string;
   q?: string;
