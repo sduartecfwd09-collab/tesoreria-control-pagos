@@ -77,11 +77,14 @@ describe("GET /api/vencimientos", () => {
 });
 
 describe("edición de obligaciones y vencimientos", () => {
-  it("al editar el día por el API se ajustan solo los vencimientos futuros", async () => {
-    const r = (await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { diaEsperadoPago: 20 } })).json();
+  it("al editar el monto por el API se ajustan solo los vencimientos futuros y el día no se cambia por aquí", async () => {
+    const dia = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { diaEsperadoPago: 20 } });
+    expect(dia.statusCode).toBe(422);
+    const r = (await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { montoEsperado: 5000 } })).json();
     expect(r.regeneracion).toEqual({ creados: 0, actualizados: 1, eliminados: 0, protegidos: 0 });
-    const v = (await app.inject("/api/vencimientos?q=fono")).json().datos.map((x: { fecha: string }) => x.fecha);
-    expect(v).toEqual(["2026-08-15", "2026-09-20"]);
+    const v = (await app.inject("/api/vencimientos?q=fono")).json().datos;
+    expect(v.map((x: { fecha: string }) => x.fecha)).toEqual(["2026-08-15", "2026-09-15"]);
+    expect(v.map((x: { montoEsperado: number | null }) => x.montoEsperado)).toEqual([null, 5000]);
   });
 
   it("editar solo el responsable no regenera", async () => {

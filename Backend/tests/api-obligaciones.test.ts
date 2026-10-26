@@ -138,16 +138,28 @@ describe("identificador duplicado: avisa, no bloquea", () => {
 describe("catálogo: edición y alta", () => {
   it("PATCH guarda los campos editables, confirma los supuestos y protege el día de la reimportación", async () => {
     const o = await porId("00012346");
-    const r = await patch(o.id, { frecuencia: "trimestral", mesArranque: 2, diaEsperadoPago: 28, montoEsperado: 1_500_000, moneda: "USD", responsable: " Ana " });
+    const r = await patch(o.id, { frecuencia: "trimestral", mesArranque: 2, montoEsperado: 1_500_000, moneda: "USD", responsable: " Ana " });
     expect(r.statusCode).toBe(200);
     expect(r.json().datos).toMatchObject({
-      frecuencia: "trimestral", frecuenciaPorConfirmar: false, mesArranque: 2, diaEsperadoPago: 28, diaEditado: true,
+      frecuencia: "trimestral", frecuenciaPorConfirmar: false, mesArranque: 2, diaEsperadoPago: 10,
       montoEsperado: 1_500_000, moneda: "USD", monedaPorConfirmar: false, responsable: "Ana",
     });
     await app.inject({ method: "POST", url: "/api/catalogo/importar" });
-    expect(await porId("00012346")).toMatchObject({ diaEsperadoPago: 28, frecuencia: "trimestral", montoEsperado: 1_500_000, responsable: "Ana" });
+    expect(await porId("00012346")).toMatchObject({ diaEsperadoPago: 10, frecuencia: "trimestral", montoEsperado: 1_500_000, responsable: "Ana" });
     // al volver a mensual se limpia el mes de arranque
     expect((await patch(o.id, { frecuencia: "mensual" })).json().datos.mesArranque).toBeNull();
+  });
+
+  it("PATCH no cambia un día ya definido (exige motivo y autor: servicio aparte) pero sí permite indicarlo si falta", async () => {
+    const o = await porId("00012345");
+    const r = await patch(o.id, { diaEsperadoPago: 20 });
+    expect(r.statusCode).toBe(422);
+    expect(r.json()).toMatchObject({ campo: "diaEsperadoPago" });
+    expect((await patch(o.id, { diaEsperadoPago: 15 })).statusCode).toBe(200); // el mismo valor no es un cambio
+    await prisma.obligacion.update({ where: { id: o.id }, data: { diaEsperadoPago: null } });
+    const lleno = await patch(o.id, { diaEsperadoPago: 12 });
+    expect(lleno.json().datos).toMatchObject({ diaEsperadoPago: 12, diaEditado: true });
+    await prisma.obligacion.update({ where: { id: o.id }, data: { diaEsperadoPago: 15, diaEditado: false } });
   });
 
   it("PATCH desactiva sin borrar, y al desactivar una del par repetido la alerta desaparece", async () => {

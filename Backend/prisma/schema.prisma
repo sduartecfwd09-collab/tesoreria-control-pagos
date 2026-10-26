@@ -104,6 +104,7 @@ model Obligacion {
   creadoEn               DateTime      @default(now()) @db.DateTime(3)
   actualizado            DateTime      @updatedAt @db.DateTime(3)
   vencimientos           Vencimiento[]
+  cambiosDia             CambioDia[]
 
   @@unique([sociedadId, proveedor, identificador])
 }
@@ -112,7 +113,8 @@ model Vencimiento {
   id             Int            @id @default(autoincrement())
   obligacionId   Int
   obligacion     Obligacion     @relation(fields: [obligacionId], references: [id])
-  fecha          DateTime       @db.Date // solo fecha, sin hora (se escribe y se lee como medianoche UTC)
+  fecha          DateTime       @db.Date // fecha vigente: solo fecha, sin hora (se escribe y se lee como medianoche UTC)
+  fechaOriginal  DateTime?      @db.Date // null = la fecha vigente es la del día de pago; con valor = se movió «de una sola vez» y esta es la fecha original
   periodo        String         @db.VarChar(7) // AAAA-MM
   montoEsperado  BigInt? // centavos; null = "monto sin definir"
   // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion
@@ -121,6 +123,7 @@ model Vencimiento {
   actualizado    DateTime       @updatedAt @db.DateTime(3)
   conciliaciones Conciliacion[]
   alertas        Alerta[]
+  cambiosDia     CambioDia[]
 
   @@unique([obligacionId, periodo])
 }
@@ -141,6 +144,30 @@ model CatalogoRevision {
   creadoEn      DateTime @default(now()) @db.DateTime(3)
 
   @@index([tipo])
+}
+
+// Historial de cambios del día de pago. Solo se inserta: no hay edición ni borrado (el repositorio no los ofrece).
+// permanente: cambia el día de la obligación (afecta a vencimientos futuros no pagados; vencimientoId = null).
+// una_vez: mueve la fecha de un vencimiento concreto (diaAnterior/diaNuevo = null; fechaAnterior/fechaNueva con valor).
+model CambioDia {
+  id            Int          @id @default(autoincrement())
+  obligacionId  Int
+  obligacion    Obligacion   @relation(fields: [obligacionId], references: [id])
+  vencimientoId Int?
+  vencimiento   Vencimiento? @relation(fields: [vencimientoId], references: [id], onDelete: Restrict)
+  tipo          String       @db.VarChar(20) // permanente | una_vez
+  diaAnterior   Int?
+  diaNuevo      Int?
+  fechaAnterior DateTime?    @db.Date
+  fechaNueva    DateTime?    @db.Date
+  motivo        String       @db.VarChar(300)
+  usuarioId     Int
+  usuario       Usuario      @relation(fields: [usuarioId], references: [id])
+  creadoEn      DateTime     @default(now()) @db.DateTime(3)
+
+  @@index([obligacionId])
+  @@index([vencimientoId])
+  @@index([usuarioId])
 }
 
 model ArchivoImportado {
@@ -255,5 +282,6 @@ model Usuario {
   creadoEn             DateTime                    @default(now()) @db.DateTime(3)
   actualizado          DateTime                    @updatedAt @db.DateTime(3)
   sociedadesATesoreria Sociedad[]                  @relation("TesoreroDeSociedad")
+  cambiosDia           CambioDia[]
   historialTesorero    SociedadTesoreroHistorial[]
 }

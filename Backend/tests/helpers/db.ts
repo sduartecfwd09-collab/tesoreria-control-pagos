@@ -5,6 +5,7 @@ import { exigirBaseDePruebas } from "../../src/config/proteccion-pruebas.js";
 export async function vaciarImportaciones() {
   exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL"); // borra datos: solo en la base _test
   await prisma.catalogoRevision.deleteMany();
+  await prisma.cambioDia.deleteMany();
   await prisma.conciliacion.deleteMany();
   await prisma.alerta.deleteMany();
   await prisma.movimiento.deleteMany();

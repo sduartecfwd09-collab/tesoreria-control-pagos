@@ -44,20 +44,20 @@ export async function horizonte(): Promise<string | null> {
 export async function vencimientosDeObligacionDesde(obligacionId: number, periodo: string) {
   return prisma.vencimiento.findMany({
     where: { obligacionId, periodo: { gte: periodo } },
-    include: { _count: { select: { conciliaciones: true, alertas: true } } },
+    include: { _count: { select: { conciliaciones: true, alertas: true, cambiosDia: true } } },
   });
 }
 
 export interface CambiosVencimientos {
   crear: VencimientoPlan[];
-  actualizar: { id: number; fecha: Date; montoEsperado: number | null }[];
+  actualizar: { id: number; fecha: Date; fechaOriginal: Date | null; montoEsperado: number | null }[];
   eliminar: number[];
 }
 
 export async function aplicarCambios(c: CambiosVencimientos) {
   await prisma.$transaction(async (tx) => {
-    if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, estado: { notIn: ESTADOS_PAGADOS }, conciliaciones: { none: {} }, alertas: { none: {} } } });
-    for (const u of c.actualizar) await tx.vencimiento.update({ where: { id: u.id }, data: { fecha: u.fecha, montoEsperado: u.montoEsperado } });
+    if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, estado: { notIn: ESTADOS_PAGADOS }, conciliaciones: { none: {} }, alertas: { none: {} }, cambiosDia: { none: {} } } });
+    for (const u of c.actualizar) await tx.vencimiento.update({ where: { id: u.id }, data: { fecha: u.fecha, fechaOriginal: u.fechaOriginal, montoEsperado: u.montoEsperado } });
     if (c.crear.length > 0) await tx.vencimiento.createMany({ data: c.crear });
   });
 }

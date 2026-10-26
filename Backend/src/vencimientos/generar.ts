@@ -5,7 +5,7 @@ import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { ESTADOS_PAGADOS, periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
 import {
-  aplicarCambios, crearFaltantes, describirObligaciones, horizonte, obligacionesParaPlan, obligacionParaPlan,
+  aplicarCambios, type CambiosVencimientos, crearFaltantes, describirObligaciones, horizonte, obligacionesParaPlan, obligacionParaPlan,
   vencimientosDeObligacionDesde,
 } from "../repositories/vencimientos.js";
 
@@ -80,7 +80,7 @@ export async function regenerarObligacion(obligacionId: number, reloj: Reloj): P
   const plan = fin && fin >= desde ? planificar([o], periodosEntre(desde, fin)).vencimientos : [];
   const deseados = new Map(plan.map((v) => [v.periodo, v]));
 
-  const actualizar: { id: number; fecha: Date; montoEsperado: number | null }[] = [];
+  const actualizar: CambiosVencimientos["actualizar"] = [];
   const eliminar: number[] = [];
   const ocupados = new Set<string>();
   for (const v of await vencimientosDeObligacionDesde(obligacionId, desde)) {
@@ -88,9 +88,16 @@ export async function regenerarObligacion(obligacionId: number, reloj: Reloj): P
     if (v.fecha < hoy) continue; // pasado: no se toca
     if (v._count.conciliaciones > 0 || v._count.alertas > 0 || ESTADOS_PAGADOS.includes(v.estado)) { r.protegidos++; continue; }
     const d = deseados.get(v.periodo);
-    if (!d) { eliminar.push(v.id); continue; }
-    if (d.fecha.getTime() !== v.fecha.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
-      actualizar.push({ id: v.id, fecha: d.fecha, montoEsperado: d.montoEsperado });
+    const movido = v.fechaOriginal !== null; // movido «de una sola vez»: conserva su fecha vigente y su historial
+    if (!d) {
+      if (movido || v._count.cambiosDia > 0) r.protegidos++;
+      else eliminar.push(v.id);
+      continue;
+    }
+    const fecha = movido ? v.fecha : d.fecha;
+    const fechaOriginal = movido && d.fecha.getTime() !== v.fecha.getTime() ? d.fecha : null;
+    if (fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
+      actualizar.push({ id: v.id, fecha, fechaOriginal, montoEsperado: d.montoEsperado });
     }
   }
   // solo se crean los que caen de hoy en adelante; un existente futuro sí puede moverse a una fecha ya pasada del mes

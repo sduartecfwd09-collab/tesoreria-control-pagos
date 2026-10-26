@@ -25,3 +25,9 @@ export async function crearUsuario(d: { correo: string; nombre: string; rolId: n
 export async function actualizarUsuario(id: number, d: { nombre: string; rolId: number }) {
   return prisma.usuario.update({ where: { id }, data: { ...d, nombreNormalizado: normalizarNombrePersona(d.nombre) } });
 }
+
+/** Quien actúa, con el nombre de su rol: lo que necesitan las reglas de permisos. */
+export async function obtenerActor(id: number) {
+  const u = await prisma.usuario.findUnique({ where: { id }, select: { id: true, activo: true, rol: { select: { nombre: true } } } });
+  return u ? { id: u.id, activo: u.activo, rol: u.rol.nombre } : null;
+}

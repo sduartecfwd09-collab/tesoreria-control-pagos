@@ -168,6 +168,11 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const actual = await obtenerObligacion(id.data);
     if (!actual) return reply.code(404).send({ error: "Obligación no encontrada" });
 
+    // Cambiar un día ya definido exige motivo y deja historial (servicio cambiar-dia, que verifica el permiso de quien actúa):
+    // hasta que exista el inicio de sesión no se hace por esta ruta. Indicar el día cuando falta sí se permite.
+    if (r.data.diaEsperadoPago !== undefined && actual.diaEsperadoPago !== null && r.data.diaEsperadoPago !== actual.diaEsperadoPago) {
+      return invalido(reply, "El día de pago ya definido solo se cambia indicando el motivo y quién lo cambia; todavía no está disponible", "diaEsperadoPago");
+    }
     const d = { ...r.data };
     if (d.frecuencia === "mensual" && d.mesArranque === undefined) d.mesArranque = null; // al pasar a mensual se limpia
     const mes = errorMesArranque(d.frecuencia ?? actual.frecuencia, d.mesArranque === undefined ? actual.mesArranque : d.mesArranque);

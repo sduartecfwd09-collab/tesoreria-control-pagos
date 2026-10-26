@@ -58,6 +58,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         frecuencia: v.obligacion.frecuencia,
         periodo: v.periodo,
         fecha: v.fecha.toISOString().slice(0, 10),
+        fechaOriginal: v.fechaOriginal ? v.fechaOriginal.toISOString().slice(0, 10) : null, // solo si se movió «de una sola vez»
         montoEsperado: aNumero(v.montoEsperado),
         moneda: v.obligacion.moneda,
         estado: v.estado,
