@@ -1,6 +1,12 @@
 // Catálogos SINTÉTICOS con la estructura de la tabla de pagos frecuentes (cabecera en la fila 3).
 // Proveedores e identificadores inventados; no derivan de datos reales.
+import { prisma } from "../../src/db.js";
 import { libro, type Fila } from "./muestras.js";
+
+/** El importador nunca crea sociedades: las pruebas siembran las del catálogo sintético. */
+export async function sembrarSociedadesDelCatalogo(codigos: string[] = ["AAA", "BBB"]) {
+  for (const codigo of codigos) await prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: `Sociedad ${codigo}` }, update: {} });
+}
 
 export const CABECERA_CATALOGO: Fila = ["Sociedad", "Categoría", "Proveedor", "NISE / Cuenta / Identificador", "Última fecha de pago"];
 

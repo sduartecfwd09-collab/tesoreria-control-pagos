@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { importarCatalogo } from "../src/catalogo/importar.js";
+import { MOTIVO_SOCIEDAD_SIN_COINCIDENCIA } from "../src/repositories/obligaciones.js";
 import { prisma } from "../src/db.js";
-import { catalogo, FILAS_BASE } from "./helpers/catalogo.js";
+import { catalogo, FILAS_BASE, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 let dir: string;
@@ -14,11 +15,32 @@ const buscar = (identificador: string, proveedor?: string) =>
   prisma.obligacion.findFirstOrThrow({ where: { identificador, ...(proveedor ? { proveedor } : {}) } });
 
 beforeAll(() => { dir = mkdtempSync(path.join(tmpdir(), "catalogo-")); });
-beforeEach(async () => { await vaciarImportaciones(); await escribir(); });
+beforeEach(async () => { await vaciarImportaciones(); await sembrarSociedadesDelCatalogo(); await escribir(); });
 afterAll(async () => { rmSync(dir, { recursive: true, force: true }); await vaciarImportaciones(); });
 
 describe("importarCatalogo", () => {
-  it("crea sociedades, categorías y obligaciones, y resume por sociedad, categoría y proveedor", async () => {
+  it("nunca crea sociedades: la fila sin coincidencia va a revisión con motivo y las demás se cargan", async () => {
+    await escribir([...FILAS_BASE, ["ZZZ", "Telecom", "Fono Tres", "555", "05 DIA"]]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 6, enRevision: 1 });
+    expect(await prisma.sociedad.count({ where: { codigo: "ZZZ" } })).toBe(0);
+    expect(await prisma.sociedad.count()).toBe(2);
+    const rev = await prisma.catalogoRevision.findMany();
+    expect(rev).toHaveLength(1);
+    expect(rev[0]).toMatchObject({ tipo: "sociedad_sin_coincidencia", fila: 10, motivo: MOTIVO_SOCIEDAD_SIN_COINCIDENCIA, obligacionId: null });
+    expect(await prisma.obligacion.count({ where: { identificador: "555" } })).toBe(0);
+  });
+
+  it("reconoce la sociedad por nombre oficial o alias y la lista de revisión se reemplaza en cada importación", async () => {
+    await prisma.sociedad.create({ data: { nombreLargo: "Sociedad Sin Abreviatura, S.A." } });
+    await escribir([["sociedad sin abreviatura, s.a.", "Telecom", "Fono", "1", "05 DIA"], ["QQQ", "Telecom", "Fono", "2", "05 DIA"]]);
+    expect(await importarCatalogo(archivo())).toMatchObject({ creadas: 1, enRevision: 1 });
+    await escribir([["AAA", "Telecom", "Fono", "3", "05 DIA"]]);
+    expect(await importarCatalogo(archivo())).toMatchObject({ creadas: 1, enRevision: 0 });
+    expect(await prisma.catalogoRevision.count()).toBe(0);
+  });
+
+  it("crea categorías y obligaciones, y resume por sociedad, categoría y proveedor", async () => {
     const r = await importarCatalogo(archivo());
     expect(r).toMatchObject({ filasLeidas: 6, creadas: 6, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, problemas: [] });
     expect(r.porSociedad).toEqual({ AAA: 4, BBB: 2 });
@@ -75,7 +97,7 @@ describe("importarCatalogo", () => {
   });
 
   it("no toca las obligaciones creadas a mano aunque coincidan con una fila", async () => {
-    const s = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } });
+    const s = await prisma.sociedad.findUniqueOrThrow({ where: { codigo: "AAA" } });
     const c = await prisma.categoria.findFirstOrThrow({ where: { nombre: "Electricidad" } });
     await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "LUZ UNO", identificador: "00012345", diaEsperadoPago: 3, origen: "manual" } });
     const r = await importarCatalogo(archivo());

@@ -1,6 +1,10 @@
 import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { claveNombre, type FilaCatalogo } from "../catalogo/lector.js";
+import { codigoPorAlias } from "../config/alias-sociedades.js";
+import { resolutorDeSociedades } from "../domain/sociedades.js";
+
+export const MOTIVO_SOCIEDAD_SIN_COINCIDENCIA = "La sociedad no coincide con ninguna sociedad existente";
 
 const incluir = { sociedad: true, categoria: true, cuentaEsperada: true } as const;
 export type ObligacionCompleta = Prisma.ObligacionGetPayload<{ include: typeof incluir }>;
@@ -14,10 +18,13 @@ export interface ResultadoSincronizacion {
   sinCambios: number;
   /** obligaciones del catálogo que ya no están en el archivo (no se desactivan solas) */
   noEnArchivo: number;
+  /** filas que no se cargaron o que piden decisión: quedan en la lista de revisión */
+  enRevision: number;
 }
 
 /**
  * Sincroniza las filas leídas del catálogo en una sola transacción. Idempotente:
+ * - nunca crea sociedades: solo asigna a las existentes; la fila que no coincide queda en la lista de revisión con su motivo;
  * - crea la obligación si no existe (sociedad + proveedor normalizado + identificador);
  * - si existe y es del catálogo, solo actualiza lo que viene del archivo: categoría, forma del nombre y
  *   el día (si Tesorería no lo editó a mano y el archivo trae un día válido);
@@ -25,22 +32,25 @@ export interface ResultadoSincronizacion {
  */
 export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefecto: string): Promise<ResultadoSincronizacion> {
   return prisma.$transaction(async (tx) => {
-    const sociedades = new Map<string, number>();
-    for (const codigo of new Set(filas.map((f) => f.sociedad))) {
-      const s = await tx.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo: codigo }, update: {} });
-      sociedades.set(codigo, s.id);
-    }
+    const resolver = resolutorDeSociedades(await tx.sociedad.findMany({ select: { id: true, codigo: true, nombreLargo: true } }), codigoPorAlias);
+    const sociedades = new Map<string, number | null>();
+    for (const texto of new Set(filas.map((f) => f.sociedad))) sociedades.set(texto, resolver(texto));
+    await tx.catalogoRevision.deleteMany();
+    const revision: Prisma.CatalogoRevisionCreateManyInput[] = [];
+    const aRevision = (f: FilaCatalogo, tipo: string, motivo: string, obligacionId: number | null = null) =>
+      revision.push({ fila: f.fila, tipo, motivo, sociedadTexto: f.sociedad, categoria: f.categoria, proveedor: f.proveedor, identificador: f.identificador, dia: f.dia, obligacionId });
     const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveNombre(c.nombre), c.id]));
-    for (const nombre of new Set(filas.map((f) => f.categoria))) {
+    for (const nombre of new Set(filas.filter((f) => sociedades.get(f.sociedad) != null).map((f) => f.categoria))) {
       if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre, nombreNormalizado: claveNombre(nombre) } })).id);
     }
 
     const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador), o]));
-    const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0 };
+    const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, enRevision: 0 };
     const vistas = new Set<number>();
 
     for (const f of filas) {
-      const sociedadId = sociedades.get(f.sociedad)!;
+      const sociedadId = sociedades.get(f.sociedad);
+      if (sociedadId == null) { aRevision(f, "sociedad_sin_coincidencia", MOTIVO_SOCIEDAD_SIN_COINCIDENCIA); continue; }
       const categoriaId = categorias.get(claveNombre(f.categoria))!;
       const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador));
       if (!o) {
@@ -60,6 +70,8 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       await tx.obligacion.update({ where: { id: o.id }, data: cambios });
       r.actualizadas++;
     }
+    if (revision.length > 0) await tx.catalogoRevision.createMany({ data: revision });
+    r.enRevision = revision.length;
     r.noEnArchivo = [...existentes.values()].filter((o) => o.origen === "catalogo" && !vistas.has(o.id)).length;
     return r;
   });

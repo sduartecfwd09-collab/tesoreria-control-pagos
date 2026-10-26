@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { prisma } from "../src/db.js";
-import { catalogo } from "./helpers/catalogo.js";
+import { catalogo, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 let app: Awaited<ReturnType<typeof crearApp>>;
@@ -20,7 +20,7 @@ const patch = (id: number, payload: object) => app.inject({ method: "PATCH", url
 
 beforeAll(async () => {
   await vaciarImportaciones();
-  await prisma.sociedad.create({ data: { codigo: "DM", nombreLargo: "Sociedad DM" } }); // sociedad sin obligaciones
+  await sembrarSociedadesDelCatalogo(["AAA", "BBB", "DM"]); // DM: sociedad sin obligaciones
   dir = mkdtempSync(path.join(tmpdir(), "catalogo-api-"));
   writeFileSync(path.join(dir, "catalogo.xlsx"), await catalogo());
   writeFileSync(path.join(dir, "sin-cabecera.xlsx"), await catalogo([], { cabecera: ["Otra", "Cosa"] }));

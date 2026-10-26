@@ -125,6 +125,24 @@ model Vencimiento {
   @@unique([obligacionId, periodo])
 }
 
+// Filas del catálogo que la importación no pudo asignar o que piden una decisión de una persona.
+// Se reemplaza completa en cada importación del catálogo. El identificador queda solo en la base: nunca en registros ni errores.
+model CatalogoRevision {
+  id            Int      @id @default(autoincrement())
+  fila          Int // número de fila en el Excel
+  tipo          String   @db.VarChar(40) // sociedad_sin_coincidencia | identificador_duplicado | estado_desconocido
+  motivo        String   @db.VarChar(200) // texto fijo del sistema
+  sociedadTexto String   @db.VarChar(200)
+  categoria     String   @db.VarChar(100)
+  proveedor     String   @db.VarChar(150)
+  identificador String   @db.VarChar(100)
+  dia           Int?
+  obligacionId  Int? // obligación creada o existente a la que se refiere, si la hay
+  creadoEn      DateTime @default(now()) @db.DateTime(3)
+
+  @@index([tipo])
+}
+
 model ArchivoImportado {
   id             Int          @id @default(autoincrement())
   ruta           String       @unique @db.VarChar(500)
