@@ -1,7 +1,7 @@
 import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { aNumero } from "../domain/montos.js";
-import type { ObligacionPlan, VencimientoPlan } from "../domain/vencimientos.js";
+import { ESTADOS_PAGADOS, type ObligacionPlan, type VencimientoPlan } from "../domain/vencimientos.js";
 
 const clave = (obligacionId: number, periodo: string) => `${obligacionId}|${periodo}`;
 
@@ -56,7 +56,7 @@ export interface CambiosVencimientos {
 
 export async function aplicarCambios(c: CambiosVencimientos) {
   await prisma.$transaction(async (tx) => {
-    if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, conciliaciones: { none: {} }, alertas: { none: {} } } });
+    if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, estado: { notIn: ESTADOS_PAGADOS }, conciliaciones: { none: {} }, alertas: { none: {} } } });
     for (const u of c.actualizar) await tx.vencimiento.update({ where: { id: u.id }, data: { fecha: u.fecha, montoEsperado: u.montoEsperado } });
     if (c.crear.length > 0) await tx.vencimiento.createMany({ data: c.crear });
   });

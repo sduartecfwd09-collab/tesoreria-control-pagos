@@ -7,6 +7,9 @@ export const PASO_MESES: Record<string, number> = { mensual: 1, bimestral: 2, tr
 
 export const MAX_MESES_GENERACION = 24;
 
+/** Estados de un vencimiento ya pagado: nunca se borran ni se mueven al regenerar. */
+export const ESTADOS_PAGADOS = ["pagado", "pagado_con_inconsistencia"];
+
 export const esPeriodo = (p: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(p);
 
 const aIndice = (p: string) => Number(p.slice(0, 4)) * 12 + Number(p.slice(5, 7)) - 1;

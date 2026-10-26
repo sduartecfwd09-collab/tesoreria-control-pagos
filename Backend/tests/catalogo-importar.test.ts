@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { importarCatalogo } from "../src/catalogo/importar.js";
-import { MOTIVO_SOCIEDAD_SIN_COINCIDENCIA } from "../src/repositories/obligaciones.js";
+import { MOTIVO_ESTADO_DESCONOCIDO, MOTIVO_SOCIEDAD_SIN_COINCIDENCIA } from "../src/repositories/obligaciones.js";
 import { prisma } from "../src/db.js";
-import { catalogo, FILAS_BASE, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
+import { CABECERA_CATALOGO, catalogo, FILAS_BASE, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 let dir: string;
@@ -17,6 +17,36 @@ const buscar = (identificador: string, proveedor?: string) =>
 beforeAll(() => { dir = mkdtempSync(path.join(tmpdir(), "catalogo-")); });
 beforeEach(async () => { await vaciarImportaciones(); await sembrarSociedadesDelCatalogo(); await escribir(); });
 afterAll(async () => { rmSync(dir, { recursive: true, force: true }); await vaciarImportaciones(); });
+
+describe("importarCatalogo: ESTADO", () => {
+  it("sin la columna todas quedan activas; con ella «ACTIVA» es activa y cualquier otro valor va a revisión sin cargarse", async () => {
+    await importarCatalogo(archivo());
+    expect(await prisma.obligacion.count({ where: { activa: true } })).toBe(6);
+
+    await vaciarImportaciones();
+    await sembrarSociedadesDelCatalogo();
+    writeFileSync(archivo(), await catalogo(
+      [["AAA", "Telecom", "Fono", "1", "05 DIA", "ACTIVA"], ["AAA", "Telecom", "Fono", "2", "05 DIA", "INACTIVA"], ["AAA", "Telecom", "Fono", "3", "05 DIA", ""]],
+      { cabecera: [...CABECERA_CATALOGO, "ESTADO"] },
+    ));
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 1, enRevision: 2 });
+    expect(await prisma.obligacion.count({ where: { activa: true } })).toBe(1);
+    expect(await prisma.obligacion.count()).toBe(1);
+    const rev = await prisma.catalogoRevision.findMany({ orderBy: { fila: "asc" } });
+    expect(rev.map((x) => [x.tipo, x.motivo])).toEqual([["estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO], ["estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO]]);
+  });
+
+  it("no hay forma de borrar una obligación desde la API (solo desactivarla)", async () => {
+    const { crearApp } = await import("../src/app.js");
+    const app = await crearApp();
+    try {
+      expect((await app.inject({ method: "DELETE", url: "/api/obligaciones/1" })).statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 describe("importarCatalogo", () => {
   it("nunca crea sociedades: la fila sin coincidencia va a revisión con motivo y las demás se cargan", async () => {

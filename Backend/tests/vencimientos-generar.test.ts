@@ -102,6 +102,16 @@ describe("regenerarObligacion (reloj inyectado)", () => {
     expect(await fechas(ids.mensual)).toEqual(["2026-10:2026-10-15"]);
   });
 
+  it("al desactivar conserva los pasados, los pagados y los futuros pagados; borra solo los futuros sin pagar ni conciliar", async () => {
+    await generarVencimientos("2026-08", "2026-12");
+    await prisma.vencimiento.updateMany({ where: { obligacionId: ids.mensual, periodo: "2026-10" }, data: { estado: "pagado" } });
+    await prisma.vencimiento.updateMany({ where: { obligacionId: ids.mensual, periodo: "2026-11" }, data: { estado: "pagado_con_inconsistencia" } });
+    await prisma.obligacion.update({ where: { id: ids.mensual }, data: { activa: false } });
+    const r = await regenerarObligacion(ids.mensual, reloj(2026, 9, 1));
+    expect(r).toEqual({ creados: 0, actualizados: 0, eliminados: 2, protegidos: 2 }); // se van sep y dic; quedan oct y nov (pagados)
+    expect(await fechas(ids.mensual)).toEqual(["2026-08:2026-08-15", "2026-10:2026-10-15", "2026-11:2026-11-15"]);
+  });
+
   it("sin vencimientos generados no crea nada (no hay horizonte)", async () => {
     expect(await regenerarObligacion(ids.mensual, reloj(2026, 9, 1))).toEqual({ creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 });
   });

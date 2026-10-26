@@ -3,7 +3,7 @@
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
-import { periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
+import { ESTADOS_PAGADOS, periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
 import {
   aplicarCambios, crearFaltantes, describirObligaciones, horizonte, obligacionesParaPlan, obligacionParaPlan,
   vencimientosDeObligacionDesde,
@@ -67,7 +67,8 @@ export interface ResumenRegeneracion {
 /**
  * Tras editar una obligación, ajusta sus vencimientos de hoy en adelante, hasta el horizonte ya generado:
  * crea los que faltan, corrige fecha y monto de los que siguen correspondiendo y elimina los que ya no
- * corresponden (frecuencia distinta o desactivada). Nunca toca los pasados ni los que tienen conciliación.
+ * corresponden (frecuencia distinta o desactivada). Solo borra vencimientos futuros, no pagados y sin conciliación;
+ * nunca toca los pasados, los pagados ni los conciliados. Los vencimientos pasados de una obligación desactivada se conservan.
  */
 export async function regenerarObligacion(obligacionId: number, reloj: Reloj): Promise<ResumenRegeneracion> {
   const r: ResumenRegeneracion = { creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 };
@@ -85,7 +86,7 @@ export async function regenerarObligacion(obligacionId: number, reloj: Reloj): P
   for (const v of await vencimientosDeObligacionDesde(obligacionId, desde)) {
     ocupados.add(v.periodo);
     if (v.fecha < hoy) continue; // pasado: no se toca
-    if (v._count.conciliaciones > 0 || v._count.alertas > 0) { r.protegidos++; continue; }
+    if (v._count.conciliaciones > 0 || v._count.alertas > 0 || ESTADOS_PAGADOS.includes(v.estado)) { r.protegidos++; continue; }
     const d = deseados.get(v.periodo);
     if (!d) { eliminar.push(v.id); continue; }
     if (d.fecha.getTime() !== v.fecha.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {

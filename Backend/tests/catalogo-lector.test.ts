@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { leerCatalogo, parsearDia } from "../src/catalogo/lector.js";
+import { estadoEsActiva, leerCatalogo, parsearDia } from "../src/catalogo/lector.js";
 import { leerLibro } from "../src/ingest/lector.js";
-import { catalogo, FILAS_BASE } from "./helpers/catalogo.js";
+import { CABECERA_CATALOGO, catalogo, FILAS_BASE } from "./helpers/catalogo.js";
 
 const leer = async (b: Promise<Buffer>) => leerCatalogo(await leerLibro(await b));
 
@@ -18,13 +18,28 @@ describe("parsearDia", () => {
   });
 });
 
+describe("leerCatalogo: columna ESTADO opcional", () => {
+  const CAB_ESTADO = [...CABECERA_CATALOGO, "ESTADO"];
+  it("sin columna ESTADO el estado de cada fila es null", async () => {
+    expect((await leer(catalogo())).filas.every((f) => f.estado === null)).toBe(true);
+  });
+  it("con la columna lee el texto de cada fila", async () => {
+    const c = await leer(catalogo([["AAA", "Telecom", "Fono", "1", "05 DIA", "ACTIVA"], ["AAA", "Telecom", "Fono", "2", "05 DIA", "Inactiva"], ["AAA", "Telecom", "Fono", "3", "05 DIA", ""]], { cabecera: CAB_ESTADO }));
+    expect(c.filas.map((f) => f.estado)).toEqual(["ACTIVA", "Inactiva", ""]);
+  });
+  it("solo «ACTIVA» (sin mayúsculas ni tildes) es activa", () => {
+    expect(["ACTIVA", "activa", " Activa "].every(estadoEsActiva)).toBe(true);
+    expect(["INACTIVA", "", "Suspendida", "activo"].some(estadoEsActiva)).toBe(false);
+  });
+});
+
 describe("leerCatalogo", () => {
   it("encuentra la cabecera en la fila 3 y lee todas las filas", async () => {
     const c = await leer(catalogo());
     expect(c.filaCabecera).toBe(3);
     expect(c.filas).toHaveLength(FILAS_BASE.length);
     expect(c.problemas).toEqual([]);
-    expect(c.filas[0]).toEqual({ fila: 4, sociedad: "AAA", categoria: "Electricidad", proveedor: "Luz Uno", identificador: "00012345", dia: 15 });
+    expect(c.filas[0]).toEqual({ fila: 4, sociedad: "AAA", categoria: "Electricidad", proveedor: "Luz Uno", identificador: "00012345", dia: 15, estado: null });
   });
 
   it("conserva los ceros a la izquierda y avisa si el identificador vino como número", async () => {

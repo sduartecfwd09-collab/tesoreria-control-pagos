@@ -1,9 +1,10 @@
 import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
-import { claveNombre, type FilaCatalogo } from "../catalogo/lector.js";
+import { claveNombre, estadoEsActiva, type FilaCatalogo } from "../catalogo/lector.js";
 import { codigoPorAlias } from "../config/alias-sociedades.js";
 import { resolutorDeSociedades } from "../domain/sociedades.js";
 
+export const MOTIVO_ESTADO_DESCONOCIDO = "El estado de la fila no es «ACTIVA»: no se cargó, una persona decide";
 export const MOTIVO_SOCIEDAD_SIN_COINCIDENCIA = "La sociedad no coincide con ninguna sociedad existente";
 
 const incluir = { sociedad: true, categoria: true, cuentaEsperada: true } as const;
@@ -25,6 +26,8 @@ export interface ResultadoSincronizacion {
 /**
  * Sincroniza las filas leídas del catálogo en una sola transacción. Idempotente:
  * - nunca crea sociedades: solo asigna a las existentes; la fila que no coincide queda en la lista de revisión con su motivo;
+ * - la columna ESTADO es opcional: sin ella todas son activas; con ella, «ACTIVA» es activa y cualquier otro valor va a revisión
+ *   (no se carga ni se asume);
  * - crea la obligación si no existe (sociedad + proveedor normalizado + identificador);
  * - si existe y es del catálogo, solo actualiza lo que viene del archivo: categoría, forma del nombre y
  *   el día (si Tesorería no lo editó a mano y el archivo trae un día válido);
@@ -40,7 +43,7 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
     const aRevision = (f: FilaCatalogo, tipo: string, motivo: string, obligacionId: number | null = null) =>
       revision.push({ fila: f.fila, tipo, motivo, sociedadTexto: f.sociedad, categoria: f.categoria, proveedor: f.proveedor, identificador: f.identificador, dia: f.dia, obligacionId });
     const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveNombre(c.nombre), c.id]));
-    for (const nombre of new Set(filas.filter((f) => sociedades.get(f.sociedad) != null).map((f) => f.categoria))) {
+    for (const nombre of new Set(filas.filter((f) => sociedades.get(f.sociedad) != null && (f.estado === null || estadoEsActiva(f.estado))).map((f) => f.categoria))) {
       if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre, nombreNormalizado: claveNombre(nombre) } })).id);
     }
 
@@ -51,6 +54,7 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
     for (const f of filas) {
       const sociedadId = sociedades.get(f.sociedad);
       if (sociedadId == null) { aRevision(f, "sociedad_sin_coincidencia", MOTIVO_SOCIEDAD_SIN_COINCIDENCIA); continue; }
+      if (f.estado !== null && !estadoEsActiva(f.estado)) { aRevision(f, "estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO); continue; }
       const categoriaId = categorias.get(claveNombre(f.categoria))!;
       const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador));
       if (!o) {
