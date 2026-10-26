@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { importarCatalogo } from "../src/catalogo/importar.js";
-import { MOTIVO_ESTADO_DESCONOCIDO, MOTIVO_SOCIEDAD_SIN_COINCIDENCIA } from "../src/repositories/obligaciones.js";
+import { MOTIVO_CATEGORIA_DESCONOCIDA, MOTIVO_ESTADO_DESCONOCIDO, MOTIVO_SOCIEDAD_SIN_COINCIDENCIA } from "../src/repositories/obligaciones.js";
 import { prisma } from "../src/db.js";
 import { CABECERA_CATALOGO, catalogo, FILAS_BASE, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
@@ -46,6 +46,24 @@ describe("importarCatalogo: ESTADO", () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe("importarCatalogo: categorías", () => {
+  it("nunca crea categorías: una que no existe manda la fila a revisión con motivo; las conocidas se cargan aunque cambien mayúsculas o tildes", async () => {
+    const antes = await prisma.categoria.count();
+    await escribir([
+      ["AAA", "ELECTRICIDAD", "Luz", "1", "01 DIA"],
+      ["AAA", "Tele comunicaciones", "Fono", "2", "01 DIA"],
+      ["AAA", "internet", "Red", "3", "01 DIA"],
+    ]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 2, enRevision: 1 });
+    expect(await prisma.categoria.count()).toBe(antes);
+    const rev = await prisma.catalogoRevision.findMany({ where: { tipo: "categoria_desconocida" } });
+    expect(rev).toHaveLength(1);
+    expect(rev[0]).toMatchObject({ fila: 5, motivo: MOTIVO_CATEGORIA_DESCONOCIDA, obligacionId: null });
+    expect(await prisma.obligacion.count({ where: { identificador: "2" } })).toBe(0);
   });
 });
 

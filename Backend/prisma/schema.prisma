@@ -150,7 +150,7 @@ model Vencimiento {
 model CatalogoRevision {
   id            Int      @id @default(autoincrement())
   fila          Int // número de fila en el Excel
-  tipo          String   @db.VarChar(40) // sociedad_sin_coincidencia | identificador_duplicado | estado_desconocido
+  tipo          String   @db.VarChar(40) // sociedad_sin_coincidencia | categoria_desconocida | identificador_duplicado | estado_desconocido
   motivo        String   @db.VarChar(200) // texto fijo del sistema
   sociedadTexto String   @db.VarChar(200)
   categoria     String   @db.VarChar(100)

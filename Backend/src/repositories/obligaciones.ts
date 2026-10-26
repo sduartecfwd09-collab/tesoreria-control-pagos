@@ -2,10 +2,12 @@ import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { claveNombre, estadoEsActiva, estadoEsInactiva, type FilaCatalogo } from "../catalogo/lector.js";
 import { codigoPorAlias } from "../config/alias-sociedades.js";
+import { claveCategoria } from "../domain/categorias.js";
 import { primerDiaDelPeriodo } from "../domain/control-desde.js";
 import { identificadorClave, MOTIVO_IDENTIFICADOR_DUPLICADO } from "../domain/identificadores.js";
 import { resolutorDeSociedades } from "../domain/sociedades.js";
 
+export const MOTIVO_CATEGORIA_DESCONOCIDA = "La categoría no existe: solo Jefatura puede crearla";
 export const MOTIVO_ESTADO_DESCONOCIDO = "El estado de la fila no es «ACTIVA» ni «INACTIVA»: no se cargó, una persona decide";
 export const MOTIVO_SOCIEDAD_SIN_COINCIDENCIA = "La sociedad no coincide con ninguna sociedad existente";
 
@@ -29,6 +31,7 @@ export interface ResultadoSincronizacion {
 
 /**
  * Sincroniza las filas leídas del catálogo en una sola transacción. Idempotente:
+ * - nunca crea categorías: la fila con una categoría que no existe queda en la lista de revisión;
  * - nunca crea sociedades: solo asigna a las existentes; la fila que no coincide queda en la lista de revisión con su motivo;
  * - la columna ESTADO es opcional: sin ella todas son activas; con ella, «ACTIVA» es activa, «INACTIVA» se carga inactiva
  *   y cualquier otro valor (incluida una celda vacía) va a revisión (no se carga ni se asume);
@@ -46,11 +49,8 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
     const revision: Prisma.CatalogoRevisionCreateManyInput[] = [];
     const aRevision = (f: FilaCatalogo, tipo: string, motivo: string, obligacionId: number | null = null) =>
       revision.push({ fila: f.fila, tipo, motivo, sociedadTexto: f.sociedad, categoria: f.categoria, proveedor: f.proveedor, identificador: f.identificador, dia: f.dia, obligacionId });
-    const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveNombre(c.nombre), c.id]));
-    for (const nombre of new Set(filas.filter((f) => sociedades.get(f.sociedad) != null && (f.estado === null || estadoEsActiva(f.estado) || estadoEsInactiva(f.estado))).map((f) => f.categoria))) {
-      if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre, nombreNormalizado: claveNombre(nombre) } })).id);
-    }
-
+    // El importador nunca crea categorías (solo Jefatura): una categoría que no existe manda la fila a revisión.
+    const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveCategoria(c.nombre), c.id]));
     const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador, o.categoriaId), o]));
     const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, enRevision: 0, identificadoresDuplicados: 0 };
     const vistas = new Set<number>();
@@ -60,7 +60,8 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       const sociedadId = sociedades.get(f.sociedad);
       if (sociedadId == null) { aRevision(f, "sociedad_sin_coincidencia", MOTIVO_SOCIEDAD_SIN_COINCIDENCIA); continue; }
       if (f.estado !== null && !estadoEsActiva(f.estado) && !estadoEsInactiva(f.estado)) { aRevision(f, "estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO); continue; }
-      const categoriaId = categorias.get(claveNombre(f.categoria))!;
+      const categoriaId = categorias.get(claveCategoria(f.categoria));
+      if (categoriaId === undefined) { aRevision(f, "categoria_desconocida", MOTIVO_CATEGORIA_DESCONOCIDA); continue; }
       const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador, categoriaId));
       if (!o) {
         const nueva = await tx.obligacion.create({
