@@ -4,7 +4,7 @@ import { exigirBaseDePruebas } from "../src/config/proteccion-pruebas.js";
 import { aNumero } from "../src/domain/montos.js";
 import { asegurarCategoria } from "../src/repositories/parametros.js";
 import { sembrarSociedad } from "../src/repositories/importaciones.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { copiaDeObligacion, vaciarImportaciones } from "./helpers/db.js";
 
 describe("protección de la base de pruebas", () => {
   it("acepta solo bases cuyo nombre termina en _test", () => {
@@ -40,7 +40,7 @@ describe("modelo sobre MySQL", () => {
     const c = await asegurarCategoria("Prueba");
     const o = await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "P", identificador: "1", montoEsperado: 3_000_000_000n } });
     for (const [i, f] of ["2026-03-01", "2026-12-31"].entries()) {
-      const v = await prisma.vencimiento.create({ data: { obligacionId: o.id, fecha: new Date(`${f}T00:00:00Z`), periodo: `2026-0${i}` } });
+      const v = await prisma.vencimiento.create({ data: { obligacionId: o.id, fecha: new Date(`${f}T00:00:00Z`), periodo: `2026-0${i}`, ...copiaDeObligacion(o) } });
       expect((await prisma.vencimiento.findUniqueOrThrow({ where: { id: v.id } })).fecha.toISOString().slice(0, 10)).toBe(f);
     }
     expect((await prisma.obligacion.findUniqueOrThrow({ where: { id: o.id } })).montoEsperado).toBe(3_000_000_000n);

@@ -24,3 +24,8 @@ export async function vaciarUsuarios() {
   await prisma.sociedad.updateMany({ data: { tesoreroId: null } });
   await prisma.usuario.deleteMany();
 }
+
+/** La copia de los datos de la obligación que lleva cada vencimiento (para crear vencimientos a mano en las pruebas). */
+export const copiaDeObligacion = (o: { sociedadId: number; categoriaId: number; proveedor: string; cuentaEsperadaId: number | null; moneda: string; diaEsperadoPago: number | null }) => ({
+  dia: o.diaEsperadoPago, sociedadId: o.sociedadId, categoriaId: o.categoriaId, proveedor: o.proveedor, cuentaEsperadaId: o.cuentaEsperadaId, moneda: o.moneda,
+});

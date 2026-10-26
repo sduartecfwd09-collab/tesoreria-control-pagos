@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { importarCarpeta } from "../src/ingest/importar-carpeta.js";
 import { actualizarCuentaManual, sembrarSociedad } from "../src/repositories/importaciones.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { copiaDeObligacion, vaciarImportaciones } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
 let raiz: string;
@@ -115,7 +115,7 @@ describe("importarCarpeta", () => {
     const sociedad = (await prisma.sociedad.findFirst({ where: { codigo: "ZFL" } }))!;
     const categoria = await prisma.categoria.upsert({ where: { nombreNormalizado: "prueba" }, create: { nombre: "Prueba", nombreNormalizado: "prueba" }, update: {} });
     const ob = await prisma.obligacion.create({ data: { sociedadId: sociedad.id, categoriaId: categoria.id, proveedor: "P", identificador: "001", diaEsperadoPago: 15 } });
-    const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08" } });
+    const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08", ...copiaDeObligacion(ob) } });
     await prisma.conciliacion.create({ data: { vencimientoId: ven.id, movimientoId: mov.id, tipoCruce: "automatico", estado: "claro" } });
 
     poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1({ movs: M.MOVS_BASE.slice(0, 2) }));

@@ -40,8 +40,23 @@ export function fechaVencimiento(periodo: string, dia: number): Date {
   return new Date(Date.UTC(y, m - 1, Math.min(dia, ultimo)));
 }
 
+/** Datos de la obligación que cada vencimiento guarda como copia (el monto estimado va aparte, en montoEsperado). */
+export interface CopiaObligacion {
+  dia: number | null;
+  sociedadId: number;
+  categoriaId: number;
+  proveedor: string;
+  cuentaEsperadaId: number | null;
+  moneda: string;
+}
+
 export interface ObligacionPlan {
   id: number;
+  sociedadId: number;
+  categoriaId: number;
+  proveedor: string;
+  cuentaEsperadaId: number | null;
+  moneda: string;
   activa: boolean;
   frecuencia: string;
   mesArranque: number | null;
@@ -51,7 +66,17 @@ export interface ObligacionPlan {
   controlDesde?: string | null;
 }
 
-export interface VencimientoPlan {
+/** La copia que se guarda en cada vencimiento a partir de la obligación. */
+export const copiaDe = (o: ObligacionPlan): CopiaObligacion => ({
+  dia: o.diaEsperadoPago,
+  sociedadId: o.sociedadId,
+  categoriaId: o.categoriaId,
+  proveedor: o.proveedor,
+  cuentaEsperadaId: o.cuentaEsperadaId,
+  moneda: o.moneda,
+});
+
+export interface VencimientoPlan extends CopiaObligacion {
   obligacionId: number;
   periodo: string;
   fecha: Date;
@@ -82,7 +107,7 @@ export function planificar(obligaciones: ObligacionPlan[], periodos: string[]): 
     for (const periodo of periodos) {
       if (o.controlDesde && periodo < o.controlDesde) continue; // antes de «Control desde» no se genera nada
       if (!tocaEnPeriodo(o.frecuencia, o.mesArranque, periodo)) continue;
-      vencimientos.push({ obligacionId: o.id, periodo, fecha: fechaVencimiento(periodo, o.diaEsperadoPago), montoEsperado: o.montoEsperado });
+      vencimientos.push({ obligacionId: o.id, periodo, fecha: fechaVencimiento(periodo, o.diaEsperadoPago), montoEsperado: o.montoEsperado, ...copiaDe(o) });
     }
   }
   return { vencimientos, omitidas };

@@ -2,11 +2,11 @@ import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { periodoDeControl } from "../domain/control-desde.js";
 import { aNumero } from "../domain/montos.js";
-import { ESTADOS_PAGADOS, type ObligacionPlan, type VencimientoPlan } from "../domain/vencimientos.js";
+import { ESTADOS_PAGADOS, type CopiaObligacion, type ObligacionPlan, type VencimientoPlan } from "../domain/vencimientos.js";
 
 const clave = (obligacionId: number, periodo: string) => `${obligacionId}|${periodo}`;
 
-const camposPlan = { id: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true, controlDesde: true } as const;
+const camposPlan = { id: true, sociedadId: true, categoriaId: true, proveedor: true, cuentaEsperadaId: true, moneda: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true, controlDesde: true } as const;
 
 const aPlan = (o: { montoEsperado: bigint | null; controlDesde: Date | null } & Omit<ObligacionPlan, "montoEsperado" | "controlDesde">): ObligacionPlan => ({
   ...o,
@@ -55,14 +55,14 @@ export async function vencimientosDeObligacionDesde(obligacionId: number, period
 
 export interface CambiosVencimientos {
   crear: VencimientoPlan[];
-  actualizar: { id: number; fecha: Date; fechaOriginal: Date | null; montoEsperado: number | null }[];
+  actualizar: ({ id: number; fecha: Date; fechaOriginal: Date | null; montoEsperado: number | null } & CopiaObligacion)[];
   eliminar: number[];
 }
 
 export async function aplicarCambios(c: CambiosVencimientos) {
   await prisma.$transaction(async (tx) => {
     if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, estado: { notIn: ESTADOS_PAGADOS }, conciliaciones: { none: {} }, alertas: { none: {} }, cambiosDia: { none: {} } } });
-    for (const u of c.actualizar) await tx.vencimiento.update({ where: { id: u.id }, data: { fecha: u.fecha, fechaOriginal: u.fechaOriginal, montoEsperado: u.montoEsperado } });
+    for (const { id, ...data } of c.actualizar) await tx.vencimiento.update({ where: { id }, data });
     if (c.crear.length > 0) await tx.vencimiento.createMany({ data: c.crear });
   });
 }
@@ -87,19 +87,18 @@ export async function listarVencimientos(f: FiltroVencimientos) {
   };
   const where: Prisma.VencimientoWhereInput = {
     ...(Object.keys(periodo).length ? { periodo } : {}),
-    obligacion: {
-      ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
-      ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
-      ...(f.categoria ? { categoriaId: f.categoria } : {}),
-      ...(f.q ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }] } : {}),
-    },
+    // sociedad, categoría y proveedor salen de la copia del vencimiento: el Histórico no cambia si la obligación se edita
+    ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
+    ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
+    ...(f.categoria ? { categoriaId: f.categoria } : {}),
+    ...(f.q ? { OR: [{ proveedor: { contains: f.q } }, { obligacion: { identificador: { contains: f.q.replace(/\s+/g, "") } } }] } : {}),
   };
   const [total, datos] = await Promise.all([
     prisma.vencimiento.count({ where }),
     prisma.vencimiento.findMany({
       where,
-      include: { obligacion: { include: { sociedad: true, categoria: true } }, _count: { select: { conciliaciones: true } } },
-      orderBy: [{ fecha: "asc" }, { obligacion: { sociedad: { codigo: "asc" } } }, { obligacion: { proveedor: "asc" } }, { id: "asc" }],
+      include: { obligacion: true, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } } },
+      orderBy: [{ fecha: "asc" }, { sociedad: { codigo: "asc" } }, { proveedor: "asc" }, { id: "asc" }],
       skip: (f.pagina - 1) * f.porPagina,
       take: f.porPagina,
     }),

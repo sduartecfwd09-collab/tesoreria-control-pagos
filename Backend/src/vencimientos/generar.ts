@@ -3,7 +3,7 @@
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
-import { ESTADOS_PAGADOS, periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
+import { copiaDe, ESTADOS_PAGADOS, periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
 import {
   aplicarCambios, type CambiosVencimientos, crearFaltantes, describirObligaciones, horizonte, obligacionesParaPlan, obligacionParaPlan,
   vencimientosDeObligacionDesde,
@@ -96,8 +96,11 @@ export async function regenerarObligacion(obligacionId: number, reloj: Reloj): P
     }
     const fecha = movido ? v.fecha : d.fecha;
     const fechaOriginal = movido && d.fecha.getTime() !== v.fecha.getTime() ? d.fecha : null;
-    if (fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
-      actualizar.push({ id: v.id, fecha, fechaOriginal, montoEsperado: d.montoEsperado });
+    // la copia de los datos de la obligación también se actualiza (solo en estos vencimientos futuros, no pagados y sin conciliación)
+    const copia = copiaDe(o);
+    const copiaIgual = (Object.keys(copia) as (keyof typeof copia)[]).every((k) => v[k] === copia[k]);
+    if (!copiaIgual || fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
+      actualizar.push({ id: v.id, fecha, fechaOriginal, montoEsperado: d.montoEsperado, ...copia });
     }
   }
   // solo se crean los que caen de hoy en adelante; un existente futuro sí puede moverse a una fecha ya pasada del mes

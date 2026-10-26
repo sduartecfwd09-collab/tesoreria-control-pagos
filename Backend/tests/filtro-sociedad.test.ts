@@ -3,7 +3,7 @@ import { prisma } from "../src/db.js";
 import { asegurarCategoria } from "../src/repositories/parametros.js";
 import { listarObligaciones } from "../src/repositories/obligaciones.js";
 import { listarVencimientos } from "../src/repositories/vencimientos.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { copiaDeObligacion, vaciarImportaciones } from "./helpers/db.js";
 
 // Datos inventados: una sociedad con abreviatura y otra sin abreviatura (como las que carga la lista maestra).
 let conCodigo: number;
@@ -16,7 +16,7 @@ beforeAll(async () => {
   sinCodigo = (await prisma.sociedad.create({ data: { nombreLargo: "Sociedad inventada sin abreviatura" } })).id;
   for (const [i, sociedadId] of [conCodigo, sinCodigo, sinCodigo].entries()) {
     const o = await prisma.obligacion.create({ data: { sociedadId, categoriaId: cat.id, proveedor: "Proveedor inventado", identificador: `ID-${i}`, diaEsperadoPago: 10 } });
-    await prisma.vencimiento.create({ data: { obligacionId: o.id, fecha: new Date("2026-08-10T00:00:00Z"), periodo: "2026-08" } });
+    await prisma.vencimiento.create({ data: { obligacionId: o.id, fecha: new Date("2026-08-10T00:00:00Z"), periodo: "2026-08", ...copiaDeObligacion(o) } });
   }
 });
 afterAll(vaciarImportaciones);

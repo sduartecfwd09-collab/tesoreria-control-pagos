@@ -37,7 +37,7 @@ export async function registrarCambioPermanente(c: CambioPermanente): Promise<{ 
     for (const v of afectados) {
       const nueva = fechaVencimiento(v.periodo, c.diaNuevo);
       const manual = v.fechaOriginal !== null;
-      const data = manual ? { fechaOriginal: nueva.getTime() === v.fecha.getTime() ? null : nueva } : { fecha: nueva };
+      const data = { dia: c.diaNuevo, ...(manual ? { fechaOriginal: nueva.getTime() === v.fecha.getTime() ? null : nueva } : { fecha: nueva }) };
       await tx.vencimiento.update({ where: { id: v.id }, data });
       if (!manual && nueva.getTime() !== v.fecha.getTime()) movidos++;
     }

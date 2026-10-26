@@ -31,6 +31,7 @@ model Sociedad {
   tesorero          Usuario?                    @relation("TesoreroDeSociedad", fields: [tesoreroId], references: [id])
   cuentas           Cuenta[]
   obligaciones      Obligacion[]
+  vencimientos      Vencimiento[]
   archivos          ArchivoImportado[]
   historialTesorero SociedadTesoreroHistorial[]
 }
@@ -71,12 +72,13 @@ model Cuenta {
 }
 
 model Categoria {
-  id                Int          @id @default(autoincrement())
-  nombre            String       @db.VarChar(100) // como se muestra
-  nombreNormalizado String       @unique @db.VarChar(100) // sin mayúsculas, tildes ni espacios sobrantes: "Cable" y "CABLE" son la misma
-  activa            Boolean      @default(true) // las categorías no se borran: se desactivan
-  creadoEn          DateTime     @default(now()) @db.DateTime(3)
-  actualizado       DateTime     @updatedAt @db.DateTime(3)
+  id                Int           @id @default(autoincrement())
+  nombre            String        @db.VarChar(100) // como se muestra
+  nombreNormalizado String        @unique @db.VarChar(100) // sin mayúsculas, tildes ni espacios sobrantes: "Cable" y "CABLE" son la misma
+  activa            Boolean       @default(true) // las categorías no se borran: se desactivan
+  vencimientos      Vencimiento[]
+  creadoEn          DateTime      @default(now()) @db.DateTime(3)
+  actualizado       DateTime      @updatedAt @db.DateTime(3)
   obligaciones      Obligacion[]
 }
 
@@ -111,22 +113,34 @@ model Obligacion {
 }
 
 model Vencimiento {
-  id             Int            @id @default(autoincrement())
-  obligacionId   Int
-  obligacion     Obligacion     @relation(fields: [obligacionId], references: [id])
-  fecha          DateTime       @db.Date // fecha vigente: solo fecha, sin hora (se escribe y se lee como medianoche UTC)
-  fechaOriginal  DateTime?      @db.Date // null = la fecha vigente es la del día de pago; con valor = se movió «de una sola vez» y esta es la fecha original
-  periodo        String         @db.VarChar(7) // AAAA-MM
-  montoEsperado  BigInt? // centavos; null = "monto sin definir"
+  id               Int            @id @default(autoincrement())
+  obligacionId     Int
+  obligacion       Obligacion     @relation(fields: [obligacionId], references: [id])
+  fecha            DateTime       @db.Date // fecha vigente: solo fecha, sin hora (se escribe y se lee como medianoche UTC)
+  fechaOriginal    DateTime?      @db.Date // null = la fecha vigente es la del día de pago; con valor = se movió «de una sola vez» y esta es la fecha original
+  periodo          String         @db.VarChar(7) // AAAA-MM
+  montoEsperado    BigInt? // centavos; null = "monto sin definir"
+  // Copia de los datos de la obligación al generar el vencimiento: el Histórico no cambia si la obligación se edita o
+  // se desactiva. Solo los vencimientos futuros, no pagados y sin conciliación se actualizan cuando la obligación cambia.
+  dia              Int? // día de pago
+  sociedadId       Int
+  sociedad         Sociedad       @relation(fields: [sociedadId], references: [id])
+  categoriaId      Int
+  categoria        Categoria      @relation(fields: [categoriaId], references: [id])
+  proveedor        String         @db.VarChar(150)
+  cuentaEsperadaId Int?
+  moneda           String         @db.VarChar(10)
   // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion
-  estado         String         @default("proyectado") @db.VarChar(40)
-  creadoEn       DateTime       @default(now()) @db.DateTime(3)
-  actualizado    DateTime       @updatedAt @db.DateTime(3)
-  conciliaciones Conciliacion[]
-  alertas        Alerta[]
-  cambiosDia     CambioDia[]
+  estado           String         @default("proyectado") @db.VarChar(40)
+  creadoEn         DateTime       @default(now()) @db.DateTime(3)
+  actualizado      DateTime       @updatedAt @db.DateTime(3)
+  conciliaciones   Conciliacion[]
+  alertas          Alerta[]
+  cambiosDia       CambioDia[]
 
   @@unique([obligacionId, periodo])
+  @@index([sociedadId])
+  @@index([categoriaId])
 }
 
 // Filas del catálogo que la importación no pudo asignar o que piden una decisión de una persona.

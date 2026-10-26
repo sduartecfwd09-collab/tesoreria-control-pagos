@@ -18,7 +18,7 @@ const hoy = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d))
 
 describe("dominio de «Control desde»", () => {
   it("planificar no genera nada antes del mes de control", () => {
-    const ob: ObligacionPlan = { id: 1, activa: true, frecuencia: "mensual", mesArranque: null, diaEsperadoPago: 10, montoEsperado: null, controlDesde: "2026-03" };
+    const ob: ObligacionPlan = { id: 1, sociedadId: 1, categoriaId: 1, proveedor: "P", cuentaEsperadaId: null, moneda: "CRC", activa: true, frecuencia: "mensual", mesArranque: null, diaEsperadoPago: 10, montoEsperado: null, controlDesde: "2026-03" };
     const r = planificar([ob], ["2026-01", "2026-02", "2026-03", "2026-04"]);
     expect(r.vencimientos.map((v) => v.periodo)).toEqual(["2026-03", "2026-04"]);
     expect(planificar([{ ...ob, controlDesde: null }], ["2026-01"]).vencimientos).toHaveLength(1); // sin definir: sin límite

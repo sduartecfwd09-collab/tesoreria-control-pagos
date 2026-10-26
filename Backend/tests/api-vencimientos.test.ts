@@ -11,7 +11,7 @@ beforeAll(async () => {
   await vaciarImportaciones();
   const s = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } });
   const b = await prisma.sociedad.create({ data: { codigo: "BBB", nombreLargo: "Sociedad BBB" } });
-  const c = await prisma.categoria.findFirstOrThrow({ where: { nombre: "Telecom" } });
+  const c = await prisma.categoria.upsert({ where: { nombreNormalizado: "telecom" }, create: { nombre: "Telecom", nombreNormalizado: "telecom" }, update: {} }); // no depende de otras pruebas
   mensual = (await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "Fono", identificador: "0001", diaEsperadoPago: 15 } })).id;
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "Otro", identificador: "0002", diaEsperadoPago: 31 } });
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "SinDia", identificador: "0003" } });
