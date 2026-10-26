@@ -12,7 +12,7 @@ import {
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
-  actualizarObligacion, buscarPorClave, crearObligacion, listarCategorias, listarObligaciones, listarSociedades,
+  actualizarObligacion, buscarPorClave, buscarPorIdentificador, crearObligacion, listarCategorias, listarObligaciones, listarSociedades,
   obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorCodigo, todasLasObligaciones,
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
@@ -121,6 +121,20 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador)) {
       return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
     }
+    // El identificador no es único por sí solo: se avisa con los datos de la otra obligación y se admite confirmar «Es intencional».
+    if (!d.esIntencional) {
+      const otras = await buscarPorIdentificador(d.identificador);
+      if (otras.length > 0) {
+        return reply.code(409).send({
+          error: "Este identificador ya existe en otra obligación. Si es intencional, confírmelo para crearla igual.",
+          campo: "identificador",
+          advertencia: {
+            tipo: "identificador_duplicado",
+            otras: otras.map((o) => ({ sociedad: etiquetaSociedad(o.sociedad), categoria: o.categoria.nombre, proveedor: o.proveedor, activa: o.activa })),
+          },
+        });
+      }
+    }
     const defecto = (await valorGlobal("frecuencia_defecto")) ?? "mensual";
     const frecuencia = d.frecuencia ?? (FRECUENCIAS.includes(defecto) ? defecto : "mensual");
     const mes = errorMesArranque(frecuencia, d.mesArranque);
@@ -128,7 +142,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const cuenta = await errorCuenta(d.cuentaEsperadaId, sociedad.id);
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 
-    const { sociedad: _codigo, ...resto } = d;
+    const { sociedad: _codigo, esIntencional: _intencional, ...resto } = d;
     const o = await crearObligacion({
       ...resto,
       sociedadId: sociedad.id,

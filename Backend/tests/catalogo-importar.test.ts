@@ -48,6 +48,36 @@ describe("importarCatalogo: ESTADO", () => {
   });
 });
 
+describe("importarCatalogo: identificador duplicado", () => {
+  it("carga las filas igual y las deja marcadas en la lista de revisión (sin ceros a la izquierda y entre sociedades)", async () => {
+    await escribir([
+      ["AAA", "Telecom", "Fono Uno", "0077", "01 DIA"],
+      ["BBB", "Telecom", "Fono Dos", "77", "02 DIA"], // mismo servicio sin ceros, otra sociedad
+      ["AAA", "Telecom", "Fono Tres", "88", "03 DIA"], // único
+    ]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 3, enRevision: 0, identificadoresDuplicados: 2 });
+    expect(await prisma.obligacion.count()).toBe(3);
+    const rev = await prisma.catalogoRevision.findMany({ orderBy: { fila: "asc" } });
+    expect(rev.map((x) => [x.tipo, x.fila])).toEqual([["identificador_duplicado", 4], ["identificador_duplicado", 5]]);
+    expect(rev.every((x) => x.obligacionId !== null)).toBe(true);
+    expect((await prisma.obligacion.findFirstOrThrow({ where: { proveedor: "Fono Uno" } })).identificador).toBe("0077"); // texto: conserva los ceros
+  });
+
+  it("no registra el identificador en el resumen ni en los motivos", async () => {
+    const r = await importarCatalogo(archivo());
+    expect(JSON.stringify(r)).not.toContain("77777777");
+    expect(r.identificadoresDuplicados).toBe(2); // el par del catálogo base
+  });
+
+  it("la misma fila con ceros distintos no se carga dos veces (misma sociedad y proveedor)", async () => {
+    await escribir([["AAA", "Telecom", "Fono", "0077", "01 DIA"], ["AAA", "Telecom", "Fono", "77", "01 DIA"]]);
+    const r = await importarCatalogo(archivo());
+    expect(r.creadas).toBe(1);
+    expect(r.problemas).toEqual([{ fila: 5, motivo: expect.stringContaining("Repite la fila 4"), importada: false }]);
+  });
+});
+
 describe("importarCatalogo", () => {
   it("nunca crea sociedades: la fila sin coincidencia va a revisión con motivo y las demás se cargan", async () => {
     await escribir([...FILAS_BASE, ["ZZZ", "Telecom", "Fono Tres", "555", "05 DIA"]]);
@@ -55,7 +85,7 @@ describe("importarCatalogo", () => {
     expect(r).toMatchObject({ creadas: 6, enRevision: 1 });
     expect(await prisma.sociedad.count({ where: { codigo: "ZZZ" } })).toBe(0);
     expect(await prisma.sociedad.count()).toBe(2);
-    const rev = await prisma.catalogoRevision.findMany();
+    const rev = await prisma.catalogoRevision.findMany({ where: { tipo: "sociedad_sin_coincidencia" } });
     expect(rev).toHaveLength(1);
     expect(rev[0]).toMatchObject({ tipo: "sociedad_sin_coincidencia", fila: 10, motivo: MOTIVO_SOCIEDAD_SIN_COINCIDENCIA, obligacionId: null });
     expect(await prisma.obligacion.count({ where: { identificador: "555" } })).toBe(0);

@@ -10,6 +10,7 @@ import { etiquetaSociedad } from "../src/domain/sociedades.js";
 import { calidadCatalogo } from "../src/domain/obligaciones.js";
 import { prisma } from "../src/db.js";
 import { listarSociedades, todasLasObligaciones } from "../src/repositories/obligaciones.js";
+import { sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 const ruta = env.CATALOGO_FILE;
@@ -18,6 +19,7 @@ const hayArchivo = !!ruta && existsSync(ruta);
 describe.skipIf(!hayArchivo)("importación del catálogo real", () => {
   beforeAll(async () => {
     await vaciarImportaciones();
+    await sembrarSociedadesDelCatalogo(["ZFL", "GGDI", "BONAVISTA", "WW", "MEMEMC"]); // el importador no crea sociedades
   });
   afterAll(vaciarImportaciones);
 

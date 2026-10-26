@@ -104,6 +104,37 @@ describe("catálogo: lectura", () => {
   });
 });
 
+describe("identificador duplicado: avisa, no bloquea", () => {
+  const crear = (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload });
+  it("el alta con un identificador que ya existe devuelve el aviso con sociedad, categoría y proveedor de la otra (sin ceros) y se confirma con «Es intencional»", async () => {
+    const cat = (await app.inject("/api/categorias")).json().datos[0];
+    const base = { sociedad: "DM", categoriaId: cat.id, proveedor: "Proveedor Nuevo", identificador: "12345", diaEsperadoPago: 7 }; // existe como 00012345 en AAA
+    const aviso = await crear(base);
+    expect(aviso.statusCode).toBe(409);
+    expect(aviso.json()).toMatchObject({
+      campo: "identificador",
+      advertencia: { tipo: "identificador_duplicado", otras: [{ sociedad: "AAA", categoria: "Electricidad", proveedor: "Luz Uno", activa: true }] },
+    });
+    expect(JSON.stringify(aviso.json())).not.toContain("12345"); // el aviso no repite el identificador
+    expect(await prisma.obligacion.count({ where: { proveedor: "Proveedor Nuevo" } })).toBe(0);
+
+    const ok = await crear({ ...base, esIntencional: true });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json().datos).toMatchObject({ identificador: "12345", proveedor: "Proveedor Nuevo" }); // guardado como texto tal cual
+    expect(ok.json().datos).not.toHaveProperty("esIntencional");
+  });
+
+  it("la otra obligación cuenta aunque esté inactiva", async () => {
+    const cat = (await app.inject("/api/categorias")).json().datos[0];
+    const o = await porId("000999888777");
+    await patch(o.id, { activa: false });
+    const r = await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "Otro Nuevo", identificador: "999888777" });
+    expect(r.statusCode).toBe(409);
+    expect(r.json().advertencia.otras[0]).toMatchObject({ activa: false, sociedad: "BBB" });
+    await patch(o.id, { activa: true });
+  });
+});
+
 describe("catálogo: edición y alta", () => {
   it("PATCH guarda los campos editables, confirma los supuestos y protege el día de la reimportación", async () => {
     const o = await porId("00012346");

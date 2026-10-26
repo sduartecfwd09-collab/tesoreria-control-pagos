@@ -3,6 +3,7 @@
 // así desaparecen solas cuando Tesorería corrige el catálogo.
 import { z } from "zod";
 import { limpiarIdentificador } from "../catalogo/lector.js";
+import { identificadorClave } from "./identificadores.js";
 import { FRECUENCIAS } from "./parametros.js";
 
 export const MONEDAS = ["CRC", "USD"] as const;
@@ -49,6 +50,8 @@ const editablesOpcionales = z.object(camposEditables).partial();
 export const esquemaEdicion = editablesOpcionales.refine((o) => Object.keys(o).length > 0, "No se indicó ningún cambio");
 
 export const esquemaAlta = editablesOpcionales.extend({
+  /** «Es intencional»: la persona confirma que el identificador ya existe en otra obligación y quiere crearla igual. */
+  esIntencional: z.boolean({ error: "Indique sí o no" }).optional(),
   sociedad: z.string({ error: "Indique la sociedad" }).trim().min(1, "Indique la sociedad").transform((s) => s.toUpperCase()),
   categoriaId: z.number({ error: "Indique la categoría" }).int().positive("Indique la categoría"),
   proveedor: z
@@ -104,7 +107,7 @@ export interface Etiqueta {
   ayuda: string;
 }
 
-const claveId = (o: { sociedad: string; identificador: string }) => `${o.sociedad}|${o.identificador}`;
+const claveId = (o: { sociedad: string; identificador: string }) => `${o.sociedad}|${identificadorClave(o.identificador)}`;
 
 /** Grupos de obligaciones activas con el mismo identificador en una sociedad y distinto proveedor. */
 export function identificadoresRepetidos(obs: ObligacionCalidad[]) {

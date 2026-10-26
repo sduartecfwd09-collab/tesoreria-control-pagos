@@ -14,7 +14,7 @@ if (!env.CATALOGO_FILE) {
 const r = await importarCatalogo(env.CATALOGO_FILE);
 const lineas = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `  ${k}: ${n}`).join("\n");
 
-console.log(`Catálogo (hoja «${r.hoja}»): ${r.filasLeidas} filas leídas · ${r.creadas} creadas, ${r.actualizadas} actualizadas, ${r.sinCambios} sin cambios, ${r.enRevision} en revisión, ${r.noEnArchivo} ya no están en el archivo`);
+console.log(`Catálogo (hoja «${r.hoja}»): ${r.filasLeidas} filas leídas · ${r.creadas} creadas, ${r.actualizadas} actualizadas, ${r.sinCambios} sin cambios, ${r.enRevision} en revisión, ${r.identificadoresDuplicados} con identificador duplicado, ${r.noEnArchivo} ya no están en el archivo`);
 console.log(`Por sociedad:\n${lineas(r.porSociedad)}`);
 console.log(`Por categoría:\n${lineas(r.porCategoria)}`);
 console.log(`Proveedores distintos (${r.proveedores.length}):\n${r.proveedores.map((p) => `  ${p.nombre}: ${p.filas}`).join("\n")}`);

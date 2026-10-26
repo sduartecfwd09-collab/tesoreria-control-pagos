@@ -2,6 +2,7 @@ import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { claveNombre, estadoEsActiva, type FilaCatalogo } from "../catalogo/lector.js";
 import { codigoPorAlias } from "../config/alias-sociedades.js";
+import { identificadorClave, MOTIVO_IDENTIFICADOR_DUPLICADO } from "../domain/identificadores.js";
 import { resolutorDeSociedades } from "../domain/sociedades.js";
 
 export const MOTIVO_ESTADO_DESCONOCIDO = "El estado de la fila no es «ACTIVA»: no se cargó, una persona decide";
@@ -11,7 +12,7 @@ const incluir = { sociedad: true, categoria: true, cuentaEsperada: true } as con
 export type ObligacionCompleta = Prisma.ObligacionGetPayload<{ include: typeof incluir }>;
 
 const claveObligacion = (sociedadId: number, proveedor: string, identificador: string) =>
-  `${sociedadId}|${claveNombre(proveedor)}|${identificador}`;
+  `${sociedadId}|${claveNombre(proveedor)}|${identificadorClave(identificador)}`;
 
 export interface ResultadoSincronizacion {
   creadas: number;
@@ -21,6 +22,8 @@ export interface ResultadoSincronizacion {
   noEnArchivo: number;
   /** filas que no se cargaron o que piden decisión: quedan en la lista de revisión */
   enRevision: number;
+  /** filas cargadas cuyo identificador ya existe en otra obligación: quedan marcadas en la lista de revisión */
+  identificadoresDuplicados: number;
 }
 
 /**
@@ -48,8 +51,9 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
     }
 
     const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador), o]));
-    const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, enRevision: 0 };
+    const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, enRevision: 0, identificadoresDuplicados: 0 };
     const vistas = new Set<number>();
+    const cargadas: { f: FilaCatalogo; obligacionId: number }[] = [];
 
     for (const f of filas) {
       const sociedadId = sociedades.get(f.sociedad);
@@ -58,13 +62,15 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       const categoriaId = categorias.get(claveNombre(f.categoria))!;
       const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador));
       if (!o) {
-        await tx.obligacion.create({
+        const nueva = await tx.obligacion.create({
           data: { sociedadId, categoriaId, proveedor: f.proveedor, identificador: f.identificador, diaEsperadoPago: f.dia, frecuencia: frecuenciaDefecto },
         });
+        cargadas.push({ f, obligacionId: nueva.id });
         r.creadas++;
         continue;
       }
       vistas.add(o.id);
+      cargadas.push({ f, obligacionId: o.id });
       if (o.origen === "manual") { r.sinCambios++; continue; }
       const cambios: Prisma.ObligacionUncheckedUpdateInput = {};
       if (o.categoriaId !== categoriaId) cambios.categoriaId = categoriaId;
@@ -74,8 +80,18 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       await tx.obligacion.update({ where: { id: o.id }, data: cambios });
       r.actualizadas++;
     }
+    // identificador duplicado: avisa, no bloquea. La fila ya se cargó; queda marcada en la lista de revisión.
+    const porId = new Map<string, number[]>();
+    for (const o of await tx.obligacion.findMany({ select: { id: true, identificador: true } })) {
+      const k = identificadorClave(o.identificador);
+      porId.set(k, [...(porId.get(k) ?? []), o.id]);
+    }
+    for (const { f, obligacionId } of cargadas) {
+      if ((porId.get(identificadorClave(f.identificador)) ?? []).length > 1) aRevision(f, "identificador_duplicado", MOTIVO_IDENTIFICADOR_DUPLICADO, obligacionId);
+    }
     if (revision.length > 0) await tx.catalogoRevision.createMany({ data: revision });
-    r.enRevision = revision.length;
+    r.identificadoresDuplicados = revision.filter((x) => x.tipo === "identificador_duplicado").length;
+    r.enRevision = revision.length - r.identificadoresDuplicados;
     r.noEnArchivo = [...existentes.values()].filter((o) => o.origen === "catalogo" && !vistas.has(o.id)).length;
     return r;
   });
@@ -133,8 +149,16 @@ export async function obtenerObligacion(id: number) {
 }
 
 export async function buscarPorClave(sociedadId: number, proveedor: string, identificador: string) {
-  const candidatas = await prisma.obligacion.findMany({ where: { sociedadId, identificador } });
-  return candidatas.find((o) => claveNombre(o.proveedor) === claveNombre(proveedor)) ?? null;
+  const clave = identificadorClave(identificador);
+  const candidatas = await prisma.obligacion.findMany({ where: { sociedadId, identificador: { endsWith: clave } } });
+  return candidatas.find((o) => claveNombre(o.proveedor) === claveNombre(proveedor) && identificadorClave(o.identificador) === clave) ?? null;
+}
+
+/** Otras obligaciones (activas o inactivas, de cualquier sociedad) con el mismo identificador, sin contar ceros a la izquierda. */
+export async function buscarPorIdentificador(identificador: string, excluirId?: number) {
+  const clave = identificadorClave(identificador);
+  const candidatas = await prisma.obligacion.findMany({ where: { identificador: { endsWith: clave } }, include: incluir });
+  return candidatas.filter((o) => o.id !== excluirId && identificadorClave(o.identificador) === clave);
 }
 
 export async function crearObligacion(data: Prisma.ObligacionUncheckedCreateInput) {

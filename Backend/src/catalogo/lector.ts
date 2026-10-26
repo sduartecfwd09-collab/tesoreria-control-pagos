@@ -3,6 +3,7 @@
 // Los mensajes no incluyen identificadores (solo número de fila y el texto del día, que no es sensible).
 import type { Worksheet } from "exceljs";
 import { ErrorLectura, type LibroLeido } from "../ingest/lector.js";
+import { identificadorClave } from "../domain/identificadores.js";
 import { normalizar, valorPlano } from "../ingest/utiles.js";
 
 export interface FilaCatalogo {
@@ -155,7 +156,7 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
 
     const categoria = unificar("categoria", categoriaTxt);
     const proveedor = unificar("proveedor", proveedorTxt);
-    const clave = `${sociedad}|${claveNombre(proveedor)}|${identificador}`;
+    const clave = `${sociedad}|${claveNombre(proveedor)}|${identificadorClave(identificador)}`;
     const previa = vistas.get(clave);
     if (previa !== undefined) {
       problemas.push({ fila: r, motivo: `Repite la fila ${previa} (misma sociedad, proveedor e identificador): no se importó`, importada: false });
