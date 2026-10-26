@@ -159,6 +159,31 @@ describe("cambio de una sola vez", () => {
   });
 });
 
+describe("vencimiento movido «solo este mes» frente a regenerar", () => {
+  it("no se borra ni se mueve aunque la frecuencia cambie y ya no le corresponda ese mes", async () => {
+    const nov = await vencimiento("2026-11");
+    await cambiarFechaDeUnaVez({ actorId: jefe, vencimientoId: nov.id, fechaNueva: "2026-11-27", motivo: "Prórroga" });
+    await prisma.obligacion.update({ where: { id: obligacion }, data: { frecuencia: "bimestral", mesArranque: 10 } }); // toca oct y dic: noviembre ya no corresponde
+    const r = await regenerarObligacion(obligacion, reloj);
+    expect(r.eliminados).toBe(1); // septiembre (futuro, sin pagar ni mover)
+    expect(r.protegidos).toBe(1); // noviembre: guarda una decisión con motivo
+    const v = await vencimiento("2026-11");
+    expect(iso(v.fecha)).toBe("2026-11-27");
+    expect(await prisma.cambioDia.count({ where: { vencimientoId: v.id } })).toBe(1);
+  });
+
+  it("si el mes sigue correspondiendo conserva su fecha movida y la fecha original sigue al día de la obligación", async () => {
+    const oct = await vencimiento("2026-10");
+    await cambiarFechaDeUnaVez({ actorId: jefe, vencimientoId: oct.id, fechaNueva: "2026-10-29", motivo: "Prórroga" });
+    await prisma.obligacion.update({ where: { id: obligacion }, data: { montoEsperado: 7000n } });
+    await regenerarObligacion(obligacion, reloj);
+    const v = await vencimiento("2026-10");
+    expect(iso(v.fecha)).toBe("2026-10-29");
+    expect(iso(v.fechaOriginal)).toBe("2026-10-15");
+    expect(v.montoEsperado).toBe(7000n);
+  });
+});
+
 describe("historial", () => {
   it("el repositorio del historial no ofrece edición ni borrado", async () => {
     const m = await import("../src/repositories/cambios-dia.js");
