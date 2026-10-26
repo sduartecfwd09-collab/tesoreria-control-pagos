@@ -14,7 +14,7 @@ import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
   actualizarObligacion, buscarPorClave, buscarPorIdentificador, crearObligacion, listarCategorias, listarObligaciones, listarSociedades,
-  obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorCodigo, todasLasObligaciones,
+  obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorId, todasLasObligaciones,
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
@@ -117,8 +117,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const r = esquemaAlta.safeParse(req.body ?? {});
     if (!r.success) return reply.code(422).send(primerError(r.error));
     const d = r.data;
-    const sociedad = await obtenerSociedadPorCodigo(d.sociedad);
-    if (!sociedad) return invalido(reply, `La sociedad «${d.sociedad}» no existe`, "sociedad");
+    const sociedad = await obtenerSociedadPorId(d.sociedadId);
+    if (!sociedad) return invalido(reply, "La sociedad no existe", "sociedadId");
     if (!(await obtenerCategoria(d.categoriaId))) return invalido(reply, "La categoría no existe", "categoriaId");
     if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador, d.categoriaId)) {
       return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador y esa categoría en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
@@ -150,11 +150,10 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const controlDesde = d.controlDesde === undefined ? mesDeAlta(hoy) : d.controlDesde;
     const advertencia = advertenciaDiaYaPaso(d.diaEsperadoPago, hoy, d.controlDesde !== undefined);
 
-    const { sociedad: _codigo, esIntencional: _intencional, controlDesde: _control, ...resto } = d;
+    const { esIntencional: _intencional, controlDesde: _control, ...resto } = d;
     const o = await crearObligacion({
       ...resto,
       controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde),
-      sociedadId: sociedad.id,
       frecuencia,
       frecuenciaPorConfirmar: d.frecuenciaPorConfirmar ?? d.frecuencia === undefined,
       monedaPorConfirmar: d.monedaPorConfirmar ?? d.moneda === undefined,

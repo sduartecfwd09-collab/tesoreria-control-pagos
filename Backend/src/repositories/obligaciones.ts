@@ -178,8 +178,8 @@ export async function listarSociedades() {
   });
 }
 
-export async function obtenerSociedadPorCodigo(codigo: string) {
-  return prisma.sociedad.findUnique({ where: { codigo } });
+export async function obtenerSociedadPorId(id: number) {
+  return prisma.sociedad.findUnique({ where: { id } });
 }
 
 export async function listarCategorias() {

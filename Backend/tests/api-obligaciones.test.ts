@@ -16,6 +16,12 @@ type Ob = { id: number; identificador: string; proveedor: string; sociedad: stri
 const listar = async (qs = "") => (await app.inject(`/api/obligaciones${qs}`)).json() as { datos: Ob[]; total: number; paginas: number };
 const porId = async (identificador: string, proveedor?: string) =>
   (await listar("?porPagina=500")).datos.find((o) => o.identificador === identificador && (!proveedor || o.proveedor === proveedor))!;
+/** Alta por el API: la sociedad se indica con su abreviatura de prueba y se envía como sociedadId (así la usa el Frontend). */
+const alta = async (payload: { sociedad?: string } & Record<string, unknown>) => {
+  const { sociedad, ...resto } = payload;
+  const sociedadId = sociedad ? (await prisma.sociedad.findUniqueOrThrow({ where: { codigo: sociedad.toUpperCase() } })).id : undefined;
+  return app.inject({ method: "POST", url: "/api/obligaciones", payload: { ...(sociedadId ? { sociedadId } : {}), ...resto } });
+};
 const patch = (id: number, payload: object) => app.inject({ method: "PATCH", url: `/api/obligaciones/${id}`, payload });
 
 beforeAll(async () => {
@@ -105,7 +111,7 @@ describe("catálogo: lectura", () => {
 });
 
 describe("identificador duplicado: avisa, no bloquea", () => {
-  const crear = (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload });
+  const crear = alta;
   it("el alta con un identificador que ya existe devuelve el aviso con sociedad, categoría y proveedor de la otra (sin ceros) y se confirma con «Es intencional»", async () => {
     const cat = (await app.inject("/api/categorias")).json().datos[0];
     const base = { sociedad: "DM", categoriaId: cat.id, proveedor: "Proveedor Nuevo", identificador: "12345", diaEsperadoPago: 7 }; // existe como 00012345 en AAA
@@ -175,6 +181,18 @@ describe("catálogo: edición y alta", () => {
     await prisma.obligacion.update({ where: { id: o.id }, data: { diaEsperadoPago: 15, diaEditado: false } });
   });
 
+  it("el monto admite más de ₡21,4 millones (en centavos) y rechaza lo que un número no puede representar", async () => {
+    const o = await porId("00012346");
+    const grande = await patch(o.id, { montoEsperado: 5_000_000_000 }); // ₡50 millones
+    expect(grande.statusCode).toBe(200);
+    expect(grande.json().datos.montoEsperado).toBe(5_000_000_000);
+    expect((await porId("00012346")).montoEsperado).toBe(5_000_000_000);
+    const r = await patch(o.id, { montoEsperado: 2 ** 60 });
+    expect(r.statusCode).toBe(422);
+    expect(r.json()).toMatchObject({ campo: "montoEsperado" });
+    await patch(o.id, { montoEsperado: null });
+  });
+
   it("PATCH desactiva sin borrar, y al desactivar una del par repetido la alerta desaparece", async () => {
     const o = await porId("77777777", "Fono Dos");
     expect((await patch(o.id, { activa: false })).json().datos.activa).toBe(false);
@@ -207,7 +225,7 @@ describe("catálogo: edición y alta", () => {
 
   it("POST crea una obligación manual y rechaza duplicados y datos inválidos", async () => {
     const cat = (await app.inject("/api/categorias")).json().datos[0];
-    const crear = (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload });
+    const crear = alta;
     const r = await crear({ sociedad: "dm", categoriaId: cat.id, proveedor: "Agua Uno", identificador: "000555", diaEsperadoPago: 5 });
     expect(r.statusCode).toBe(201);
     expect(r.json().datos).toMatchObject({ sociedad: "DM", identificador: "000555", origen: "manual", frecuencia: "mensual", frecuenciaPorConfirmar: true });
@@ -215,7 +233,9 @@ describe("catálogo: edición y alta", () => {
 
     const dup = await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "AGUA UNO", identificador: "000555" });
     expect(dup.statusCode).toBe(409);
-    expect((await crear({ sociedad: "XYZ", categoriaId: cat.id, proveedor: "P", identificador: "1" })).json()).toMatchObject({ campo: "sociedad" });
+    expect((await crear({ sociedadId: 999_999, categoriaId: cat.id, proveedor: "P", identificador: "1" })).json()).toMatchObject({ campo: "sociedadId", error: "La sociedad no existe" });
+    expect((await crear({ categoriaId: cat.id, proveedor: "P", identificador: "1" })).json()).toMatchObject({ campo: "sociedadId" });
+    expect((await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "Grande", identificador: "9999", montoEsperado: 3_000_000_000 })).statusCode).toBe(201); // más de ₡21,4 millones
     expect((await crear({ sociedad: "DM", categoriaId: 999_999, proveedor: "P", identificador: "1" })).json()).toMatchObject({ campo: "categoriaId" });
     expect((await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "P" })).json()).toMatchObject({ campo: "identificador" });
   });

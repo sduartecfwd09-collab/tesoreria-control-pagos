@@ -6,7 +6,7 @@ import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence
 import type { CambiosObligacion, Categoria, Cuenta, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir, Etiqueta } from "../ui";
 
-const MONTO_MAXIMO = 2_147_483_647; // centavos (límite actual del Backend)
+const MONTO_MAXIMO = Number.MAX_SAFE_INTEGER; // centavos (el mismo límite del Backend)
 
 interface Valores {
   sociedad: string;
@@ -28,13 +28,14 @@ interface Valores {
 // Campo del Backend -> campo del formulario (para mostrar el error junto al control correcto).
 const CAMPO_FORMULARIO: Record<string, FieldPath<Valores>> = {
   montoEsperado: "monto",
+  sociedadId: "sociedad",
   frecuenciaPorConfirmar: "frecuenciaConfirmada",
   monedaPorConfirmar: "monedaConfirmada",
 };
 
 function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): Valores {
   return {
-    sociedad: o?.sociedad ?? "",
+    sociedad: o ? String(o.sociedadId) : "", // identificador de la sociedad
     categoriaId: o ? String(o.categoriaId) : "",
     proveedor: o?.proveedor ?? "",
     identificador: o?.identificador ?? "",
@@ -56,7 +57,7 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
   const incluir = (k: keyof Valores) => sucios === null || !!sucios[k];
   const c: CambiosObligacion = {};
   if (sucios === null) {
-    c.sociedad = v.sociedad;
+    c.sociedadId = Number(v.sociedad);
     c.categoriaId = Number(v.categoriaId);
     c.proveedor = v.proveedor;
     c.identificador = v.identificador;
@@ -101,7 +102,10 @@ export function FormularioObligacion({
 
   // useWatch (y no watch) para que el React Compiler pueda optimizar el componente.
   const [frecuencia, mesArranque, moneda, sociedad] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda", "sociedad"] });
-  const cuentasSociedad = useMemo(() => cuentas.filter((c) => c.sociedad === sociedad), [cuentas, sociedad]);
+  const cuentasSociedad = useMemo(() => {
+    const elegida = sociedades.find((s) => String(s.id) === sociedad);
+    return elegida ? cuentas.filter((c) => c.sociedad === (elegida.codigo ?? elegida.nombreLargo)) : [];
+  }, [cuentas, sociedades, sociedad]);
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
 
   async function enviar(v: Valores) {
@@ -166,7 +170,7 @@ export function FormularioObligacion({
                 <select id="f-sociedad" className={`${claseControl} w-full`} aria-describedby={desc("sociedad", false)} {...register("sociedad", { required: "Elija la sociedad" })}>
                   <option value="">Elija una sociedad…</option>
                   {sociedades.map((s) => (
-                    <option key={s.id} value={s.codigo ?? ""}>{s.codigo ?? s.nombreLargo}</option>
+                    <option key={s.id} value={String(s.id)}>{s.nombreLargo}</option>
                   ))}
                 </select>
               </Campo>
@@ -287,7 +291,7 @@ export function FormularioObligacion({
                   validate: (v) => {
                     const c = aCentavos(v);
                     if (c === undefined) return "Escriba solo números, con hasta 2 decimales (p. ej. 15000 o 15000,50)";
-                    if (c !== null && c > MONTO_MAXIMO) return "El monto supera el máximo admitido (21 474 836,47)";
+                    if (c !== null && c > MONTO_MAXIMO) return "El monto es demasiado grande";
                     return true;
                   },
                 })}

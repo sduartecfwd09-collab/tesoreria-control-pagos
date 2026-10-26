@@ -126,7 +126,7 @@ describe("API: alta y edición con «Control desde»", () => {
     await vaciarImportaciones();
   });
   const sociedadId = async () => (await prisma.sociedad.findUniqueOrThrow({ where: { codigo: "AAA" } })).id;
-  const crear = async (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload: { sociedad: "AAA", categoriaId: cat, ...payload } });
+  const crear = async (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload: { sociedadId: await sociedadId(), categoriaId: cat, ...payload } });
 
   it("el alta manual usa el mes de alta y avisa si el día de pago de ese mes ya pasó", async () => {
     const r = await crear({ proveedor: "Agua", identificador: "10", diaEsperadoPago: 5 });

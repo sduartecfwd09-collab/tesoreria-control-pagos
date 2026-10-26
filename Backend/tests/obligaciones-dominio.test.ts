@@ -85,11 +85,11 @@ describe("validaciones", () => {
     expect(error(esquemaEdicion.safeParse({ activa: "si" }))?.campo).toBe("activa");
   });
 
-  it("el alta exige sociedad, categoría, proveedor e identificador, y limpia el identificador", () => {
+  it("el alta exige sociedadId, categoría, proveedor e identificador, y limpia el identificador", () => {
     expect(error(esquemaAlta.safeParse({}))).toMatchObject({ error: "Indique la sociedad" });
-    expect(error(esquemaAlta.safeParse({ sociedad: "aaa", categoriaId: 1, proveedor: "  " }))).toMatchObject({ campo: "proveedor" });
-    const r = esquemaAlta.parse({ sociedad: "aaa", categoriaId: 1, proveedor: " Luz ", identificador: " cr12 0000 " });
-    expect(r).toEqual({ sociedad: "AAA", categoriaId: 1, proveedor: "Luz", identificador: "CR120000" });
+    expect(error(esquemaAlta.safeParse({ sociedadId: 7, categoriaId: 1, proveedor: "  " }))).toMatchObject({ campo: "proveedor" });
+    const r = esquemaAlta.parse({ sociedadId: 7, categoriaId: 1, proveedor: " Luz ", identificador: " cr12 0000 " });
+    expect(r).toEqual({ sociedadId: 7, categoriaId: 1, proveedor: "Luz", identificador: "CR120000" });
   });
 
   it("el mes de arranque solo aplica a frecuencias no mensuales", () => {

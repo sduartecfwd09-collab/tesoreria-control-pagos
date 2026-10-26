@@ -140,7 +140,7 @@ export interface Obligacion {
 
 /** Campos que se envían al crear o editar (en la edición solo los que cambiaron). */
 export interface CambiosObligacion {
-  sociedad?: string;
+  sociedadId?: number;
   categoriaId?: number;
   proveedor?: string;
   identificador?: string;

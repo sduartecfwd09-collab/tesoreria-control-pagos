@@ -8,8 +8,9 @@ import { esPeriodo } from "./vencimientos.js";
 import { FRECUENCIAS } from "./parametros.js";
 
 export const MONEDAS = ["CRC", "USD"] as const;
-// Prisma Int es de 32 bits: ₡21 474 836,47 como máximo (ver deuda técnica en el README).
-export const MONTO_MAXIMO = 2_147_483_647;
+// Los montos se guardan en centavos como BigInt y la API los envía como número: el máximo es el mayor entero que un
+// número representa sin perder precisión (unos ₡90 billones). Hay montos reales mayores a ₡21,4 millones.
+export const MONTO_MAXIMO = Number.MAX_SAFE_INTEGER;
 
 /** Identificador con forma de IBAN (dos letras, dos dígitos de control y el resto alfanumérico). */
 export const pareceIban = (id: string) => /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(id);
@@ -35,7 +36,7 @@ const camposEditables = {
     .number({ error: "El monto debe ser un número" })
     .int("El monto se envía en centavos (número entero)")
     .min(0, "El monto no puede ser negativo")
-    .max(MONTO_MAXIMO, "El monto supera el máximo admitido (21 474 836,47)")
+    .max(MONTO_MAXIMO, "El monto es demasiado grande")
     .nullable(),
   moneda: z.enum(MONEDAS, { error: "La moneda debe ser CRC (colones) o USD (dólares)" }),
   monedaPorConfirmar: z.boolean({ error: "Indique sí o no" }),
@@ -57,7 +58,8 @@ export const esquemaEdicion = editablesOpcionales.refine((o) => Object.keys(o).l
 export const esquemaAlta = editablesOpcionales.extend({
   /** «Es intencional»: la persona confirma que el identificador ya existe en otra obligación y quiere crearla igual. */
   esIntencional: z.boolean({ error: "Indique sí o no" }).optional(),
-  sociedad: z.string({ error: "Indique la sociedad" }).trim().min(1, "Indique la sociedad").transform((s) => s.toUpperCase()),
+  // La sociedad se elige por su nombre oficial y se envía su identificador (61 sociedades no tienen abreviatura).
+  sociedadId: z.number({ error: "Indique la sociedad" }).int("Indique la sociedad").positive("Indique la sociedad"),
   categoriaId: z.number({ error: "Indique la categoría" }).int().positive("Indique la categoría"),
   proveedor: z
     .string({ error: "Indique el proveedor" })
