@@ -126,6 +126,8 @@ Al crear o editar una obligación (frecuencia, mes de arranque, día, monto o ac
 Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones también `campo`, para marcarlo en el formulario); fechas ISO 8601; montos en centavos (enteros).
 **CORS:** el Backend solo acepta los orígenes de `CORS_ORIGINS` (por defecto `http://localhost:3000`). El Frontend lee la URL del API desde `NEXT_PUBLIC_API_URL`.
 
+**Dirección de escucha:** la API escucha por defecto solo en `127.0.0.1` (este equipo). La variable opcional `HOST` la cambia; vacía equivale a `127.0.0.1`. No usar `0.0.0.0` hasta que exista autenticación.
+
 ## Importación de estados de cuenta (Hito 2)
 
 - Lee solo las subcarpetas de `STATEMENTS_ROOT` (una por sociedad); ignora `resultados/` y los archivos de la raíz. **Nunca escribe en esa carpeta.**

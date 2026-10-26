@@ -9,6 +9,7 @@ describe("leerEnv", () => {
     expect(e.STATEMENTS_ROOT).toBeUndefined();
     expect(e.CATALOGO_FILE).toBeUndefined();
     expect(e.PORT).toBe(3001);
+    expect(e.HOST).toBe("127.0.0.1");
     expect(e.CORS_ORIGINS).toEqual(["http://localhost:3000"]);
   });
   it("falla si falta DATABASE_URL", () => {

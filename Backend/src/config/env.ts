@@ -6,6 +6,8 @@ const vacioAUndefined = (v: unknown) => (typeof v === "string" && v.trim() === "
 const opcional = <T extends z.ZodType>(s: T) => z.preprocess(vacioAUndefined, s.optional());
 
 const esquema = z.object({
+  // Vacío = solo este equipo (127.0.0.1). Un valor distinto expone la API a la red: solo con autenticación en marcha.
+  HOST: z.preprocess(vacioAUndefined, z.string().default("127.0.0.1")),
   PORT: z.preprocess(vacioAUndefined, z.coerce.number().int().min(1).max(65535).default(3001)),
   DATABASE_URL: z.string().min(1, "DATABASE_URL es obligatoria"),
   CORS_ORIGINS: z
