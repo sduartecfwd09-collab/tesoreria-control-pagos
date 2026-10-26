@@ -99,6 +99,7 @@ model Obligacion {
   cuentaEsperadaId       Int?
   cuentaEsperada         Cuenta?       @relation(fields: [cuentaEsperadaId], references: [id])
   responsable            String?       @db.VarChar(150)
+  controlDesde           DateTime?     @db.Date // primer día del mes desde el cual se generan vencimientos; null = aún sin definir (sin límite)
   activa                 Boolean       @default(true) // no se borra: se desactiva
   origen                 String        @default("catalogo") @db.VarChar(20) // catalogo | manual (la importación no toca las manuales)
   creadoEn               DateTime      @default(now()) @db.DateTime(3)

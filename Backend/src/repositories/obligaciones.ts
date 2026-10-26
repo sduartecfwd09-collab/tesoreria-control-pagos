@@ -2,6 +2,7 @@ import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { claveNombre, estadoEsActiva, type FilaCatalogo } from "../catalogo/lector.js";
 import { codigoPorAlias } from "../config/alias-sociedades.js";
+import { primerDiaDelPeriodo } from "../domain/control-desde.js";
 import { identificadorClave, MOTIVO_IDENTIFICADOR_DUPLICADO } from "../domain/identificadores.js";
 import { resolutorDeSociedades } from "../domain/sociedades.js";
 
@@ -191,3 +192,32 @@ export async function obtenerCategoria(id: number) {
 export async function obtenerCuenta(id: number) {
   return prisma.cuenta.findUnique({ where: { id } });
 }
+
+/** Mes más antiguo (AAAA-MM) con estados de cuenta leídos de la cuenta; si no se da cuenta, de las cuentas de la sociedad. */
+export async function mesMasAntiguoConEstados(sociedadId: number, cuentaId: number | null): Promise<string | null> {
+  const r = await prisma.archivoImportado.aggregate({
+    _min: { mes: true },
+    where: { estado: "leido", mes: { not: null }, ...(cuentaId !== null ? { cuentaId } : { sociedadId }) },
+  });
+  return r._min.mes;
+}
+
+/**
+ * Pone «Control desde» a las obligaciones que aún no lo tienen: el primer día del mes más antiguo con estados cargados
+ * para su cuenta esperada (o, sin cuenta esperada, para su sociedad). Nunca cambia uno ya definido. Devuelve cuántas se completaron.
+ */
+export async function completarControlDesdePendientes(): Promise<number> {
+  const pendientes = await prisma.obligacion.findMany({ where: { controlDesde: null }, select: { id: true, sociedadId: true, cuentaEsperadaId: true } });
+  const cache = new Map<string, string | null>();
+  let n = 0;
+  for (const o of pendientes) {
+    const k = `${o.sociedadId}|${o.cuentaEsperadaId ?? ""}`;
+    if (!cache.has(k)) cache.set(k, await mesMasAntiguoConEstados(o.sociedadId, o.cuentaEsperadaId));
+    const mes = cache.get(k);
+    if (!mes) continue;
+    await prisma.obligacion.update({ where: { id: o.id }, data: { controlDesde: primerDiaDelPeriodo(mes) } });
+    n++;
+  }
+  return n;
+}
+

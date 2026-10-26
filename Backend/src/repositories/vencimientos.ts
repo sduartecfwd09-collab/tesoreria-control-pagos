@@ -1,13 +1,18 @@
 import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
+import { periodoDeControl } from "../domain/control-desde.js";
 import { aNumero } from "../domain/montos.js";
 import { ESTADOS_PAGADOS, type ObligacionPlan, type VencimientoPlan } from "../domain/vencimientos.js";
 
 const clave = (obligacionId: number, periodo: string) => `${obligacionId}|${periodo}`;
 
-const camposPlan = { id: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true } as const;
+const camposPlan = { id: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true, controlDesde: true } as const;
 
-const aPlan = (o: { montoEsperado: bigint | null } & Omit<ObligacionPlan, "montoEsperado">): ObligacionPlan => ({ ...o, montoEsperado: aNumero(o.montoEsperado) });
+const aPlan = (o: { montoEsperado: bigint | null; controlDesde: Date | null } & Omit<ObligacionPlan, "montoEsperado" | "controlDesde">): ObligacionPlan => ({
+  ...o,
+  montoEsperado: aNumero(o.montoEsperado),
+  controlDesde: periodoDeControl(o.controlDesde),
+});
 
 export async function obligacionesParaPlan(): Promise<ObligacionPlan[]> {
   return (await prisma.obligacion.findMany({ select: camposPlan, orderBy: { id: "asc" } })).map(aPlan);

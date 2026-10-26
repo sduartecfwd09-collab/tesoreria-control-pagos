@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { advertenciaDiaYaPaso, mesDeAlta, periodoDeControl, primerDiaDelPeriodo } from "../domain/control-desde.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -17,11 +18,11 @@ import {
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import type { Reloj } from "../domain/reloj.js";
+import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { regenerarObligacion } from "../vencimientos/generar.js";
 
 // Campos que cambian los vencimientos: al editarlos se regeneran los futuros sin conciliación.
-const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "montoEsperado", "activa"];
+const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "montoEsperado", "activa", "controlDesde"];
 
 const consulta = z.object({
   sociedad: z.string().trim().min(1).transform((s) => s.toUpperCase()).optional(),
@@ -49,6 +50,7 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
     cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: o.cuentaEsperada.numero, banco: o.cuentaEsperada.banco } : null,
     responsable: o.responsable, activa: o.activa, origen: o.origen,
+    controlDesde: periodoDeControl(o.controlDesde),
     actualizado: o.actualizado.toISOString(),
     etiquetas: etiquetasDe(aCalidad(o), repetidos),
   };
@@ -142,9 +144,16 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const cuenta = await errorCuenta(d.cuentaEsperadaId, sociedad.id);
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 
-    const { sociedad: _codigo, esIntencional: _intencional, ...resto } = d;
+    // «Control desde»: por defecto el mes de alta. Si el día de pago de ese mes ya pasó y no se eligió, se devuelve la
+    // advertencia para que el formulario pregunte «¿desde este mes o desde el siguiente?» (el valor sigue siendo el mes de alta).
+    const hoy = hoyDe(opts.reloj);
+    const controlDesde = d.controlDesde === undefined ? mesDeAlta(hoy) : d.controlDesde;
+    const advertencia = advertenciaDiaYaPaso(d.diaEsperadoPago, hoy, d.controlDesde !== undefined);
+
+    const { sociedad: _codigo, esIntencional: _intencional, controlDesde: _control, ...resto } = d;
     const o = await crearObligacion({
       ...resto,
+      controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde),
       sociedadId: sociedad.id,
       frecuencia,
       frecuenciaPorConfirmar: d.frecuenciaPorConfirmar ?? d.frecuencia === undefined,
@@ -152,7 +161,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       origen: "manual",
     });
     const regeneracion = await regenerarObligacion(o.id, opts.reloj);
-    return reply.code(201).send({ datos: aDto(o, await repetidosActuales()), regeneracion });
+    return reply.code(201).send({ datos: aDto(o, await repetidosActuales()), regeneracion, advertencias: advertencia ? [advertencia] : [] });
   });
 
   app.patch("/api/obligaciones/:id", async (req, reply) => {
@@ -180,8 +189,10 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const cuenta = await errorCuenta(d.cuentaEsperadaId, actual.sociedadId);
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 
+    const { controlDesde, ...resto } = d;
     const o = await actualizarObligacion(id.data, {
-      ...d,
+      ...resto,
+      ...(controlDesde !== undefined ? { controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde) } : {}),
       ...(d.diaEsperadoPago !== undefined ? { diaEditado: true } : {}),
       ...(d.frecuencia !== undefined && d.frecuenciaPorConfirmar === undefined ? { frecuenciaPorConfirmar: false } : {}),
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),

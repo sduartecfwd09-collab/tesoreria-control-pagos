@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { leerLibro } from "../ingest/lector.js";
-import { sincronizarCatalogo, type ResultadoSincronizacion } from "../repositories/obligaciones.js";
+import { completarControlDesdePendientes, sincronizarCatalogo, type ResultadoSincronizacion } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { leerCatalogo, type ProblemaFila, type VarianteNombre } from "./lector.js";
 
@@ -34,6 +34,7 @@ export async function importarCatalogo(ruta: string): Promise<ResumenCatalogo> {
     const defecto = (await valorGlobal("frecuencia_defecto")) ?? "mensual";
     const frecuencia = FRECUENCIAS.includes(defecto) ? defecto : "mensual";
     const r = await sincronizarCatalogo(leido.filas, frecuencia);
+    await completarControlDesdePendientes(); // «Control desde» por defecto: mes más antiguo con estados cargados
     return {
       ...r,
       hoja: leido.hoja,

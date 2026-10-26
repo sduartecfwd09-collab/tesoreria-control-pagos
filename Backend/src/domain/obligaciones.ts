@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { limpiarIdentificador } from "../catalogo/lector.js";
 import { identificadorClave } from "./identificadores.js";
+import { esPeriodo } from "./vencimientos.js";
 import { FRECUENCIAS } from "./parametros.js";
 
 export const MONEDAS = ["CRC", "USD"] as const;
@@ -41,6 +42,10 @@ const camposEditables = {
   cuentaEsperadaId: z.number({ error: "La cuenta de pago no es válida" }).int("La cuenta de pago no es válida").positive("La cuenta de pago no es válida").nullable(),
   responsable: textoOpcional(80, "El responsable"),
   activa: z.boolean({ error: "Indique si la obligación está activa (sí o no)" }),
+  controlDesde: z
+    .string({ error: "«Control desde» debe ser un mes con el formato AAAA-MM (por ejemplo 2026-08)" })
+    .refine(esPeriodo, "«Control desde» debe ser un mes con el formato AAAA-MM (por ejemplo 2026-08)")
+    .nullable(),
 };
 
 export const CAMPOS_EDITABLES = Object.keys(camposEditables);

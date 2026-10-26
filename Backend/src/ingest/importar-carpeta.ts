@@ -9,6 +9,7 @@ import {
   ArchivoConConciliaciones, buscarArchivoPorRuta, buscarSociedadPorCodigo,
   guardarArchivoConError, guardarArchivoEnRevision, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
 } from "../repositories/importaciones.js";
+import { completarControlDesdePendientes } from "../repositories/obligaciones.js";
 
 export type EstadoArchivo = "leido" | "error" | "sin_cambios" | "en_revision";
 
@@ -76,7 +77,9 @@ export async function importarCarpeta(raiz: string): Promise<ResumenImportacion>
   if (enCurso) throw new Error("Ya hay una importación en curso");
   enCurso = true;
   try {
-    return await ejecutar(raiz);
+    const resumen = await ejecutar(raiz);
+    await completarControlDesdePendientes(); // los estados nuevos pueden definir «Control desde» de obligaciones que aún no lo tienen
+    return resumen;
   } finally {
     enCurso = false;
   }

@@ -47,6 +47,8 @@ export interface ObligacionPlan {
   mesArranque: number | null;
   diaEsperadoPago: number | null;
   montoEsperado: number | null;
+  /** «Control desde» (AAAA-MM): antes de ese mes no se genera nada. null/ausente = sin límite. */
+  controlDesde?: string | null;
 }
 
 export interface VencimientoPlan {
@@ -78,6 +80,7 @@ export function planificar(obligaciones: ObligacionPlan[], periodos: string[]): 
     if (o.diaEsperadoPago === null) { omitidas.push({ obligacionId: o.id, motivo: "falta_dia" }); continue; }
     if (paso > 1 && o.mesArranque === null) { omitidas.push({ obligacionId: o.id, motivo: "falta_mes_arranque" }); continue; }
     for (const periodo of periodos) {
+      if (o.controlDesde && periodo < o.controlDesde) continue; // antes de «Control desde» no se genera nada
       if (!tocaEnPeriodo(o.frecuencia, o.mesArranque, periodo)) continue;
       vencimientos.push({ obligacionId: o.id, periodo, fecha: fechaVencimiento(periodo, o.diaEsperadoPago), montoEsperado: o.montoEsperado });
     }
