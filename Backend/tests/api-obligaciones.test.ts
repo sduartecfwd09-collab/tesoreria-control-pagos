@@ -124,6 +124,19 @@ describe("identificador duplicado: avisa, no bloquea", () => {
     expect(ok.json().datos).not.toHaveProperty("esIntencional");
   });
 
+  it("solo bloquea si coinciden sociedad, proveedor, identificador y categoría; con otra categoría avisa y se confirma", async () => {
+    const cats = (await app.inject("/api/categorias")).json().datos as { id: number; nombre: string }[];
+    const base = { sociedad: "DM", proveedor: "Paquete Combo", identificador: "4040", diaEsperadoPago: 9 };
+    expect((await crear({ ...base, categoriaId: cats[0]!.id })).statusCode).toBe(201);
+    const igual = await crear({ ...base, identificador: "004040", categoriaId: cats[0]!.id, esIntencional: true });
+    expect(igual.statusCode).toBe(409); // mismos cuatro datos (sin ceros): bloquea aunque se diga «intencional»
+    expect(igual.json()).not.toHaveProperty("advertencia");
+    const otra = await crear({ ...base, categoriaId: cats[1]!.id });
+    expect(otra.statusCode).toBe(409);
+    expect(otra.json().advertencia).toMatchObject({ tipo: "identificador_duplicado", otras: [{ proveedor: "Paquete Combo", categoria: cats[0]!.nombre }] });
+    expect((await crear({ ...base, categoriaId: cats[1]!.id, esIntencional: true })).statusCode).toBe(201);
+  });
+
   it("la otra obligación cuenta aunque esté inactiva", async () => {
     const cat = (await app.inject("/api/categorias")).json().datos[0];
     const o = await porId("000999888777");

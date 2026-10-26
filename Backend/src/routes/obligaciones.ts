@@ -120,8 +120,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const sociedad = await obtenerSociedadPorCodigo(d.sociedad);
     if (!sociedad) return invalido(reply, `La sociedad «${d.sociedad}» no existe`, "sociedad");
     if (!(await obtenerCategoria(d.categoriaId))) return invalido(reply, "La categoría no existe", "categoriaId");
-    if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador)) {
-      return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
+    if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador, d.categoriaId)) {
+      return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador y esa categoría en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
     }
     // El identificador no es único por sí solo: se avisa con los datos de la otra obligación y se admite confirmar «Es intencional».
     if (!d.esIntencional) {

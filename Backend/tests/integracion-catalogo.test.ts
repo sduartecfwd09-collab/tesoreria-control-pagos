@@ -23,22 +23,21 @@ describe.skipIf(!hayArchivo)("importación del catálogo real", () => {
   });
   afterAll(vaciarImportaciones);
 
-  it("importa 65 obligaciones en 3 categorías y 5 sociedades, y es idempotente", async () => {
+  // El catálogo real cambia (José lo actualiza): solo se afirman invariantes y conteos, nunca valores del archivo.
+  it("carga todas las filas que se pueden cargar, deja el resto en revisión, y es idempotente", async () => {
     const r = await importarCatalogo(ruta!);
-    expect(r).toMatchObject({ filasLeidas: 65, creadas: 65, problemas: [] });
-    expect(r.porSociedad).toEqual({ ZFL: 34, GGDI: 12, BONAVISTA: 10, WW: 7, MEMEMC: 2 });
-    expect(Object.keys(r.porCategoria).sort()).toEqual(["CCSS", "Electricidad", "Telecom"]);
-    expect(await prisma.sociedad.count()).toBe(5);
+    expect(r.filasLeidas).toBeGreaterThan(0);
+    expect(r.creadas + r.enRevision).toBe(r.filasLeidas);
+    expect(await prisma.obligacion.count()).toBe(r.creadas);
+    expect(await prisma.sociedad.count()).toBe(5); // el importador no crea sociedades
 
     const c = calidadCatalogo(
       (await todasLasObligaciones()).map((o) => ({ ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad) })),
       (await listarSociedades()).map(etiquetaSociedad),
     );
-    expect(c.sociedadesSinObligaciones).toEqual([]);
-    expect(c.identificadoresRepetidos.map((g) => g.sociedad)).toEqual(["GGDI"]);
-    expect(c.formatoIban.map((o) => o.sociedad)).toEqual(["ZFL"]);
+    expect(c.total).toBe(r.creadas);
 
-    expect(await importarCatalogo(ruta!)).toMatchObject({ creadas: 0, actualizadas: 0, sinCambios: 65 });
-    expect(await prisma.obligacion.count()).toBe(65);
+    expect(await importarCatalogo(ruta!)).toMatchObject({ creadas: 0, actualizadas: 0, sinCambios: r.creadas, enRevision: r.enRevision });
+    expect(await prisma.obligacion.count()).toBe(r.creadas);
   });
 });

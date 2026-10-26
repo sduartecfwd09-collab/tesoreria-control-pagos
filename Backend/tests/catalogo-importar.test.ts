@@ -71,6 +71,19 @@ describe("importarCatalogo: identificador duplicado", () => {
     expect(r.identificadoresDuplicados).toBe(2); // el par del catálogo base
   });
 
+  it("mismo proveedor e identificador con otra categoría (paquete combinado): se cargan las dos y quedan marcadas; con la misma categoría es la misma fila", async () => {
+    await escribir([
+      ["AAA", "Cable", "Combo", "500", "01 DIA"],
+      ["AAA", "Internet", "Combo", "500", "01 DIA"], // otra categoría: otra obligación
+      ["AAA", "Internet", "Combo", "0500", "01 DIA"], // misma categoría, ceros distintos: repetida
+    ]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 2, identificadoresDuplicados: 2 });
+    expect(r.problemas).toEqual([{ fila: 6, motivo: expect.stringContaining("Repite la fila 5"), importada: false }]);
+    expect(await prisma.obligacion.count({ where: { proveedor: "Combo" } })).toBe(2);
+    expect(await importarCatalogo(archivo())).toMatchObject({ creadas: 0 });
+  });
+
   it("la misma fila con ceros distintos no se carga dos veces (misma sociedad y proveedor)", async () => {
     await escribir([["AAA", "Telecom", "Fono", "0077", "01 DIA"], ["AAA", "Telecom", "Fono", "77", "01 DIA"]]);
     const r = await importarCatalogo(archivo());

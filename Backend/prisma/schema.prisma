@@ -109,7 +109,9 @@ model Obligacion {
   vencimientos           Vencimiento[]
   cambiosDia             CambioDia[]
 
-  @@unique([sociedadId, proveedor, identificador])
+  // La categoría es parte de la identidad: un mismo proveedor puede cobrar con el mismo identificador paquetes de
+  // categorías distintas (por ejemplo cable e internet combinados).
+  @@unique([sociedadId, proveedor, identificador, categoriaId])
 }
 
 model Vencimiento {

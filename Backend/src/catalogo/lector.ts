@@ -124,7 +124,7 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
   const problemas: ProblemaFila[] = [];
   // clave normalizada -> forma elegida (la primera que aparece) y demás formas vistas
   const nombres = { proveedor: new Map<string, Set<string>>(), categoria: new Map<string, Set<string>>() };
-  const vistas = new Map<string, number>(); // sociedad|proveedor|identificador -> fila
+  const vistas = new Map<string, number>(); // sociedad|proveedor|identificador|categoría -> fila
 
   const unificar = (campo: "proveedor" | "categoria", forma: string) => {
     const k = claveNombre(forma);
@@ -159,10 +159,10 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
 
     const categoria = unificar("categoria", categoriaTxt);
     const proveedor = unificar("proveedor", proveedorTxt);
-    const clave = `${sociedad}|${claveNombre(proveedor)}|${identificadorClave(identificador)}`;
+    const clave = `${sociedad}|${claveNombre(proveedor)}|${identificadorClave(identificador)}|${claveNombre(categoria)}`;
     const previa = vistas.get(clave);
     if (previa !== undefined) {
-      problemas.push({ fila: r, motivo: `Repite la fila ${previa} (misma sociedad, proveedor e identificador): no se importó`, importada: false });
+      problemas.push({ fila: r, motivo: `Repite la fila ${previa} (misma sociedad, proveedor, identificador y categoría): no se importó`, importada: false });
       continue;
     }
     vistas.set(clave, r);

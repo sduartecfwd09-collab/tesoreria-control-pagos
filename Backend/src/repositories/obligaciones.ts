@@ -12,8 +12,8 @@ export const MOTIVO_SOCIEDAD_SIN_COINCIDENCIA = "La sociedad no coincide con nin
 const incluir = { sociedad: true, categoria: true, cuentaEsperada: true } as const;
 export type ObligacionCompleta = Prisma.ObligacionGetPayload<{ include: typeof incluir }>;
 
-const claveObligacion = (sociedadId: number, proveedor: string, identificador: string) =>
-  `${sociedadId}|${claveNombre(proveedor)}|${identificadorClave(identificador)}`;
+const claveObligacion = (sociedadId: number, proveedor: string, identificador: string, categoriaId: number) =>
+  `${sociedadId}|${claveNombre(proveedor)}|${identificadorClave(identificador)}|${categoriaId}`;
 
 export interface ResultadoSincronizacion {
   creadas: number;
@@ -33,7 +33,7 @@ export interface ResultadoSincronizacion {
  * - la columna ESTADO es opcional: sin ella todas son activas; con ella, «ACTIVA» es activa, «INACTIVA» se carga inactiva
  *   y cualquier otro valor (incluida una celda vacía) va a revisión (no se carga ni se asume);
  * - crea la obligación si no existe (sociedad + proveedor normalizado + identificador);
- * - si existe y es del catálogo, solo actualiza lo que viene del archivo: categoría, forma del nombre y
+ * - si existe y es del catálogo, solo actualiza lo que viene del archivo: forma del nombre y
  *   el día (si Tesorería no lo editó a mano y el archivo trae un día válido);
  * - nunca toca frecuencia, monto, moneda, cuenta, responsable ni activa, ni las obligaciones manuales.
  */
@@ -51,7 +51,7 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre, nombreNormalizado: claveNombre(nombre) } })).id);
     }
 
-    const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador), o]));
+    const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador, o.categoriaId), o]));
     const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, enRevision: 0, identificadoresDuplicados: 0 };
     const vistas = new Set<number>();
     const cargadas: { f: FilaCatalogo; obligacionId: number }[] = [];
@@ -61,7 +61,7 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       if (sociedadId == null) { aRevision(f, "sociedad_sin_coincidencia", MOTIVO_SOCIEDAD_SIN_COINCIDENCIA); continue; }
       if (f.estado !== null && !estadoEsActiva(f.estado) && !estadoEsInactiva(f.estado)) { aRevision(f, "estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO); continue; }
       const categoriaId = categorias.get(claveNombre(f.categoria))!;
-      const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador));
+      const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador, categoriaId));
       if (!o) {
         const nueva = await tx.obligacion.create({
           data: { sociedadId, categoriaId, proveedor: f.proveedor, identificador: f.identificador, diaEsperadoPago: f.dia, frecuencia: frecuenciaDefecto, activa: f.estado === null || !estadoEsInactiva(f.estado) },
@@ -74,7 +74,6 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
       cargadas.push({ f, obligacionId: o.id });
       if (o.origen === "manual") { r.sinCambios++; continue; }
       const cambios: Prisma.ObligacionUncheckedUpdateInput = {};
-      if (o.categoriaId !== categoriaId) cambios.categoriaId = categoriaId;
       if (o.proveedor !== f.proveedor) cambios.proveedor = f.proveedor;
       if (!o.diaEditado && f.dia !== null && o.diaEsperadoPago !== f.dia) cambios.diaEsperadoPago = f.dia;
       if (Object.keys(cambios).length === 0) { r.sinCambios++; continue; }
@@ -149,9 +148,10 @@ export async function obtenerObligacion(id: number) {
   return prisma.obligacion.findUnique({ where: { id }, include: incluir });
 }
 
-export async function buscarPorClave(sociedadId: number, proveedor: string, identificador: string) {
+/** La misma obligación: sociedad, proveedor, identificador (sin ceros a la izquierda) y categoría. */
+export async function buscarPorClave(sociedadId: number, proveedor: string, identificador: string, categoriaId: number) {
   const clave = identificadorClave(identificador);
-  const candidatas = await prisma.obligacion.findMany({ where: { sociedadId, identificador: { endsWith: clave } } });
+  const candidatas = await prisma.obligacion.findMany({ where: { sociedadId, categoriaId, identificador: { endsWith: clave } } });
   return candidatas.find((o) => claveNombre(o.proveedor) === claveNombre(proveedor) && identificadorClave(o.identificador) === clave) ?? null;
 }
 
