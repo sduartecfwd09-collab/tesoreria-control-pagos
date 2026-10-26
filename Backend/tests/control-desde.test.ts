@@ -87,16 +87,16 @@ describe("«Control desde» por defecto", () => {
     return cuenta.id;
   };
 
-  it("la importación del catálogo lo fija en el primer día del mes más antiguo con estados de la sociedad (sin cuenta esperada)", async () => {
+  it("la importación del catálogo lo fija en el mes más antiguo con estados de la sociedad (sin cuenta esperada) o, sin estados, en el mes de carga", async () => {
     await archivo("AAA", "111", "2026-06");
     await archivo("AAA", "222", "2026-03");
     await archivo("AAA", "333", "2025-01", "error"); // un archivo con error no cuenta
     writeFileSync(path.join(dir, "c.xlsx"), await catalogo([["AAA", "Telecom", "Fono", "1", "05 DIA"], ["BBB", "Telecom", "Fono", "2", "05 DIA"]]));
-    await importarCatalogo(path.join(dir, "c.xlsx"));
+    await importarCatalogo(path.join(dir, "c.xlsx"), reloj(2026, 9, 10));
     const a = await prisma.obligacion.findFirstOrThrow({ where: { identificador: "1" } });
     const b = await prisma.obligacion.findFirstOrThrow({ where: { identificador: "2" } });
     expect(iso(a.controlDesde)).toBe("2026-03-01");
-    expect(b.controlDesde).toBeNull(); // BBB sin estados: queda sin definir
+    expect(iso(b.controlDesde)).toBe("2026-09-01"); // BBB sin estados: empieza el mes en que se carga
   });
 
   it("con cuenta esperada usa solo los estados de esa cuenta, y nunca pisa un valor ya definido", async () => {

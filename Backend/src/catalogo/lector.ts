@@ -50,7 +50,10 @@ const CABECERA: Record<Columna, (t: string) => boolean> = {
 // Columna opcional: si no existe, todas las filas se consideran activas.
 const COLUMNA_ESTADO = (t: string) => t === "estado";
 
-/** Solo «ACTIVA» (sin importar mayúsculas ni tildes) es una obligación activa; cualquier otro valor lo decide una persona. */
+/** «INACTIVA» (sin importar mayúsculas ni tildes): la obligación se carga como inactiva y conserva su historial. */
+export const estadoEsInactiva = (estado: string): boolean => normalizar(estado) === "inactiva";
+
+/** Solo «ACTIVA» (sin importar mayúsculas ni tildes) es una obligación activa; cualquier otro valor (incluida una celda vacía) va a revisión. */
 export const estadoEsActiva = (estado: string): boolean => normalizar(estado) === "activa";
 
 const FILAS_BUSQUEDA_CABECERA = 20;

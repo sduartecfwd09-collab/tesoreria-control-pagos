@@ -19,20 +19,21 @@ beforeEach(async () => { await vaciarImportaciones(); await sembrarSociedadesDel
 afterAll(async () => { rmSync(dir, { recursive: true, force: true }); await vaciarImportaciones(); });
 
 describe("importarCatalogo: ESTADO", () => {
-  it("sin la columna todas quedan activas; con ella «ACTIVA» es activa y cualquier otro valor va a revisión sin cargarse", async () => {
+  it("sin la columna todas quedan activas; con ella «ACTIVA» es activa, «INACTIVA» se carga inactiva y cualquier otro valor (o vacío) va a revisión", async () => {
     await importarCatalogo(archivo());
     expect(await prisma.obligacion.count({ where: { activa: true } })).toBe(6);
 
     await vaciarImportaciones();
     await sembrarSociedadesDelCatalogo();
     writeFileSync(archivo(), await catalogo(
-      [["AAA", "Telecom", "Fono", "1", "05 DIA", "ACTIVA"], ["AAA", "Telecom", "Fono", "2", "05 DIA", "INACTIVA"], ["AAA", "Telecom", "Fono", "3", "05 DIA", ""]],
+      [["AAA", "Telecom", "Fono", "1", "05 DIA", "ACTIVA"], ["AAA", "Telecom", "Fono", "2", "05 DIA", "Inactiva"], ["AAA", "Telecom", "Fono", "3", "05 DIA", ""], ["AAA", "Telecom", "Fono", "4", "05 DIA", "SUSPENDIDA"]],
       { cabecera: [...CABECERA_CATALOGO, "ESTADO"] },
     ));
     const r = await importarCatalogo(archivo());
-    expect(r).toMatchObject({ creadas: 1, enRevision: 2 });
+    expect(r).toMatchObject({ creadas: 2, enRevision: 2 });
     expect(await prisma.obligacion.count({ where: { activa: true } })).toBe(1);
-    expect(await prisma.obligacion.count()).toBe(1);
+    expect((await prisma.obligacion.findFirstOrThrow({ where: { identificador: "2" } })).activa).toBe(false); // se carga inactiva
+    expect(await prisma.obligacion.count()).toBe(2);
     const rev = await prisma.catalogoRevision.findMany({ orderBy: { fila: "asc" } });
     expect(rev.map((x) => [x.tipo, x.motivo])).toEqual([["estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO], ["estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO]]);
   });
