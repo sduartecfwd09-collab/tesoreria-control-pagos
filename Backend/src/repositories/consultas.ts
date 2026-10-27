@@ -21,6 +21,8 @@ export interface ArchivoFila {
   motivo: string | null;
   detalle: unknown;
   leidoEn: Date | null;
+  /** el archivo ya no está en la carpeta: no cuenta en totales, cobertura ni cruce */
+  retiradoEn: Date | null;
 }
 
 export async function listarArchivos(): Promise<ArchivoFila[]> {
@@ -35,7 +37,7 @@ export async function listarArchivos(): Promise<ArchivoFila[]> {
     moneda: a.cuenta?.moneda ?? null, monedaPorConfirmar: a.cuenta?.monedaPorConfirmar ?? null,
     formato: a.formato, mes: a.mes, estado: a.estado,
     numMovimientos: a.numMovimientos, numDuplicados: a.numDuplicados, error: a.error, motivo: a.motivo,
-    detalle: a.detalle ? safeJson(a.detalle) : null, leidoEn: a.leidoEn,
+    detalle: a.detalle ? safeJson(a.detalle) : null, leidoEn: a.leidoEn, retiradoEn: a.retiradoEn,
   }));
 }
 
@@ -88,6 +90,7 @@ export async function fechasPorSociedadYMes(): Promise<FechasPorSociedadMes[]> {
                0
              ) AS desvio
       FROM Movimiento m
+      JOIN ArchivoImportado a ON a.id = m.archivoId AND a.retiradoEn IS NULL
       JOIN Cuenta c ON c.id = m.cuentaId
       JOIN Sociedad s ON s.id = c.sociedadId
     ) t

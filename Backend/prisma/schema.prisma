@@ -204,6 +204,7 @@ model ArchivoImportado {
   numDuplicados  Int          @default(0) // omitidos por solaparse con otro archivo
   error          String?      @db.VarChar(1000) // mensaje si estado = error (sin datos del contenido)
   detalle        String?      @db.Text // JSON: advertencias, continuidad de saldo, discrepancias de nombre
+  retiradoEn     DateTime?    @db.DateTime(3) // el archivo ya no está en la carpeta: no cuenta en totales, cobertura ni cruce; se reactiva si vuelve
   creadoEn       DateTime     @default(now()) @db.DateTime(3)
   actualizado    DateTime     @updatedAt @db.DateTime(3)
   movimientos    Movimiento[]

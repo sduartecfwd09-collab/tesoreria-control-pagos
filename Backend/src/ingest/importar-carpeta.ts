@@ -1,21 +1,21 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE } from "../domain/estado-archivo.js";
 import { clavesDeDeduplicacion } from "./clave-dedup.js";
 import { ErrorLectura, LECTOR_VERSION, leerEstadoDeCuenta, leerLibro } from "./lector.js";
 import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
 import type { ResultadoLectura } from "./tipos.js";
 import {
-  ArchivoConConciliaciones, buscarArchivoPorRuta, buscarSociedadPorCodigo,
+  ArchivoConConciliaciones, buscarArchivoPorRuta, buscarSociedadPorCodigo, marcarRetirados, reactivarArchivo,
   guardarArchivoConError, guardarArchivoEnRevision, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
 } from "../repositories/importaciones.js";
 import { completarControlDesdePendientes } from "../repositories/obligaciones.js";
 
 export type EstadoArchivo = "leido" | "error" | "sin_cambios" | "en_revision";
 
-// Motivos fijos por los que un archivo queda "en revisión" (texto del sistema, nunca datos del archivo).
-export const MOTIVO_CARPETA_SIN_SOCIEDAD = "carpeta sin sociedad asignada";
-export const MOTIVO_NOMBRE_NO_COINCIDE = "nombre de archivo no coincide con la carpeta";
+// Motivos fijos por los que un archivo queda "en revisión": ver domain/estado-archivo.ts.
+export { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE };
 export type OrigenMoneda = "archivo" | "iban" | "otro_mes" | "desconocida";
 
 export interface ResumenArchivo {
@@ -34,6 +34,8 @@ export interface ResumenImportacion {
   conError: number;
   enRevision: number;
   sinCambios: number;
+  /** archivos registrados que ya no están en la carpeta (se marcan «Retirado de la carpeta», no se borran) */
+  retirados: number;
   movimientos: number;
   duplicados: number;
 }
@@ -87,7 +89,9 @@ export async function importarCarpeta(raiz: string): Promise<ResumenImportacion>
 
 async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   const candidatos = await listarCandidatos(raiz);
-  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, enRevision: 0, sinCambios: 0, movimientos: 0, duplicados: 0 };
+  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, enRevision: 0, sinCambios: 0, retirados: 0, movimientos: 0, duplicados: 0 };
+  // Un archivo registrado que ya no está en la carpeta se marca retirado; si vuelve a estar, se reactiva (ver más abajo).
+  resumen.retirados = await marcarRetirados(candidatos.map((c) => c.ruta));
 
   // Fase 1: sociedad, hash y lectura. La sociedad y el nombre se comprueban ANTES de abrir el archivo.
   // Un archivo con error se marca y se sigue con los demás.
@@ -109,6 +113,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
       hash = createHash("sha256").update(contenido).digest("hex");
       const previo = await buscarArchivoPorRuta(cand.ruta);
       if (previo && previo.hash === hash && previo.estado === "leido" && versionDe(previo.detalle) === LECTOR_VERSION) {
+        if (previo.retiradoEn) await reactivarArchivo(cand.ruta);
         resumen.sinCambios++;
         resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: previo.formato, estado: "sin_cambios", movimientos: previo.numMovimientos, duplicados: previo.numDuplicados });
         continue;

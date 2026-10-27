@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
+import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
@@ -23,8 +24,12 @@ export async function rutasImportaciones(app: FastifyInstance) {
       const d = (a.detalle ?? {}) as DetalleArchivo;
       return {
         id: a.id, archivo: nombreDeArchivoSeguro(a.ruta), sociedad: a.sociedad, cuenta: a.cuenta === null ? null : enmascararCuenta(a.cuenta),
-        formato: a.formato, mes: a.mes, estado: a.estado, movimientos: a.numMovimientos, duplicados: a.numDuplicados,
-        error: textoSeguro(a.error), motivo: textoSeguro(a.motivo),
+        formato: a.formato, mes: a.mes, estado: estadoDeArchivo(a),
+        // un retirado no cuenta: sus movimientos no suman a los totales
+        movimientos: a.retiradoEn ? 0 : a.numMovimientos, duplicados: a.retiradoEn ? 0 : a.numDuplicados,
+        // una sola razón visible: el error de lectura o el motivo de revisión (null si el archivo está bien o retirado)
+        motivo: textoSeguro(motivoDeArchivo(a)),
+        retiradoEn: a.retiradoEn?.toISOString() ?? null,
         advertencias: (d.advertencias ?? []).map((t) => textoSeguro(t)),
         discrepancias: (d.discrepancias ?? []).map((x) => ({ tipo: x.tipo, mensaje: textoSeguro(x.mensaje) })),
         continuidad: d.continuidad ?? null, monedaOrigen: d.monedaOrigen ?? null,
@@ -33,11 +38,9 @@ export async function rutasImportaciones(app: FastifyInstance) {
     });
     return {
       datos,
+      // Archivos = Leídos + Con error + Sin sociedad; los retirados de la carpeta se cuentan aparte
       resumen: {
-        archivos: datos.length,
-        leidos: datos.filter((a) => a.estado === "leido").length,
-        conError: datos.filter((a) => a.estado === "error").length,
-        enRevision: datos.filter((a) => a.estado === "en_revision").length,
+        ...resumirEstados(datos.map((a) => a.estado)),
         movimientos: datos.reduce((s, a) => s + a.movimientos, 0),
       },
       enCurso: hayImportacionEnCurso(),
@@ -45,7 +48,7 @@ export async function rutasImportaciones(app: FastifyInstance) {
   });
 
   app.get("/api/cobertura", async () => {
-    const archivos = await listarArchivos();
+    const archivos = (await listarArchivos()).filter((a) => a.retiradoEn === null);
     return { datos: coberturaSegura(calcularCobertura(archivos)) };
   });
 

@@ -81,7 +81,7 @@ const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.c
 export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj }) {
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
-    return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
+    return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, tesorero: x.tesorero?.nombre ?? null, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
   });
 
   app.get("/api/categorias", async () => {

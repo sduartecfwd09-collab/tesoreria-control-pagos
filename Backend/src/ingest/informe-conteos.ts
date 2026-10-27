@@ -18,6 +18,8 @@ export interface ResumenCorrida {
   conError: number;
   enRevision: number;
   sinCambios: number;
+  /** archivos registrados que ya no están en la carpeta (no cuentan en el estado actual) */
+  retirados?: number;
   movimientos: number;
   duplicados: number;
 }
@@ -57,6 +59,7 @@ export function informeConteos(base: string, corrida: ResumenCorrida, filas: Fil
   L.push(`Base de datos: ${base}`);
   L.push("\nESTA CORRIDA");
   L.push(`archivos leidos: ${corrida.leidos} | sin cambios: ${corrida.sinCambios} | con error: ${corrida.conError} | en revision: ${corrida.enRevision}`);
+  if (corrida.retirados) L.push(`archivos retirados de la carpeta (no cuentan en totales ni cobertura): ${corrida.retirados}`);
   L.push(`movimientos importados: ${corrida.movimientos} | duplicados entre archivos: ${corrida.duplicados}`);
 
   L.push("\nESTADO ACTUAL DE LA BASE");

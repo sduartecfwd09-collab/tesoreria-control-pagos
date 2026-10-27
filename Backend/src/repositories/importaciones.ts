@@ -55,6 +55,24 @@ export async function buscarArchivoPorRuta(ruta: string) {
   return prisma.archivoImportado.findUnique({ where: { ruta } });
 }
 
+/**
+ * Marca como retirados los archivos registrados cuya ruta ya no está en la carpeta (no se borra nada: se conservan el
+ * archivo, sus movimientos y su historial). Devuelve cuántos están retirados después de esta importación.
+ */
+export async function marcarRetirados(rutasPresentes: string[]): Promise<number> {
+  const presentes = new Set(rutasPresentes);
+  const registrados = await prisma.archivoImportado.findMany({ select: { id: true, ruta: true, retiradoEn: true } });
+  const ausentes = registrados.filter((a) => !presentes.has(a.ruta));
+  const nuevos = ausentes.filter((a) => a.retiradoEn === null).map((a) => a.id);
+  if (nuevos.length > 0) await prisma.archivoImportado.updateMany({ where: { id: { in: nuevos } }, data: { retiradoEn: new Date() } });
+  return ausentes.length;
+}
+
+/** El archivo volvió a aparecer en la carpeta: deja de estar retirado. */
+export async function reactivarArchivo(ruta: string) {
+  await prisma.archivoImportado.update({ where: { ruta }, data: { retiradoEn: null } });
+}
+
 export interface ArchivoParaGuardar {
   ruta: string;
   hash: string;
@@ -65,7 +83,7 @@ export interface ArchivoParaGuardar {
 }
 
 export async function guardarArchivoConError(a: ArchivoParaGuardar, error: string, detalle: unknown) {
-  const datos = { ...a, estado: "error", motivo: null, error, detalle: JSON.stringify(detalle), leidoEn: new Date(), numMovimientos: 0, numDuplicados: 0 };
+  const datos = { ...a, retiradoEn: null, estado: "error", motivo: null, error, detalle: JSON.stringify(detalle), leidoEn: new Date(), numMovimientos: 0, numDuplicados: 0 };
   return prisma.archivoImportado.upsert({ where: { ruta: a.ruta }, create: datos, update: datos });
 }
 
@@ -74,7 +92,7 @@ export async function guardarArchivoConError(a: ArchivoParaGuardar, error: strin
  * sistema (nunca datos del archivo). Si el archivo ya tenía movimientos de una lectura anterior, no se tocan.
  */
 export async function guardarArchivoEnRevision(a: ArchivoParaGuardar, motivo: string) {
-  const base = { ...a, estado: "en_revision", motivo, error: null, detalle: null, leidoEn: new Date() };
+  const base = { ...a, retiradoEn: null, estado: "en_revision", motivo, error: null, detalle: null, leidoEn: new Date() };
   return prisma.archivoImportado.upsert({
     where: { ruta: a.ruta },
     create: { ...base, numMovimientos: 0, numDuplicados: 0 },
@@ -109,7 +127,7 @@ export async function guardarArchivoLeido(
     }
     const nuevos = movs.filter((m) => !existentes.has(m.claveDedup));
     const datos = {
-      ...a, estado: "leido", motivo: null, error: null, leidoEn: new Date(),
+      ...a, retiradoEn: null, estado: "leido", motivo: null, error: null, leidoEn: new Date(),
       numMovimientos: movs.length, numDuplicados: movs.length - nuevos.length,
       detalle: JSON.stringify(extra.detalle),
     };

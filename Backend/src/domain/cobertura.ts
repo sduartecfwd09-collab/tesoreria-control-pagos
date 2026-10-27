@@ -1,6 +1,8 @@
+import { estadoDeArchivo, motivoDeArchivo } from "./estado-archivo.js";
 import { parsearNombreArchivo } from "../ingest/nombre-archivo.js";
 
 export interface ArchivoCobertura {
+  id?: number;
   ruta: string;
   sociedad: string | null;
   mes: string | null;
@@ -15,12 +17,16 @@ export interface ArchivoCobertura {
   cuentaId: number | null;
   formato: string | null;
   detalle: unknown;
+  retiradoEn?: Date | null;
 }
 
-export type EstadoCelda = "leido" | "error" | "falta";
+/** error: el archivo no se pudo leer; sin_sociedad: su carpeta no tiene sociedad; falta: no hay archivo de ese mes. */
+export type EstadoCelda = "leido" | "error" | "sin_sociedad" | "falta";
 
 export interface CeldaCobertura {
   estado: EstadoCelda;
+  /** identificador del archivo registrado: la celda enlaza a su motivo en el detalle */
+  archivoId?: number;
   archivo?: string;
   formato?: string | null;
   movimientos: number;
@@ -59,7 +65,8 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
   const filas = new Map<string, FilaCobertura>();
   const sinUbicar: Cobertura["sinUbicar"] = [];
 
-  for (const a of archivos) {
+  // Los archivos retirados de la carpeta no cuentan en la cobertura.
+  for (const a of archivos.filter((x) => !x.retiradoEn)) {
     const nombre = parsearNombreArchivo(a.ruta.split("/").pop() ?? "");
     const sociedad = a.sociedad ?? a.ruta.split("/")[0] ?? "";
     const mes = a.mes ?? nombre?.periodo ?? null;
@@ -78,14 +85,15 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       fila.monedaPorConfirmar = a.monedaPorConfirmar;
     }
     fila.celdas[mes] = {
-      // un archivo en revisión no aportó datos: se muestra como celda con problema, nunca como leído
-      estado: a.estado === "error" || a.estado === "en_revision" ? "error" : "leido",
+      // un archivo que no aportó datos se muestra como celda con problema, nunca como leído
+      estado: { leido: "leido", sin_sociedad: "sin_sociedad", con_error: "error", retirado: "error" }[estadoDeArchivo(a)] as EstadoCelda,
+      ...(a.id !== undefined ? { archivoId: a.id } : {}),
       archivo: a.ruta,
       formato: a.formato,
       movimientos: a.numMovimientos,
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
-      error: a.error ?? a.motivo ?? null,
+      error: motivoDeArchivo(a),
     };
     filas.set(k, fila);
   }

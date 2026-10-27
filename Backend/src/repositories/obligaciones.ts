@@ -174,14 +174,14 @@ export async function actualizarObligacion(id: number, data: Prisma.ObligacionUn
 
 /** Identificadores de las sociedades que tienen algún estado de cuenta cargado. */
 export async function sociedadesConEstados(): Promise<Set<number>> {
-  const g = await prisma.archivoImportado.groupBy({ by: ["sociedadId"], where: { sociedadId: { not: null } } });
+  const g = await prisma.archivoImportado.groupBy({ by: ["sociedadId"], where: { sociedadId: { not: null }, retiradoEn: null } });
   return new Set(g.map((x) => x.sociedadId!));
 }
 
 export async function listarSociedades() {
   return prisma.sociedad.findMany({
     orderBy: { nombreLargo: "asc" },
-    include: { _count: { select: { obligaciones: true, cuentas: true } } },
+    include: { _count: { select: { obligaciones: true, cuentas: true } }, tesorero: { select: { nombre: true } } },
   });
 }
 
@@ -205,7 +205,7 @@ export async function obtenerCuenta(id: number) {
 export async function mesMasAntiguoConEstados(sociedadId: number, cuentaId: number | null): Promise<string | null> {
   const r = await prisma.archivoImportado.aggregate({
     _min: { mes: true },
-    where: { estado: "leido", mes: { not: null }, ...(cuentaId !== null ? { cuentaId } : { sociedadId }) },
+    where: { estado: "leido", retiradoEn: null, mes: { not: null }, ...(cuentaId !== null ? { cuentaId } : { sociedadId }) },
   });
   return r._min.mes;
 }

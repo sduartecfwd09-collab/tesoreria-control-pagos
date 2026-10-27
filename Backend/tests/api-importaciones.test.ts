@@ -39,14 +39,14 @@ const sinNumerosLargos = (v: unknown) => expect(JSON.stringify(v)).not.toMatch(/
 describe("API de importaciones (solo lectura y sin datos sensibles)", () => {
   it("GET /api/importaciones lista archivos con estado, formato y errores, solo con el nombre del archivo", async () => {
     const get = (await app.inject("/api/importaciones")).json();
-    expect(get.resumen).toEqual({ archivos: 4, leidos: 2, conError: 1, enRevision: 1, movimientos: 8 });
-    const revisado = get.datos.find((a: { estado: string }) => a.estado === "en_revision");
+    expect(get.resumen).toEqual({ archivos: 4, leidos: 2, conError: 1, sinSociedad: 1, retirados: 0, movimientos: 8 });
+    const revisado = get.datos.find((a: { estado: string }) => a.estado === "sin_sociedad");
     expect(revisado).toMatchObject({ motivo: "carpeta sin sociedad asignada", movimientos: 0, sociedad: null });
     const e1 = get.datos.find((a: { archivo: string }) => a.archivo.includes("0826") && a.archivo.includes("ZFL"));
     expect(e1).toMatchObject({ archivo: "CR****0001 0826 ZFL.xlsx", formato: "E1", estado: "leido", sociedad: expect.any(String), mes: "2026-08", movimientos: 4, cuenta: "****0001" });
     expect(e1.continuidad.estado).toBe("cuadra");
-    const roto = get.datos.find((a: { estado: string }) => a.estado === "error");
-    expect(roto).toMatchObject({ formato: null, error: expect.stringMatching(/No se pudo abrir/) });
+    const roto = get.datos.find((a: { estado: string }) => a.estado === "con_error");
+    expect(roto).toMatchObject({ estado: "con_error", formato: null, motivo: expect.stringMatching(/No se pudo abrir/) });
     for (const a of get.datos) {
       expect(a).not.toHaveProperty("ruta");
       expect(a.archivo).not.toMatch(/[\\/]/); // ni carpetas ni rutas
