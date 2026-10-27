@@ -8,9 +8,11 @@ import { z } from "zod";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { esPeriodo } from "../domain/vencimientos.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
-import { listarSociedades } from "../repositories/obligaciones.js";
+import { listarSociedades, sociedadesConObligacionesActivas } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { listarVencimientos, periodosGenerados } from "../repositories/vencimientos.js";
+
+const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"] as const;
 
 const periodo = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM)` }).refine(esPeriodo, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe tener el formato AAAA-MM (por ejemplo 2026-08)`);
 
@@ -22,6 +24,8 @@ const consulta = z.object({
   desde: periodo("el mes inicial").optional(),
   hasta: periodo("el mes final").optional(),
   q: z.string().trim().min(1).max(80, "La búsqueda admite como máximo 80 caracteres").optional(),
+  estado: z.string().transform((t) => t.split(",").map((e) => e.trim()).filter(Boolean)).pipe(z.array(z.enum(ESTADOS)).max(ESTADOS.length, "Estado inválido")).optional(),
+  pendientesAnteriores: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
   pagina: z.coerce.number().int().min(1, "La página debe ser 1 o más").default(1),
   porPagina: z.coerce.number().int().min(1).max(500, "Se pueden pedir como máximo 500 por página").default(50),
 });
@@ -33,8 +37,9 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
   app.get("/api/vencimientos/avisos-datos", async () => {
     const hoy = hoyDe(opts.reloj);
     const dias = Number(await valorGlobal("aviso_datos_dias"));
-    const [cuentas, sociedades] = await Promise.all([cargarCoberturaCuentas(), listarSociedades()]);
-    const avisos = avisosDeDatos(cuentas, hoy, Number.isInteger(dias) && dias >= 0 ? dias : 5);
+    const [cuentas, sociedades, conObligaciones] = await Promise.all([cargarCoberturaCuentas(), listarSociedades(), sociedadesConObligacionesActivas()]);
+    // solo sociedades con obligaciones activas (sin ningún estado de cuenta cargado también avisan)
+    const avisos = avisosDeDatos(new Map([...conObligaciones].map((id) => [id, cuentas.get(id) ?? []] as const)), hoy, Number.isInteger(dias) && dias >= 0 ? dias : 5);
     return {
       datos: avisos.map((a) => {
         const nombre = sociedades.find((x) => x.id === a.sociedadId)?.nombreLargo ?? "Sociedad";
@@ -48,7 +53,8 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     const q = consulta.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
     const hoy = hoyDe(opts.reloj);
-    const { total, datos } = await listarVencimientos(q.data);
+    const { estado, ...resto } = q.data;
+    const { total, datos, resumen } = await listarVencimientos({ ...resto, estados: estado });
     return {
       datos: datos.map((v) => ({
         id: v.id,
@@ -59,6 +65,8 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         identificador: v.obligacion.identificador,
         frecuencia: v.obligacion.frecuencia,
         periodo: v.periodo,
+        // pendiente de un periodo anterior al que se está viendo (se etiqueta «Mes anterior»)
+        mesAnterior: Boolean(q.data.pendientesAnteriores && q.data.periodo && v.periodo < q.data.periodo),
         fecha: v.fecha.toISOString().slice(0, 10),
         fechaOriginal: v.fechaOriginal ? v.fechaOriginal.toISOString().slice(0, 10) : null, // solo si se movió «de una sola vez»
         montoEsperado: aNumero(v.montoEsperado),
@@ -74,7 +82,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         conciliado: v._count.conciliaciones > 0,
         futuro: v.fecha >= hoy,
       })),
-      total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
+      resumen, total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
       hoy: hoy.toISOString().slice(0, 10),
     };
   });

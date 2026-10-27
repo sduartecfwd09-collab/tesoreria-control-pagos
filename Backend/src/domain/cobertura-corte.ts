@@ -74,7 +74,7 @@ export function avisosDeDatos(cuentas: Map<number, CuentaCorte[]>, hoy: Date, di
   const avisos: AvisoDatos[] = [];
   for (const [sociedadId, lista] of cuentas) {
     const cortes = lista.map((c) => corteMasReciente(c, hoy));
-    const corte = cortes.some((c) => c === null) ? null : (cortes as Date[]).reduce((m, c) => (c < m ? c : m));
+    const corte = cortes.length === 0 || cortes.some((c) => c === null) ? null : (cortes as Date[]).reduce((m, c) => (c < m ? c : m));
     if (corte === null || corte < limite) avisos.push({ sociedadId, corte });
   }
   return avisos;

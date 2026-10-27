@@ -57,9 +57,15 @@ export interface FiltroVencimientos {
   desde?: string;
   hasta?: string;
   q?: string;
+  /** estados a mostrar (vacío o ausente = todos) */
+  estados?: string[];
+  /** con `periodo`: además de ese periodo, los pendientes (vencido, sin información, por revisar) de periodos anteriores */
+  pendientesAnteriores?: boolean;
   pagina: number;
   porPagina: number;
 }
+
+export const ESTADOS_PENDIENTES = ["vencido", "sin_informacion", "por_revisar"];
 
 export async function listarVencimientos(f: FiltroVencimientos) {
   const periodo: Prisma.StringFilter = {
@@ -67,15 +73,24 @@ export async function listarVencimientos(f: FiltroVencimientos) {
     ...(f.desde ? { gte: f.desde } : {}),
     ...(f.hasta ? { lte: f.hasta } : {}),
   };
-  const where: Prisma.VencimientoWhereInput = {
-    ...(Object.keys(periodo).length ? { periodo } : {}),
-    // sociedad, categoría y proveedor salen de la copia del vencimiento: el Histórico no cambia si la obligación se edita
-    ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
-    ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
-    ...(f.categoria ? { categoriaId: f.categoria } : {}),
-    ...(f.q ? { OR: [{ proveedor: { contains: f.q } }, { obligacion: { identificador: { contains: f.q.replace(/\s+/g, "") } } }] } : {}),
+  const dePeriodo: Prisma.VencimientoWhereInput =
+    f.periodo && f.pendientesAnteriores
+      ? { OR: [{ periodo: f.periodo }, { periodo: { lt: f.periodo }, estado: { in: ESTADOS_PENDIENTES } }] }
+      : Object.keys(periodo).length ? { periodo } : {};
+  const sinEstado: Prisma.VencimientoWhereInput = {
+    AND: [
+      dePeriodo,
+      // sociedad, categoría y proveedor salen de la copia del vencimiento: el Histórico no cambia si la obligación se edita
+      {
+        ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
+        ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
+        ...(f.categoria ? { categoriaId: f.categoria } : {}),
+      },
+      f.q ? { OR: [{ proveedor: { contains: f.q } }, { obligacion: { identificador: { contains: f.q.replace(/s+/g, "") } } }] } : {},
+    ],
   };
-  const [total, datos] = await Promise.all([
+  const where: Prisma.VencimientoWhereInput = f.estados?.length ? { AND: [sinEstado, { estado: { in: f.estados } }] } : sinEstado;
+  const [total, datos, porEstado] = await Promise.all([
     prisma.vencimiento.count({ where }),
     prisma.vencimiento.findMany({
       where,
@@ -88,8 +103,10 @@ export async function listarVencimientos(f: FiltroVencimientos) {
       skip: (f.pagina - 1) * f.porPagina,
       take: f.porPagina,
     }),
+    // conteo por estado de lo que se ve (sin el filtro de estado: las tarjetas muestran todos)
+    prisma.vencimiento.groupBy({ by: ["estado"], where: sinEstado, _count: { _all: true } }),
   ]);
-  return { total, datos };
+  return { total, datos, resumen: Object.fromEntries(porEstado.map((x) => [x.estado, x._count._all])) as Record<string, number> };
 }
 
 export async function periodosGenerados() {

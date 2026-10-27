@@ -178,6 +178,12 @@ export async function sociedadesConEstados(): Promise<Set<number>> {
   return new Set(g.map((x) => x.sociedadId!));
 }
 
+/** Identificadores de las sociedades que tienen al menos una obligación activa. */
+export async function sociedadesConObligacionesActivas(): Promise<Set<number>> {
+  const g = await prisma.obligacion.groupBy({ by: ["sociedadId"], where: { activa: true } });
+  return new Set(g.map((x) => x.sociedadId));
+}
+
 export async function listarSociedades() {
   return prisma.sociedad.findMany({
     orderBy: { nombreLargo: "asc" },

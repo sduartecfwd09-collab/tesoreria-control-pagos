@@ -160,6 +160,46 @@ describe("API de vencimientos: pago con moneda, textos y aviso de datos", () => 
   });
 });
 
+describe("API de vencimientos: periodo con pendientes anteriores, filtro por estado y resumen", () => {
+  it("el periodo trae además los pendientes de meses anteriores (etiquetados), con el resumen por estado", async () => {
+    // septiembre sin pagar y con cobertura (vencido); octubre pagado
+    await prisma.obligacion.update({ where: { id: obligacionId }, data: { controlDesde: dia(2026, 9, 1) } });
+    await mov(dia(2026, 10, 14), "PAGO LUZ 7771234");
+    await actualizarVencimientos(reloj);
+    const app = await crearApp({ reloj });
+    try {
+      const sep = (await app.inject("/api/vencimientos?periodo=2026-09&pendientesAnteriores=true")).json();
+      expect(sep.datos.map((v: { periodo: string }) => v.periodo)).toEqual(["2026-09"]); // nada anterior a septiembre
+      const oct = (await app.inject("/api/vencimientos?periodo=2026-10&pendientesAnteriores=true")).json();
+      expect(oct.datos.map((v: { periodo: string; mesAnterior: boolean; estado: string }) => [v.periodo, v.mesAnterior, v.estado])).toEqual([["2026-09", true, "vencido"], ["2026-10", false, "pagado"]]);
+      expect(oct.resumen).toEqual({ vencido: 1, pagado: 1 });
+      const solo = (await app.inject("/api/vencimientos?periodo=2026-10")).json(); // sin la bandera no hay pendientes anteriores
+      expect(solo.datos).toHaveLength(1);
+      const filtrado = (await app.inject("/api/vencimientos?periodo=2026-10&pendientesAnteriores=true&estado=vencido,sin_informacion")).json();
+      expect(filtrado.datos.map((v: { estado: string }) => v.estado)).toEqual(["vencido"]);
+      expect(filtrado.resumen).toEqual({ vencido: 1, pagado: 1 }); // las tarjetas cuentan todos los estados
+      expect((await app.inject("/api/vencimientos?estado=inventado")).statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("el aviso de datos lista solo sociedades con obligaciones activas, también las que no tienen estados cargados", async () => {
+    const otra = await prisma.sociedad.create({ data: { codigo: "ZZZ", nombreLargo: "Sociedad sin obligaciones" } });
+    const sinEstados = await prisma.sociedad.create({ data: { codigo: "YYY", nombreLargo: "Sociedad con obligación y sin estados" } });
+    await prisma.obligacion.create({ data: { sociedadId: sinEstados.id, categoriaId: (await prisma.categoria.findFirstOrThrow()).id, proveedor: "P", identificador: "5550001", diaEsperadoPago: 5 } });
+    await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 1) } });
+    const app = await crearApp({ reloj });
+    try {
+      const textos = (await app.inject("/api/vencimientos/avisos-datos")).json().datos.map((a: { texto: string }) => a.texto);
+      expect(textos).toEqual(["Sociedad AAA: sin estados desde 2026-10-02", "Sociedad con obligación y sin estados: sin estados cargados"]);
+      expect(textos.join()).not.toContain(otra.nombreLargo);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("API de obligaciones: próximo pago", () => {
   it("la lista trae el próximo pago calculado", async () => {
     await actualizarVencimientos(reloj);
