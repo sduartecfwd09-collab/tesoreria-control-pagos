@@ -1,13 +1,13 @@
 // Informe de diagnóstico del cruce: SOLO conteos y fechas agregadas. Nunca descripciones, montos, identificadores,
 // proveedores ni números de cuenta. Las sociedades se nombran por su abreviatura interna.
-import { corteDeMes } from "../domain/cobertura-corte.js";
+import { avisosDeDatos, corteDeMes } from "../domain/cobertura-corte.js";
 import type { ResumenCruce } from "./cruce.js";
 
 export interface SociedadInforme { id: number; codigo: string | null }
 
 const iso = (f: Date) => f.toISOString().slice(0, 10);
 
-export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInforme[]): string {
+export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInforme[], cuentasPorMoneda: Record<string, number> = {}, avisoDatosDias = 5): string {
   const nombre = (id: number) => sociedades.find((s) => s.id === id)?.codigo ?? `sociedad ${id}`;
   const L: string[] = [];
   const { hoy } = r.parametros;
@@ -61,6 +61,24 @@ export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInf
       L.push(`  ${nombre(sociedadId)} | ${mes}: ${cuentas.filter((c) => c.meses.has(mes)).length}/${cuentas.length} cuentas · corte ${minimo}`);
     }
   }
+  L.push("", "Última fecha con movimientos por sociedad y mes (la mayor entre sus cuentas):");
+  for (const [sociedadId, cuentas] of [...r.datos.cuentas].sort((a, b) => nombre(a[0]).localeCompare(nombre(b[0])))) {
+    const meses = [...new Set(cuentas.flatMap((c) => [...c.meses.keys()]))].sort();
+    for (const mes of meses) {
+      const fechas = cuentas.map((c) => c.meses.get(mes)).filter((f): f is Date => f instanceof Date);
+      L.push(`  ${nombre(sociedadId)} | ${mes}: ${fechas.length ? iso(fechas.reduce((m, f) => (f > m ? f : m))) : "sin movimientos"}`);
+    }
+  }
+
+  L.push("", `Aviso de datos (corte anterior a hoy menos ${avisoDatosDias} días): ${avisosDeDatos(r.datos.cuentas, hoy, avisoDatosDias).length} sociedades`);
+  for (const a of avisosDeDatos(r.datos.cuentas, hoy, avisoDatosDias).sort((x, y) => nombre(x.sociedadId).localeCompare(nombre(y.sociedadId)))) {
+    L.push(`  ${nombre(a.sociedadId)}: ${a.corte ? `datos hasta ${iso(a.corte)}` : "sin datos"}`);
+  }
+
+  L.push("", "Cuentas por moneda (tal como las guardó el lector):");
+  for (const m of ["CRC", "USD", "sin dato"]) L.push(`  ${m}: ${cuentasPorMoneda[m] ?? 0}`);
+  for (const [m, n] of Object.entries(cuentasPorMoneda)) if (!["CRC", "USD", "sin dato"].includes(m)) L.push(`  otra moneda: ${n}`);
+
   const mesActual = iso(hoy).slice(0, 7);
   L.push("", `Cuentas sin archivo leído de ${mesActual}, por sociedad:`);
   for (const [sociedadId, cuentas] of [...r.datos.cuentas].sort((a, b) => nombre(a[0]).localeCompare(nombre(b[0])))) {

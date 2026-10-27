@@ -13,7 +13,7 @@ export interface ResumenCruce {
   resultados: ResultadoCruce[];
   estadisticas: EstadisticasCruce;
   datos: DatosCruce;
-  parametros: { diasAntes: number; diasDespues: number; diasAviso: number; hoy: Date };
+  parametros: { diasAntes: number; diasDespues: number; diasAviso: number; marcarVencidoSinEstado: boolean; hoy: Date };
 }
 
 const entero = async (clave: string, defecto: number) => {
@@ -28,6 +28,7 @@ export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
     diasAntes: await entero("ventana_dias_antes", 3),
     diasDespues: await entero("ventana_dias_despues", 3),
     diasAviso: await diasDeAviso(),
+    marcarVencidoSinEstado: (await valorGlobal("marcar_vencido_sin_estado")) === "si",
     hoy: hoyDe(reloj),
   };
   const { resultados, estadisticas } = cruzar({ ...datos, ...parametros });

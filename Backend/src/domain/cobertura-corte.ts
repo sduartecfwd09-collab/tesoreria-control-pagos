@@ -56,3 +56,26 @@ export function coberturaDeSociedad(cuentas: CuentaCorte[], desde: Date, hasta: 
   }
   return { cubre: true, hasta: cubierto };
 }
+
+/** Última fecha hasta la que una cuenta tiene datos (el corte de su mes más reciente con datos), o null si no tiene. */
+export function corteMasReciente(cuenta: CuentaCorte, hoy: Date): Date | null {
+  for (const mes of [...cuenta.meses.keys()].sort().reverse()) {
+    const corte = corteDeMes(cuenta, mes, hoy);
+    if (corte !== null) return corte; // un archivo del mes en curso sin movimientos aún no aporta corte: vale el mes anterior
+  }
+  return null;
+}
+
+export interface AvisoDatos { sociedadId: number; /** última fecha con datos continuos de todas sus cuentas; null si alguna no tiene */ corte: Date | null }
+
+/** Sociedades cuyo corte de cobertura es anterior a hoy menos `dias` (el corte es el menor entre sus cuentas). */
+export function avisosDeDatos(cuentas: Map<number, CuentaCorte[]>, hoy: Date, dias: number): AvisoDatos[] {
+  const limite = new Date(hoy.getTime() - dias * MS_DIA);
+  const avisos: AvisoDatos[] = [];
+  for (const [sociedadId, lista] of cuentas) {
+    const cortes = lista.map((c) => corteMasReciente(c, hoy));
+    const corte = cortes.some((c) => c === null) ? null : (cortes as Date[]).reduce((m, c) => (c < m ? c : m));
+    if (corte === null || corte < limite) avisos.push({ sociedadId, corte });
+  }
+  return avisos;
+}

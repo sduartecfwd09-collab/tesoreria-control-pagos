@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CuentaCorte } from "../src/domain/cobertura-corte.js";
-import { cruzar, MOTIVOS, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
+import { avisosDeDatos, type CuentaCorte } from "../src/domain/cobertura-corte.js";
+import { cruzar, MOTIVOS, textoSinInformacion, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
 import { patronIdentificador } from "../src/domain/identificadores.js";
 
 // Reglas del motor de cruce con datos inventados. Hoy = 2026-10-27, aviso 3 días, ventana 3 antes y 3 después.
@@ -192,5 +192,49 @@ describe("determinismo", () => {
     const entrada = { ...base, movimientos: [mov(100, dia(2026, 10, 14), "PAGO 12345"), mov(101, dia(2026, 10, 16), "PAGO 12345")] };
     expect(correr(entrada).resultados).toEqual(correr(entrada).resultados);
     expect(correr({ ...entrada, movimientos: [...entrada.movimientos].reverse() }).resultados).toEqual(correr(entrada).resultados);
+  });
+});
+
+describe("«Sin información» requiere atención y el parámetro de Vencido sin estado de cuenta", () => {
+  const corto = new Map([[S1, [cuenta(1, dia(2026, 10, 16))]]]);
+  const entrada = { ...base, cuentas: corto };
+
+  it("apagado (por defecto): sin información, nunca Vencido, con las fechas para explicarlo", () => {
+    const r = estadoDe(correr(entrada), 10);
+    expect(r.estado).toBe("sin_informacion");
+    expect(textoSinInformacion(F, r.sinInfoHasta)).toBe("Venció el 2026-10-15; no hay estado de cuenta cargado después del 2026-10-16");
+    expect(textoSinInformacion(F, null)).toBe("Venció el 2026-10-15; no hay estado de cuenta cargado de esa fecha");
+  });
+
+  it("encendido: se muestra Vencido con la nota «sin estado de cuenta que lo confirme» y conserva la fecha de corte", () => {
+    const r = estadoDe(correr({ ...entrada, marcarVencidoSinEstado: true }), 10);
+    expect(r).toMatchObject({ estado: "vencido", motivo: MOTIVOS.vencidoSinEstado, sinInfoHasta: dia(2026, 10, 16) });
+    expect(r.motivo).toContain("sin estado de cuenta que lo confirme");
+  });
+
+  it("cuando llega el estado que cubre la fecha, el recálculo lo resuelve solo", () => {
+    expect(estadoDe(correr(entrada), 10).estado).toBe("sin_informacion");
+    expect(estadoDe(correr({ ...base, cuentas: new Map([[S1, [cuenta(1, dia(2026, 10, 26))]]]) }), 10).estado).toBe("vencido");
+    const pagado = correr({ ...entrada, movimientos: [mov(100, dia(2026, 10, 16), "PAGO 12345")] });
+    expect(estadoDe(pagado, 10).estado).toBe("pagado");
+  });
+});
+
+describe("aviso de datos por sociedad", () => {
+  it("lista las sociedades cuyo corte es anterior a hoy menos N días, o sin datos", () => {
+    const cuentas = new Map<number, CuentaCorte[]>([
+      [1, [cuenta(1, dia(2026, 10, 25))]], // al día (2 días)
+      [2, [cuenta(2, dia(2026, 10, 20))]], // 7 días
+      [3, [cuenta(3, null, ["2026-09"])]], // sin octubre: llega al 30 de septiembre
+      [4, [cuenta(4, dia(2026, 10, 26)), cuenta(5, dia(2026, 10, 10))]], // la menor manda
+    ]);
+    expect(avisosDeDatos(cuentas, HOY, 5).map((a) => [a.sociedadId, a.corte?.toISOString().slice(0, 10)])).toEqual([[2, "2026-10-20"], [3, "2026-09-30"], [4, "2026-10-10"]]);
+    expect(avisosDeDatos(cuentas, HOY, 20).map((a) => a.sociedadId)).toEqual([3]);
+    expect(avisosDeDatos(new Map([[9, [{ cuentaId: 9, meses: new Map() }]]]), HOY, 5)).toEqual([{ sociedadId: 9, corte: null }]);
+  });
+
+  it("un archivo del mes en curso sin movimientos aún no aporta corte: vale el mes anterior", () => {
+    const c = new Map([[1, [{ cuentaId: 1, meses: new Map([["2026-09", dia(2026, 9, 30)], ["2026-10", null]]) }]]]);
+    expect(avisosDeDatos(c, HOY, 5)[0]!.corte?.toISOString().slice(0, 10)).toBe("2026-09-30");
   });
 });

@@ -2,6 +2,8 @@ import { prisma } from "../db.js";
 import { env } from "../config/env.js";
 import { nombreDeBase } from "../conexion.js";
 import { relojSistema } from "../domain/reloj.js";
+import { contarCuentasPorMoneda } from "../repositories/cruce.js";
+import { valorGlobal } from "../repositories/parametros.js";
 import { listarSociedades } from "../repositories/obligaciones.js";
 import { cruzarVencimientos } from "../vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../vencimientos/diagnostico.js";
@@ -16,5 +18,6 @@ if (base.endsWith("_test")) {
 }
 const r = await cruzarVencimientos(relojSistema);
 console.log(`Base: ${base}`);
-console.log(informeDiagnosticoCruce(r, await listarSociedades()));
+const avisoDias = Number(await valorGlobal("aviso_datos_dias"));
+console.log(informeDiagnosticoCruce(r, await listarSociedades(), await contarCuentasPorMoneda(), Number.isInteger(avisoDias) ? avisoDias : 5));
 await prisma.$disconnect();

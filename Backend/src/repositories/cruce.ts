@@ -19,25 +19,15 @@ export interface DatosCruce {
   cuentas: Map<number, CuentaCorte[]>;
 }
 
-/** Obligaciones activas con sus vencimientos, los débitos de archivos vigentes y la cobertura de cada cuenta. */
-export async function cargarDatosCruce(): Promise<DatosCruce> {
-  const [obligaciones, vencimientos, movimientos, archivos, ultimas] = await Promise.all([
-    prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
-    prisma.vencimiento.findMany({
-      where: { obligacion: { activa: true } },
-      select: { id: true, obligacionId: true, sociedadId: true, fecha: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true },
-    }),
-    prisma.movimiento.findMany({
-      where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
-      select: { id: true, fecha: true, descripcion: true, cuenta: { select: { sociedadId: true } } },
-    }),
+/** Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos. */
+export async function cargarCoberturaCuentas(): Promise<Map<number, CuentaCorte[]>> {
+  const [archivos, ultimas] = await Promise.all([
     prisma.archivoImportado.findMany({
       where: { estado: "leido", retiradoEn: null, cuentaId: { not: null }, mes: { not: null } },
       select: { cuentaId: true, mes: true, cuenta: { select: { sociedadId: true } } },
     }),
     prisma.movimiento.groupBy({ by: ["cuentaId", "periodo"], where: { archivo: { retiradoEn: null } }, _max: { fecha: true } }),
   ]);
-
   const ultima = new Map(ultimas.map((u) => [`${u.cuentaId}|${u.periodo}`, u._max.fecha]));
   const porCuenta = new Map<number, { sociedadId: number; corte: CuentaCorte }>();
   for (const a of archivos) {
@@ -48,6 +38,29 @@ export async function cargarDatosCruce(): Promise<DatosCruce> {
   }
   const cuentas = new Map<number, CuentaCorte[]>();
   for (const { sociedadId, corte } of porCuenta.values()) cuentas.set(sociedadId, [...(cuentas.get(sociedadId) ?? []), corte]);
+  return cuentas;
+}
+
+/** Cuántas cuentas hay por moneda tal como la guardó el lector (CRC, USD o null = sin dato). */
+export async function contarCuentasPorMoneda(): Promise<Record<string, number>> {
+  const g = await prisma.cuenta.groupBy({ by: ["moneda"], _count: { _all: true } });
+  return Object.fromEntries(g.map((x) => [x.moneda ?? "sin dato", x._count._all]));
+}
+
+/** Obligaciones activas con sus vencimientos, los débitos de archivos vigentes y la cobertura de cada cuenta. */
+export async function cargarDatosCruce(): Promise<DatosCruce> {
+  const [obligaciones, vencimientos, movimientos, cuentas] = await Promise.all([
+    prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
+    prisma.vencimiento.findMany({
+      where: { obligacion: { activa: true } },
+      select: { id: true, obligacionId: true, sociedadId: true, fecha: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true },
+    }),
+    prisma.movimiento.findMany({
+      where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
+      select: { id: true, fecha: true, descripcion: true, cuenta: { select: { sociedadId: true } } },
+    }),
+    cargarCoberturaCuentas(),
+  ]);
 
   return {
     obligaciones,

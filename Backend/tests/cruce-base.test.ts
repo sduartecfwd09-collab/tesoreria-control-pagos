@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { proximoPago } from "../src/domain/vencimientos.js";
+import { contarCuentasPorMoneda } from "../src/repositories/cruce.js";
 import { listarSociedades } from "../src/repositories/obligaciones.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../src/vencimientos/diagnostico.js";
@@ -102,6 +103,60 @@ describe("cruce sobre la base", () => {
     for (const prohibido of ["SECRETOXYZ", "7771234", "1234", "Luz Uno", "CR0000"]) expect(informe).not.toContain(prohibido);
     expect(informe).toContain("Vencimientos por estado:");
     expect(informe).toContain("Débitos sin obligación, por sociedad:");
+  });
+});
+
+describe("API de vencimientos: pago con moneda, textos y aviso de datos", () => {
+  it("el pago trae la moneda de la cuenta que pagó (sin dato = null), la cuenta enmascarada y el monto en centavos", async () => {
+    await mov(dia(2026, 10, 14), "PAGO LUZ 7771234", 123456789n);
+    await actualizarVencimientos(reloj);
+    const app = await crearApp({ reloj });
+    try {
+      const pago = () => app.inject("/api/vencimientos?periodo=2026-10").then((r) => r.json().datos[0].pago);
+      expect(await pago()).toMatchObject({ fecha: "2026-10-14", monto: 123456789, moneda: null, cuenta: "****1234" });
+      await prisma.cuenta.update({ where: { id: cuentaId }, data: { moneda: "USD" } });
+      expect((await pago()).moneda).toBe("USD");
+      expect(JSON.stringify(await pago())).not.toContain("CR0000000000000000001234");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("Sin información trae su texto con fechas; con el parámetro encendido se ve Vencido con la nota", async () => {
+    await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 16) } });
+    await actualizarVencimientos(reloj);
+    const app = await crearApp({ reloj });
+    try {
+      const v = async () => (await app.inject("/api/vencimientos?periodo=2026-10")).json().datos[0];
+      expect(await v()).toMatchObject({ estado: "sin_informacion", textoEstado: "Venció el 2026-10-15; no hay estado de cuenta cargado después del 2026-10-16" });
+      await prisma.parametro.updateMany({ where: { clave: "marcar_vencido_sin_estado" }, data: { valor: "si" } });
+      await actualizarVencimientos(reloj);
+      expect(await v()).toMatchObject({ estado: "vencido", textoEstado: "Pasó la fecha de pago; sin estado de cuenta que lo confirme" });
+    } finally {
+      await prisma.parametro.updateMany({ where: { clave: "marcar_vencido_sin_estado" }, data: { valor: "no" } });
+      await app.close();
+    }
+  });
+
+  it("el aviso de datos lista las sociedades con estados atrasados", async () => {
+    await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 16) } }); // corte 11 días atrás
+    const app = await crearApp({ reloj });
+    try {
+      const r = (await app.inject("/api/vencimientos/avisos-datos")).json().datos;
+      expect(r).toEqual([expect.objectContaining({ sociedad: "Sociedad AAA", sinEstadosDesde: "2026-10-17", texto: "Sociedad AAA: sin estados desde 2026-10-17" })]);
+      await prisma.parametro.updateMany({ where: { clave: "aviso_datos_dias" }, data: { valor: "20" } });
+      expect((await app.inject("/api/vencimientos/avisos-datos")).json().datos).toEqual([]);
+    } finally {
+      await prisma.parametro.updateMany({ where: { clave: "aviso_datos_dias" }, data: { valor: "5" } });
+      await app.close();
+    }
+  });
+
+  it("el diagnóstico incluye la última fecha con movimientos y las cuentas por moneda", async () => {
+    await actualizarVencimientos(reloj);
+    const informe = informeDiagnosticoCruce(await cruzarVencimientos(reloj), [{ id: sociedadId, codigo: "AAA" }], await contarCuentasPorMoneda());
+    expect(informe).toContain("AAA | 2026-10: 2026-10-26");
+    expect(informe).toMatch(/CRC: 0\s+USD: 0\s+sin dato: 1/);
   });
 });
 

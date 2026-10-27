@@ -31,6 +31,7 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-23 | CLAUDE.md unificado con las decisiones del 21 y 22 de octubre. | Un solo documento coherente, con lo pendiente de aprobar en una sección aparte. |
 | 2026-10-27 | Cruce por identificador dentro de la descripción, ventana con «días antes» y «días después» separados, y «Vencido» solo con cobertura confirmada. | Evita marcar como vencido un pago que simplemente no está cargado; el cruce no inventa. |
 | 2026-10-27 | El calendario de vencimientos llega hasta hoy + días de aviso (sin meses futuros). | Tesorería solo necesita ver lo que está por vencer o ya venció. |
+| 2026-10-27 | «Sin información» requiere atención (junto con Vencido) y nunca se muestra como Vencido, salvo el parámetro «Marcar Vencido aunque falte el estado de cuenta». Aviso de datos por sociedad. | Un estado de cuenta sin cargar no prueba que no se pagó (decide Saraí). |
 
 ## Pendientes con Tesorería
 

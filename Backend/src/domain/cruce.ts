@@ -11,7 +11,8 @@
 //     (sin distinguir mayúsculas, tildes ni espacios); si no alcanza, Por revisar y el movimiento no se asigna a nadie.
 //  6. Sin candidatos y hoy antes de F menos los días de aviso: Proyectado; desde ahí hasta F: Por vencer.
 //  7. Sin candidatos y hoy posterior a F: Vencido solo si los estados de cuenta cubren hasta F + díasDespués; si hay
-//     duda de cobertura, Sin información (con la fecha hasta la que hay datos). Nunca se marca Vencido con duda.
+//     duda de cobertura, Sin información (con la fecha hasta la que hay datos): es un estado que requiere atención y nunca
+//     se muestra como Vencido, salvo que el parámetro «Marcar Vencido aunque falte el estado de cuenta» esté encendido.
 import { proveedorCanonico } from "../config/alias-proveedores.js";
 import { normalizar } from "../ingest/utiles.js";
 import { coberturaDeSociedad, type CuentaCorte } from "./cobertura-corte.js";
@@ -27,6 +28,7 @@ export const MOTIVOS = {
   compartido: "El identificador lo comparten varias obligaciones y el movimiento no indica el proveedor",
   vencido: "Pasó la fecha de pago y no hay pago en los estados de cuenta",
   sinInformacion: "Faltan estados de cuenta para confirmar si hubo pago",
+  vencidoSinEstado: "Pasó la fecha de pago; sin estado de cuenta que lo confirme",
 } as const;
 
 export interface ObligacionCruce { id: number; sociedadId: number; proveedor: string; identificador: string }
@@ -44,6 +46,8 @@ export interface EntradaCruce {
   diasAntes: number;
   diasDespues: number;
   diasAviso: number;
+  /** parámetro «Marcar Vencido aunque falte el estado de cuenta»: apagado por defecto */
+  marcarVencidoSinEstado?: boolean;
   hoy: Date;
 }
 
@@ -160,7 +164,17 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
     const limite = new Date(v.fecha.getTime() + e.diasDespues * MS_DIA);
     const cobertura = coberturaDeSociedad(e.cuentas.get(v.sociedadId) ?? [], v.fecha, limite, e.hoy);
     if (cobertura.cubre) return { ...base, estado: "vencido", motivo: MOTIVOS.vencido };
+    // con el parámetro encendido se muestra Vencido, pero conserva la fecha de corte y la nota de que nadie lo confirmó
+    if (e.marcarVencidoSinEstado) return { ...base, estado: "vencido", motivo: MOTIVOS.vencidoSinEstado, sinInfoHasta: cobertura.hasta };
     return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacion, sinInfoHasta: cobertura.hasta };
   });
   return { resultados, estadisticas: est };
+}
+
+/** Texto de «Sin información» para la pantalla: cuándo venció y hasta cuándo hay estados de cuenta cargados. */
+export function textoSinInformacion(fecha: Date, hasta: Date | null): string {
+  const f = (d: Date) => d.toISOString().slice(0, 10);
+  return hasta
+    ? `Venció el ${f(fecha)}; no hay estado de cuenta cargado después del ${f(hasta)}`
+    : `Venció el ${f(fecha)}; no hay estado de cuenta cargado de esa fecha`;
 }

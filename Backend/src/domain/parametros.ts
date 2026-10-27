@@ -40,6 +40,19 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 60, supuesto: false,
   },
   {
+    clave: "marcar_vencido_sin_estado",
+    etiqueta: "Marcar Vencido aunque falte el estado de cuenta",
+    ayuda:
+      "Apagado: si faltan estados de cuenta para confirmar el pago, el vencimiento queda en «Sin información» y requiere atención. Encendido: se muestra como Vencido, con la nota «sin estado de cuenta que lo confirme».",
+    tipo: "texto", ambito: "global", valorInicial: "no", opciones: ["no", "si"], supuesto: false,
+  },
+  {
+    clave: "aviso_datos_dias",
+    etiqueta: "Días sin estados de cuenta para avisar",
+    ayuda: "Si los estados de cuenta de una sociedad llegan hasta una fecha anterior a hoy menos estos días, se avisa que faltan datos.",
+    tipo: "entero", ambito: "global", valorInicial: "5", unidad: "días", min: 0, max: 60, supuesto: false,
+  },
+  {
     clave: "frecuencia_defecto",
     etiqueta: "Frecuencia por defecto",
     ayuda:

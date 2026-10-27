@@ -1,9 +1,15 @@
 import type { FastifyInstance } from "fastify";
+import { avisosDeDatos } from "../domain/cobertura-corte.js";
+import { textoSinInformacion } from "../domain/cruce.js";
+import { enmascararCuenta } from "../domain/enmascarar.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { z } from "zod";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { esPeriodo } from "../domain/vencimientos.js";
+import { cargarCoberturaCuentas } from "../repositories/cruce.js";
+import { listarSociedades } from "../repositories/obligaciones.js";
+import { valorGlobal } from "../repositories/parametros.js";
 import { listarVencimientos, periodosGenerados } from "../repositories/vencimientos.js";
 
 const periodo = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM)` }).refine(esPeriodo, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe tener el formato AAAA-MM (por ejemplo 2026-08)`);
@@ -22,6 +28,21 @@ const consulta = z.object({
 
 export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Reloj }) {
   app.get("/api/vencimientos/periodos", async () => ({ datos: await periodosGenerados() }));
+
+  // Aviso de datos: sociedades cuyos estados de cuenta llegan hasta una fecha anterior a hoy menos N días.
+  app.get("/api/vencimientos/avisos-datos", async () => {
+    const hoy = hoyDe(opts.reloj);
+    const dias = Number(await valorGlobal("aviso_datos_dias"));
+    const [cuentas, sociedades] = await Promise.all([cargarCoberturaCuentas(), listarSociedades()]);
+    const avisos = avisosDeDatos(cuentas, hoy, Number.isInteger(dias) && dias >= 0 ? dias : 5);
+    return {
+      datos: avisos.map((a) => {
+        const nombre = sociedades.find((x) => x.id === a.sociedadId)?.nombreLargo ?? "Sociedad";
+        const desde = a.corte ? new Date(a.corte.getTime() + 86_400_000).toISOString().slice(0, 10) : null; // primer día sin datos
+        return { sociedadId: a.sociedadId, sociedad: nombre, sinEstadosDesde: desde, texto: desde ? `${nombre}: sin estados desde ${desde}` : `${nombre}: sin estados cargados` };
+      }).sort((a, b) => a.sociedad.localeCompare(b.sociedad, "es")),
+    };
+  });
 
   app.get("/api/vencimientos", async (req, reply) => {
     const q = consulta.safeParse(req.query);
@@ -44,6 +65,10 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         moneda: v.moneda,
         estado: v.estado,
         motivo: v.motivo,
+        // «Sin información» requiere atención y se explica con fechas; nunca se presenta como Vencido
+        textoEstado: v.estado === "sin_informacion" ? textoSinInformacion(v.fecha, v.sinInfoHasta) : v.motivo,
+        // el pago que respalda el estado; la moneda es la de la cuenta que pagó (null = sin dato: sin símbolo ni código)
+        pago: v.movimiento ? { fecha: v.movimiento.fecha.toISOString().slice(0, 10), monto: aNumero(v.movimiento.debito), moneda: v.movimiento.cuenta.moneda, banco: v.movimiento.cuenta.banco, cuenta: enmascararCuenta(v.movimiento.cuenta.numero) } : null,
         diferenciaDias: v.diferenciaDias,
         sinInfoHasta: v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null,
         conciliado: v._count.conciliaciones > 0,

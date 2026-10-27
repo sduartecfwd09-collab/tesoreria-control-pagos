@@ -79,7 +79,11 @@ export async function listarVencimientos(f: FiltroVencimientos) {
     prisma.vencimiento.count({ where }),
     prisma.vencimiento.findMany({
       where,
-      include: { obligacion: true, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } } },
+      include: {
+        obligacion: true, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } },
+        // el pago que respalda el estado: solo fecha, monto y la cuenta (para su moneda, banco y últimos 4)
+        movimiento: { select: { fecha: true, debito: true, cuenta: { select: { numero: true, banco: true, moneda: true } } } },
+      },
       orderBy: [{ fecha: "asc" }, { sociedad: { codigo: "asc" } }, { proveedor: "asc" }, { id: "asc" }],
       skip: (f.pagina - 1) * f.porPagina,
       take: f.porPagina,
