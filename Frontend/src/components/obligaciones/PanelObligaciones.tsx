@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { ordenarSociedades } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type {
-  CambiosObligacion, Categoria, Cuenta, FiltroObligaciones, Frecuencia, Obligacion, Regeneracion,
+  CambiosObligacion, Categoria, FiltroObligaciones, Frecuencia, Obligacion, Regeneracion,
   ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad,
 } from "@/lib/tipos";
 import { CajaError, claseBoton, claseBotonSecundario, claseControl, FinDeLista } from "../ui";
@@ -20,7 +20,6 @@ const FILTRO_INICIAL: Filtro = { activa: true };
 interface Catalogos {
   sociedades: Sociedad[];
   categorias: Categoria[];
-  cuentas: Cuenta[];
   frecuenciaDefecto: Frecuencia;
 }
 
@@ -57,11 +56,11 @@ export function PanelObligaciones() {
 
   useEffect(() => {
     let vigente = true;
-    Promise.all([api.listarSociedades(), api.listarCategorias(), api.listarCuentas(), api.listarParametros(), api.resumenCatalogo()])
-      .then(([sociedades, categorias, cuentas, parametros, r]) => {
+    Promise.all([api.listarSociedades(), api.listarCategorias(), api.listarParametros(), api.resumenCatalogo()])
+      .then(([sociedades, categorias, parametros, r]) => {
         if (!vigente) return;
         const fd = parametros.find((p) => p.clave === "frecuencia_defecto")?.valor as Frecuencia | undefined;
-        setCatalogos({ sociedades: ordenarSociedades(sociedades), categorias, cuentas, frecuenciaDefecto: fd ?? "mensual" });
+        setCatalogos({ sociedades: ordenarSociedades(sociedades), categorias, frecuenciaDefecto: fd ?? "mensual" });
         setResumen(r);
         setError(null);
       })
@@ -214,7 +213,7 @@ export function PanelObligaciones() {
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span aria-live="polite">
             {lista.total === 0 ? "Ninguna obligación coincide con los filtros." : `${lista.total.toLocaleString("es-CR")} obligaciones`}
-            {filtro.falta && ` · filtrando: ${{ monto: "falta monto", cuenta: "falta cuenta", responsable: "sin responsable", dia: "falta día" }[filtro.falta]}`}
+            {filtro.falta && ` · filtrando: ${{ monto: "falta monto", responsable: "sin responsable", dia: "falta día" }[filtro.falta]}`}
           </span>
           {hayFiltros && (
             <button

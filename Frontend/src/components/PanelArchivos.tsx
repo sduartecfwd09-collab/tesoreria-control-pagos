@@ -28,11 +28,24 @@ function Celda({ c }: { c: CeldaCobertura }) {
       </div>
     );
   }
-  if (c.estado === "error") {
-    return (
-      <div title={c.error ?? "Error al leer el archivo"} className="rounded border-2 border-rojo bg-rojo-fondo px-2 py-1.5 text-rojo">
-        <span className="font-semibold">Error</span>
-        <span className="block text-xs">ver detalle abajo</span>
+  if (c.estado === "error" || c.estado === "sin_sociedad") {
+    const motivo = c.error ?? "Sin motivo registrado";
+    const clases = c.estado === "error" ? "border-2 border-rojo bg-rojo-fondo text-rojo" : "border-2 border-ambar-texto bg-ambar-fondo text-ambar-texto";
+    const contenido = (
+      <>
+        <span className="font-semibold">{c.estado === "error" ? "Error" : "Sin sociedad"}</span>
+        <span className="block text-xs line-clamp-2">{motivo}</span>
+      </>
+    );
+    // Cada celda con problema enlaza a su motivo en el detalle de abajo (ahí está el mismo archivo).
+    return c.archivoId !== undefined ? (
+      <a href={`#archivo-${c.archivoId}`} title={motivo} className={`block rounded px-2 py-1.5 ${clases}`}>
+        {contenido}
+        <span className="block text-xs underline">Ver motivo</span>
+      </a>
+    ) : (
+      <div title={motivo} className={`rounded px-2 py-1.5 ${clases}`}>
+        {contenido}
       </div>
     );
   }
@@ -53,25 +66,29 @@ function Celda({ c }: { c: CeldaCobertura }) {
 }
 
 function Resumen({ r }: { r: Importaciones["resumen"] }) {
-  const items = [
-    ["Archivos", r.archivos],
+  // Archivos = Leídos + Con error + Sin sociedad. Los retirados de la carpeta no cuentan y tienen su propia tarjeta.
+  const items: [string, number, string?][] = [
+    ["Archivos", r.archivos, "leídos + con error + sin sociedad"],
     ["Leídos", r.leidos],
     ["Con error", r.conError],
+    ["Sin sociedad", r.sinSociedad],
+    ...(r.retirados > 0 ? [["Retirados de la carpeta", r.retirados, "no cuentan en los totales"] as [string, number, string]] : []),
     ["Movimientos", r.movimientos],
-  ] as const;
+  ];
   return (
-    <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {items.map(([t, n]) => (
+    <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map(([t, n, nota]) => (
         <div key={t} className="rounded border border-divisor bg-fondo-suave px-4 py-3">
           <dt className="text-sm text-suave">{t}</dt>
           <dd className={`text-2xl font-bold ${t === "Con error" && n > 0 ? "text-rojo" : ""}`}>{numero(n)}</dd>
+          {nota && <dd className="text-xs text-suave">{nota}</dd>}
         </div>
       ))}
     </dl>
   );
 }
 
-function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda: string; vacio: string; filas: { ruta: string; texto: string }[] }) {
+function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda: string; vacio: string; filas: { ruta: string; texto: string; id?: number }[] }) {
   return (
     <section className="mt-8" aria-label={titulo}>
       <h3 className="font-bold">
@@ -83,7 +100,7 @@ function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda:
       ) : (
         <ul className="mt-3 divide-y divide-divisor border border-divisor rounded">
           {filas.map((f, i) => (
-            <li key={f.ruta + i} className="px-3 py-2 text-sm">
+            <li key={f.ruta + i} id={f.id !== undefined ? `archivo-${f.id}` : undefined} className="px-3 py-2 text-sm scroll-mt-4 target:bg-fondo-suave">
               <span className="font-medium break-all">{f.ruta}</span>
               <span className="block text-suave">{f.texto}</span>
             </li>
@@ -95,9 +112,11 @@ function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda:
 }
 
 function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
-  const errores = archivos.filter((a) => a.estado === "error");
-  const saldo = archivos.filter((a) => a.continuidad?.estado === "no_cuadra");
-  const nombre = archivos.filter((a) => a.discrepancias.length > 0);
+  const errores = archivos.filter((a) => a.estado === "con_error");
+  const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
+  const retirados = archivos.filter((a) => a.estado === "retirado");
+  const saldo = archivos.filter((a) => a.estado !== "retirado" && a.continuidad?.estado === "no_cuadra");
+  const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0);
   return (
     <>
       <h2 className="mt-12 text-lg font-bold border-b-2 border-acento pb-1">Archivos que requieren atención</h2>
@@ -105,7 +124,19 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         titulo="Archivos con error"
         ayuda="No se pudieron leer. El resto de la importación continuó con normalidad."
         vacio="Todos los archivos se leyeron."
-        filas={errores.map((a) => ({ ruta: a.archivo, texto: a.error ?? "Error desconocido" }))}
+        filas={errores.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "Sin motivo registrado" }))}
+      />
+      <ListaAtencion
+        titulo="Archivos sin sociedad"
+        ayuda="La carpeta del archivo no tiene una sociedad asignada, así que no se leyó. Se lee cuando la carpeta tenga sociedad."
+        vacio="Todas las carpetas tienen sociedad."
+        filas={sinSociedad.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "La carpeta no tiene una sociedad asignada" }))}
+      />
+      <ListaAtencion
+        titulo="Archivos retirados de la carpeta"
+        ayuda="Ya no están en la carpeta. Se conservan con su historial, pero no cuentan en totales ni cobertura. Si vuelven a aparecer, se reactivan."
+        vacio="Todos los archivos registrados siguen en la carpeta."
+        filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
       />
       <ListaAtencion
         titulo="Archivos donde el saldo no cuadra"

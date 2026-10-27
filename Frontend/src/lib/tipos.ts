@@ -17,10 +17,12 @@ export interface Parametro {
   actualizado: string;
 }
 
-export type EstadoCelda = "leido" | "error" | "falta";
+export type EstadoCelda = "leido" | "error" | "sin_sociedad" | "falta";
 
 export interface CeldaCobertura {
   estado: EstadoCelda;
+  /** archivo registrado: la celda con problema enlaza a su motivo en el detalle */
+  archivoId?: number;
   archivo?: string;
   formato?: string | null;
   movimientos: number;
@@ -53,10 +55,11 @@ export interface ArchivoImportado {
   cuenta: string | null;
   formato: string | null;
   mes: string | null;
-  estado: "leido" | "error" | "pendiente";
+  /** una sola definición: leído, con error (con motivo), sin sociedad o retirado de la carpeta */
+  estado: "leido" | "con_error" | "sin_sociedad" | "retirado";
   movimientos: number;
   duplicados: number;
-  error: string | null;
+  motivo: string | null; // visible en «con_error» y «sin_sociedad»
   advertencias: string[];
   discrepancias: { tipo: string; mensaje: string }[];
   continuidad: { estado: string; verificados: number; fallos: number; filasConFallo: number[] } | null;
@@ -66,7 +69,8 @@ export interface ArchivoImportado {
 
 export interface Importaciones {
   datos: ArchivoImportado[];
-  resumen: { archivos: number; leidos: number; conError: number; movimientos: number };
+  /** archivos = leídos + con error + sin sociedad; los retirados de la carpeta no cuentan */
+  resumen: { archivos: number; leidos: number; conError: number; sinSociedad: number; retirados: number; movimientos: number };
   enCurso: boolean;
 }
 
@@ -83,6 +87,7 @@ export interface Sociedad {
   codigo: string | null; // abreviatura interna; puede faltar
   nombreLargo: string;
   activa: boolean;
+  tesorero: string | null; // nombre del tesorero vigente; null = sin tesorero asignado
   obligaciones: number;
   cuentas: number;
 }
@@ -91,14 +96,6 @@ export interface Categoria {
   id: number;
   nombre: string;
   obligaciones: number;
-}
-
-export interface Cuenta {
-  id: number;
-  sociedad: string;
-  numero: string;
-  banco: string | null;
-  moneda: string | null;
 }
 
 export type Frecuencia = "mensual" | "bimestral" | "trimestral" | "semestral" | "anual";
@@ -171,7 +168,7 @@ export interface FiltroObligaciones {
   categoria?: number;
   activa?: boolean;
   q?: string;
-  falta?: "monto" | "cuenta" | "responsable" | "dia";
+  falta?: "monto" | "responsable" | "dia";
   pagina: number;
   porPagina: number;
 }
@@ -182,7 +179,6 @@ export interface ResumenCatalogo {
   inactivas: number;
   sinDia: number;
   sinMonto: number;
-  sinCuenta: number;
   sinResponsable: number;
   sinMesArranque: number;
   frecuenciaPorConfirmar: number;

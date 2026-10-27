@@ -1,5 +1,5 @@
 import type {
-  CambiosObligacion, Categoria, Cobertura, Cuenta, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
+  CambiosObligacion, Categoria, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, ResumenGeneracion, Sociedad, Vencimiento,
 } from "./tipos";
 
@@ -52,7 +52,6 @@ export const api = {
 
   listarSociedades: async () => (await pedir<{ datos: Sociedad[] }>("/api/sociedades")).datos,
   listarCategorias: async () => (await pedir<{ datos: Categoria[] }>("/api/categorias")).datos,
-  listarCuentas: async () => (await pedir<{ datos: Cuenta[] }>("/api/cuentas")).datos,
 
   listarObligaciones: (f: FiltroObligaciones) => pedir<Pagina<Obligacion>>(`/api/obligaciones${consulta(f)}`),
   importarCatalogo: async () =>

@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { ErrorApi } from "@/lib/api";
 import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_MONEDA, SIMBOLO } from "@/lib/formato";
-import type { CambiosObligacion, Categoria, Cuenta, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
+import type { CambiosObligacion, Categoria, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir, Etiqueta } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
 
@@ -21,7 +21,6 @@ interface Valores {
   moneda: Moneda;
   monedaConfirmada: boolean;
   monto: string;
-  cuentaEsperadaId: string;
   responsable: string;
   activa: boolean;
 }
@@ -47,7 +46,6 @@ function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): 
     moneda: o?.moneda ?? "CRC",
     monedaConfirmada: o ? !o.monedaPorConfirmar : false,
     monto: aTextoMonto(o?.montoEsperado ?? null),
-    cuentaEsperadaId: o?.cuentaEsperada ? String(o.cuentaEsperada.id) : "",
     responsable: o?.responsable ?? "",
     activa: o?.activa ?? true,
   };
@@ -70,19 +68,17 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
   if (incluir("moneda")) c.moneda = v.moneda;
   if (incluir("monedaConfirmada")) c.monedaPorConfirmar = !v.monedaConfirmada;
   if (incluir("monto")) c.montoEsperado = aCentavos(v.monto) ?? null;
-  if (incluir("cuentaEsperadaId")) c.cuentaEsperadaId = v.cuentaEsperadaId === "" ? null : Number(v.cuentaEsperadaId);
   if (incluir("responsable")) c.responsable = v.responsable.trim() === "" ? null : v.responsable;
   if (incluir("activa")) c.activa = v.activa;
   return c;
 }
 
 export function FormularioObligacion({
-  obligacion, sociedades, categorias, cuentas, frecuenciaDefecto, alGuardar, alCerrar,
+  obligacion, sociedades, categorias, frecuenciaDefecto, alGuardar, alCerrar,
 }: {
   obligacion: Obligacion | null; // null = nueva
   sociedades: Sociedad[];
   categorias: Categoria[];
-  cuentas: Cuenta[];
   frecuenciaDefecto: Frecuencia;
   alGuardar: (c: CambiosObligacion) => Promise<void>;
   alCerrar: () => void;
@@ -102,11 +98,9 @@ export function FormularioObligacion({
   }, []);
 
   // useWatch (y no watch) para que el React Compiler pueda optimizar el componente.
-  const [frecuencia, mesArranque, moneda, sociedad] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda", "sociedad"] });
-  const cuentasSociedad = useMemo(() => {
-    const elegida = sociedades.find((s) => String(s.id) === sociedad);
-    return elegida ? cuentas.filter((c) => c.sociedad === elegida.nombreLargo) : [];
-  }, [cuentas, sociedades, sociedad]);
+  const [frecuencia, mesArranque, moneda, sociedad, responsable] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda", "sociedad", "responsable"] });
+  // Solo lectura: si el responsable queda vacío se usa al tesorero de la sociedad (no se guarda en la obligación).
+  const sociedadElegida = sociedades.find((s) => String(s.id) === sociedad);
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
 
   async function enviar(v: Valores) {
@@ -306,24 +300,18 @@ export function FormularioObligacion({
                 })}
               />
             </Campo>
-            <Campo
-              id="f-cuentaEsperadaId"
-              etiqueta="Cuenta de pago esperada"
-              ayuda={sociedad && cuentasSociedad.length === 0 ? "Esta sociedad aún no tiene cuentas importadas. Es opcional." : "Opcional. Cuenta bancaria de la sociedad desde la que se paga."}
-              error={errors.cuentaEsperadaId?.message}
+            <Campo id="f-responsable" etiqueta="Responsable" ayuda={
+                <>
+                  Opcional. Persona de Tesorería a cargo.
+                  {responsable.trim() === "" && sociedadElegida && (
+                    <span className="mt-1 block">
+                      {sociedadElegida.tesorero ? `Si lo deja vacío, se usa al tesorero de la sociedad: ${sociedadElegida.tesorero}` : "La sociedad no tiene tesorero asignado"}
+                    </span>
+                  )}
+                </>
+              }
+              error={errors.responsable?.message}
             >
-              <select id="f-cuentaEsperadaId" className={`${claseControl} w-full`} aria-describedby={desc("cuentaEsperadaId")} {...register("cuentaEsperadaId")}>
-                <option value="">Sin definir</option>
-                {cuentasSociedad.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.numero}
-                    {c.banco ? ` · ${c.banco}` : ""}
-                    {c.moneda ? ` · ${c.moneda}` : ""}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo id="f-responsable" etiqueta="Responsable" ayuda="Opcional. Persona de Tesorería a cargo." error={errors.responsable?.message}>
               <input id="f-responsable" className={`${claseControl} w-full`} placeholder="Sin asignar" aria-describedby={desc("responsable")} {...register("responsable", { maxLength: { value: 80, message: "Máximo 80 caracteres" } })} />
             </Campo>
           </fieldset>
