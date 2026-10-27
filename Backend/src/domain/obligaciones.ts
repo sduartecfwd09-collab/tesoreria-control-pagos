@@ -3,6 +3,7 @@
 // así desaparecen solas cuando Tesorería corrige el catálogo.
 import { z } from "zod";
 import { limpiarIdentificador } from "../catalogo/lector.js";
+import { proveedorCanonico } from "../config/alias-proveedores.js";
 import { identificadorClave } from "./identificadores.js";
 import { esPeriodo } from "./vencimientos.js";
 import { FRECUENCIAS } from "./parametros.js";
@@ -63,7 +64,7 @@ export const esquemaAlta = editablesOpcionales.extend({
   categoriaId: z.number({ error: "Indique la categoría" }).int().positive("Indique la categoría"),
   proveedor: z
     .string({ error: "Indique el proveedor" })
-    .transform((s) => s.replace(/\s+/g, " ").trim())
+    .transform((s) => proveedorCanonico(s.replace(/\s+/g, " ").trim())) // variantes conocidas -> proveedor canónico
     .pipe(z.string().min(1, "Indique el proveedor").max(80, "El proveedor admite como máximo 80 caracteres")),
   identificador: z
     .string({ error: "Indique el identificador (NISE, cuenta o número de servicio)" })

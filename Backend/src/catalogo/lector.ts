@@ -3,6 +3,7 @@
 // Los mensajes no incluyen identificadores (solo número de fila y el texto del día, que no es sensible).
 import type { Worksheet } from "exceljs";
 import { ErrorLectura, type LibroLeido } from "../ingest/lector.js";
+import { proveedorCanonico } from "../config/alias-proveedores.js";
 import { identificadorClave } from "../domain/identificadores.js";
 import { normalizar, valorPlano } from "../ingest/utiles.js";
 
@@ -139,7 +140,7 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
     const celda = (k: Columna) => fila.getCell(cab.cols[k]).value;
     const sociedad = limpiarTexto(celda("sociedad")).toUpperCase();
     const categoriaTxt = formaCategoria(limpiarTexto(celda("categoria")));
-    const proveedorTxt = limpiarTexto(celda("proveedor"));
+    const proveedorTxt = proveedorCanonico(limpiarTexto(celda("proveedor"))); // «JASEC Internet» -> «JASEC»
     const idCrudo = valorPlano(celda("identificador"));
     const identificador = limpiarIdentificador(limpiarTexto(idCrudo));
     const diaTxt = limpiarTexto(celda("dia"));
