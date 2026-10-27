@@ -13,7 +13,6 @@ describe("validarValor", () => {
     expect(() => validarValor(def("ventana_dias_antes"), "2.5")).toThrow();
     expect(() => validarValor(def("ventana_dias_antes"), "-1")).toThrow();
     expect(() => validarValor(def("ventana_dias_antes"), "99")).toThrow();
-    expect(() => validarValor(def("tolerancia_pct", "categoria"), "101")).toThrow();
   });
   it("valida las opciones de frecuencia", () => {
     expect(validarValor(def("frecuencia_defecto"), " mensual ")).toBe("mensual");

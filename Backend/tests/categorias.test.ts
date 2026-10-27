@@ -48,7 +48,6 @@ async function limpiarPropias() {
   const ids = (await prisma.categoria.findMany({ where: { nombreNormalizado: { in: PROPIAS } }, select: { id: true } })).map((c) => c.id);
   await prisma.vencimiento.deleteMany({ where: { categoriaId: { in: ids } } });
   await prisma.obligacion.deleteMany({ where: { categoriaId: { in: ids } } });
-  await prisma.parametro.deleteMany({ where: { ambito: "categoria", categoriaId: { in: ids } } });
   await prisma.categoria.deleteMany({ where: { id: { in: ids } } });
 }
 
@@ -77,12 +76,11 @@ describe("crearCategoria", () => {
     expect(await prisma.categoria.count({ where: { nombreNormalizado: "agua" } })).toBe(0);
   });
 
-  it("crea la categoría con sus parámetros propios y el nombre limpio", async () => {
+  it("crea la categoría con el nombre limpio", async () => {
     const r = await crearCategoria({ actorId: jefe, nombre: "  Agua   " });
     expect(r).toEqual({ creada: { id: expect.any(Number), nombre: "Agua" } });
     const c = await prisma.categoria.findFirstOrThrow({ where: { nombre: "Agua" } });
     expect(c).toMatchObject({ nombreNormalizado: "agua", activa: true });
-    expect(await prisma.parametro.count({ where: { ambito: "categoria", categoriaId: c.id } })).toBeGreaterThan(0);
   });
 
   it("rechaza un nombre igual a uno existente aunque cambien mayúsculas, tildes o espacios", async () => {
@@ -117,13 +115,12 @@ describe("desactivar y borrar", () => {
     expect((await fallo(desactivarCategoria({ actorId: jefe, categoriaId: 999_999 })))?.codigo).toBe("no_encontrado");
   });
 
-  it("borrar: solo Jefatura y solo sin obligaciones ni vencimientos; se llevan sus parámetros propios", async () => {
+  it("borrar: solo Jefatura y solo sin obligaciones ni vencimientos", async () => {
     const { creada } = await nueva("Gas");
     expect((await fallo(borrarCategoria({ actorId: tesorero, categoriaId: creada.id })))?.codigo).toBe("permiso");
     expect((await fallo(borrarCategoria({ actorId: jefe, categoriaId: 999_999 })))?.codigo).toBe("no_encontrado");
     await borrarCategoria({ actorId: jefe, categoriaId: creada.id });
     expect(await prisma.categoria.count({ where: { id: creada.id } })).toBe(0);
-    expect(await prisma.parametro.count({ where: { ambito: "categoria", categoriaId: creada.id } })).toBe(0);
   });
 
   it("no borra una categoría con obligaciones ni con vencimientos (aunque la obligación ya esté en otra categoría)", async () => {

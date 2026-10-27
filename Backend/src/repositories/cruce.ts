@@ -54,7 +54,7 @@ export async function cargarDatosCruce(): Promise<DatosCruce> {
     prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
     prisma.vencimiento.findMany({
       where: { obligacion: { activa: true } },
-      select: { id: true, obligacionId: true, sociedadId: true, fecha: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true, cuentaEsperadaId: true },
+      select: { id: true, obligacionId: true, sociedadId: true, fecha: true, periodo: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true, cuentaEsperadaId: true },
     }),
     prisma.movimiento.findMany({
       where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
@@ -112,4 +112,13 @@ export async function cargarDescripcionesPorSociedad(): Promise<Map<number, stri
 export async function primerasFechasPorCuenta(): Promise<Map<number, Date>> {
   const g = await prisma.movimiento.groupBy({ by: ["cuentaId"], where: { archivo: { retiradoEn: null } }, _min: { fecha: true } });
   return new Map(g.flatMap((x) => (x._min.fecha ? [[x.cuentaId, x._min.fecha] as [number, Date]] : [])));
+}
+
+/** Para el diagnóstico de grupos: fecha, descripción y tipo (débito o crédito) de los movimientos vigentes de todas las sociedades. */
+export async function movimientosParaGrupos() {
+  const filas = await prisma.movimiento.findMany({
+    where: { archivo: { retiradoEn: null } },
+    select: { fecha: true, descripcion: true, debito: true, cuenta: { select: { sociedadId: true } } },
+  });
+  return filas.map((f) => ({ sociedadId: f.cuenta.sociedadId, fecha: f.fecha, descripcion: f.descripcion, esDebito: f.debito > 0n }));
 }

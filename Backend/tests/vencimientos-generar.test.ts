@@ -29,11 +29,11 @@ beforeEach(async () => {
 });
 afterAll(vaciarImportaciones);
 
-describe("calendario automático (ventana en días, sin meses futuros)", () => {
-  it("crea desde «Control desde» hasta hoy + días de aviso, en estado proyectado, y omite las que no se pueden planificar", async () => {
-    const r = await sincronizarVencimientos(reloj(2026, 9, 10)); // aviso 3: llega hasta el 13 de septiembre
-    expect(r).toMatchObject({ creados: 2, eliminados: 0 }); // mensual de agosto y trimestral de agosto; el 15 de septiembre aún no entra
-    expect(await fechas(ids.mensual)).toEqual(["2026-08:2026-08-15"]);
+describe("calendario automático (todo el mes en curso, sin meses futuros)", () => {
+  it("crea desde «Control desde» hasta el fin del mes en curso, en estado proyectado, y omite las que no se pueden planificar", async () => {
+    const r = await sincronizarVencimientos(reloj(2026, 9, 10)); // todo septiembre, aunque falten más de 3 días
+    expect(r).toMatchObject({ creados: 3, eliminados: 0 }); // mensual de agosto y de septiembre, y trimestral de agosto
+    expect(await fechas(ids.mensual)).toEqual(["2026-08:2026-08-15", "2026-09:2026-09-15"]);
     expect(await fechas(ids.trimestral)).toEqual(["2026-08:2026-08-31"]);
     expect(await fechas(ids.sinDia)).toEqual([]);
     expect(await fechas(ids.anualSinMes)).toEqual([]);
@@ -42,7 +42,7 @@ describe("calendario automático (ventana en días, sin meses futuros)", () => {
     expect(v).toMatchObject({ estado: "proyectado", montoEsperado: 1000n });
   });
 
-  it("el margen de aviso cruza de un mes a otro: el día 29 ya se genera el vencimiento del 1 del mes siguiente", async () => {
+  it("si el margen de aviso cruza de un mes a otro, el día 29 ya se genera el vencimiento del 1 del mes siguiente; antes no", async () => {
     await prisma.obligacion.update({ where: { id: ids.mensual }, data: { diaEsperadoPago: 1 } });
     await sincronizarVencimientos(reloj(2026, 8, 28)); // hasta el 31: el 1 de septiembre queda fuera
     expect(await fechas(ids.mensual)).toEqual(["2026-08:2026-08-01"]);

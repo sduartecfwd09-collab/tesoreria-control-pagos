@@ -152,8 +152,8 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 
 ## Vencimientos (Hito 3)
 
-- Un vencimiento por obligación activa y periodo (`@@unique`). El calendario es automático y sin meses futuros: se crean los vencimientos desde «Control desde» hasta hoy + `aviso_dias` (una ventana en días). Corre solo al crear, editar o activar una obligación, tras cada importación, al arrancar el servidor y una vez al día; es idempotente. No hay ruta ni botón para generarlos a mano.
-- **Cruce (Hito 4):** `npm run cruzar` recalcula el estado de todos los vencimientos (reglas en `src/domain/cruce.ts`); `npm run cruzar:diagnostico` imprime solo conteos por estado, sociedad y mes. El cruce usa solo débitos de archivos no retirados, la ventana `ventana_dias_antes` y `ventana_dias_despues` (3 y 3) y la cobertura de las cuentas (`src/domain/cobertura-corte.ts`): nunca marca «Vencido» si hay duda de cobertura: queda «Sin información», un estado que requiere atención. El parámetro `marcar_vencido_sin_estado` (apagado) lo muestra como Vencido con la nota «sin estado de cuenta que lo confirme».
+- Un vencimiento por obligación activa y periodo (`@@unique`). El calendario es automático y sin meses futuros: se crean los vencimientos desde «Control desde» hasta el fin del mes en curso (o hasta hoy + `aviso_dias` si eso cruza al mes siguiente). Corre solo al crear, editar o activar una obligación, tras cada importación, al arrancar el servidor y una vez al día; es idempotente. No hay ruta ni botón para generarlos a mano.
+- **Cruce (Hito 4):** `npm run cruzar` recalcula el estado de todos los vencimientos (reglas en `src/domain/cruce.ts`); `npm run cruzar:diagnostico` imprime solo conteos por estado, sociedad y mes; `npm run cruzar:grupos` muestra, por cada grupo de obligaciones de una sociedad con el mismo número de servicio, el estado de cada vencimiento por mes y los rótulos del banco (con los números largos enmascarados) y si se reconoce el nombre del proveedor. El cruce usa solo débitos de archivos no retirados, la ventana `ventana_dias_antes` y `ventana_dias_despues` (3 y 3) y la cobertura de las cuentas (`src/domain/cobertura-corte.ts`): nunca marca «Vencido» si hay duda de cobertura: queda «Sin información», un estado que requiere atención. El parámetro `marcar_vencido_sin_estado` (apagado) lo muestra como Vencido con la nota «sin estado de cuenta que lo confirme».
 - Frecuencia como paso en meses (mensual 1, bimestral 2, trimestral 3, semestral 6, anual 12) contado desde el **mes de arranque**. Una frecuencia no mensual sin mes de arranque, o una obligación sin día, se omite y se reporta con su motivo.
 - Si el día no existe en el mes se usa el último día (31 → 30, o 28/29 en febrero). Sin ajuste por fines de semana ni feriados.
 - Todos nacen **proyectado**; los demás estados se calculan con el cruce (Hito 4).
@@ -168,7 +168,7 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 
 ## Supuestos (por confirmar con Tesorería)
 
-- `tolerancia_pct = 10` por categoría y `frecuencia_defecto = mensual`. No se aplican aún (el monto no se valida en el piloto).
+- `frecuencia_defecto = mensual`. La tolerancia de monto se eliminó: el monto esperado es opcional y no se valida contra el pago.
 - Colores de estado rojo y ámbar (tokens en `Frontend/src/app/globals.css`).
 - Texto con barras = día/mes/año. Punto = decimal, coma = miles. Símbolo ¢/₡ o $ al final del nombre de cuenta = moneda.
 - Nombres de banco: solo BCT, BNCR y Davivienda se leen del propio archivo. Los códigos 0102, 0123 y 0104 (en E4) no están confirmados.

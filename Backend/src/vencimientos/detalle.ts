@@ -1,37 +1,30 @@
-// Detalle de solo lectura de un vencimiento: datos, motivo del estado según el estado y los movimientos que lo explican.
-// Todo se calcula con la base y el reloj inyectado; nada se guarda. Ninguna respuesta lleva rutas de archivo ni cuentas
-// completas (solo los últimos 4), y los números largos de las descripciones salen enmascarados.
+// Detalle de solo lectura de un vencimiento: datos, el porqué del estado (en lenguaje de tesorería, con datos reales) y los
+// movimientos que lo explican. Todo se calcula con la base y el reloj inyectado; nada se guarda. Ninguna respuesta lleva
+// rutas de archivo ni cuentas completas (solo los últimos 4); en las descripciones solo se ve completo el número que es el
+// identificador de la obligación y los demás números de 8 o más dígitos salen enmascarados.
+import { nombresEnDescripcion } from "../config/alias-proveedores.js";
 import { coberturaDeSociedad, corteMasReciente } from "../domain/cobertura-corte.js";
-import { textoSinInformacion } from "../domain/cruce.js";
-import { enmascararCuenta, enmascararNumerosLargos } from "../domain/enmascarar.js";
-import { patronIdentificador } from "../domain/identificadores.js";
+import { enmascararCuenta, enmascararSalvo } from "../domain/enmascarar.js";
+import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { aNumero } from "../domain/montos.js";
 import { responsableEfectivo } from "../domain/obligaciones.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
+import { normalizar } from "../ingest/utiles.js";
+import { textoFaltanEstados, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import { datosDeCuentas, debitosEnVentana, obtenerVencimientoDetalle } from "../repositories/vencimientos.js";
+import { datosDeCuentas, debitosEnVentana, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
+import { diasDeAviso } from "./generar.js";
 
 const MS_DIA = 86_400_000;
 const iso = (f: Date) => f.toISOString().slice(0, 10);
+const dia = (f: Date) => Math.floor(f.getTime() / MS_DIA);
+const plano = (t: string) => normalizar(t).replace(/\s+/g, "");
 const entero = async (clave: string, defecto: number) => {
   const n = Number(await valorGlobal(clave));
   return Number.isInteger(n) && n >= 0 ? n : defecto;
 };
-
-type MovimientoDetalle = NonNullable<Awaited<ReturnType<typeof obtenerVencimientoDetalle>>>["movimiento"];
-
-const aMovimiento = (m: NonNullable<MovimientoDetalle>, delPago: boolean) => ({
-  fecha: iso(m.fecha),
-  monto: aNumero(m.debito),
-  moneda: m.cuenta.moneda, // la de la cuenta; null = sin dato
-  banco: m.cuenta.banco,
-  cuenta: enmascararCuenta(m.cuenta.numero),
-  sociedad: etiquetaSociedad(m.cuenta.sociedad),
-  descripcion: m.descripcion === null ? null : enmascararNumerosLargos(m.descripcion),
-  delPago,
-});
 
 export async function detalleDeVencimiento(id: number, reloj: Reloj) {
   const v = await obtenerVencimientoDetalle(id);
@@ -41,17 +34,42 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
   const diasDespues = await entero("ventana_dias_despues", 3);
   const desde = new Date(v.fecha.getTime() - diasAntes * MS_DIA);
   const hasta = new Date(v.fecha.getTime() + diasDespues * MS_DIA);
+  const clave = identificadorClave(v.obligacion.identificador);
 
-  // movimientos que explican el estado: el pago, o los débitos con el identificador dentro de la ventana
-  let movimientos: ReturnType<typeof aMovimiento>[] = [];
+  // El grupo: las obligaciones de esta sociedad con el mismo número de servicio y su vencimiento de este mes.
+  const delMes = await vencimientosDeSociedadEnPeriodo(v.sociedadId, v.periodo);
+  const hermanos = delMes.filter((x) => identificadorClave(x.obligacion.identificador) === clave);
+  const grupo: ObligacionGrupoTexto[] = hermanos.map((x) => ({ proveedor: x.proveedor, categoria: x.categoria.nombre, diaPago: x.dia, estado: x.estado }));
+
+  // Movimientos que explican el estado: el pago, o los débitos con el número de servicio dentro de las fechas del grupo del mes.
+  let movimientos: (MovimientoTexto & { delPago: boolean })[] = [];
+  const aMovimiento = (m: NonNullable<typeof v.movimiento>, delPago: boolean): MovimientoTexto & { delPago: boolean } => {
+    const texto = plano(m.descripcion ?? "");
+    const ventanasDe = (h: (typeof hermanos)[number]) => dia(m.fecha) >= dia(h.fecha) - diasAntes && dia(m.fecha) <= dia(h.fecha) + diasDespues;
+    return {
+      fecha: iso(m.fecha),
+      monto: aNumero(m.debito),
+      moneda: m.cuenta.moneda, // la de la cuenta; null = sin dato
+      banco: m.cuenta.banco,
+      cuenta: enmascararCuenta(m.cuenta.numero),
+      sociedad: etiquetaSociedad(m.cuenta.sociedad),
+      descripcion: m.descripcion === null ? null : enmascararSalvo(m.descripcion, clave),
+      delPago,
+      porNombre: [...new Set(hermanos.filter((h) => nombresEnDescripcion(h.proveedor).some((n) => texto.includes(n))).map((h) => h.proveedor))],
+      porFecha: [...new Set(hermanos.filter(ventanasDe).map((h) => h.proveedor))],
+    };
+  };
   if (v.estado === "pagado" && v.movimiento) movimientos = [aMovimiento(v.movimiento, true)];
   else if (v.estado === "pagado_con_inconsistencia" || v.estado === "por_revisar") {
     const patron = patronIdentificador(v.obligacion.identificador);
-    const candidatos = patron ? (await debitosEnVentana(desde, hasta)).filter((m) => patron.test((m.descripcion ?? "").toUpperCase())) : [];
+    const fechas = hermanos.length > 0 ? hermanos.map((h) => h.fecha) : [v.fecha];
+    const desdeGrupo = new Date(Math.min(...fechas.map((f) => f.getTime())) - diasAntes * MS_DIA);
+    const hastaGrupo = new Date(Math.max(...fechas.map((f) => f.getTime())) + diasDespues * MS_DIA);
+    const candidatos = patron ? (await debitosEnVentana(desdeGrupo, hastaGrupo)).filter((m) => patron.test((m.descripcion ?? "").toUpperCase())) : [];
     movimientos = candidatos.map((m) => aMovimiento(m, m.id === v.movimientoId));
   }
 
-  // cobertura: hasta cuándo hay estados de la sociedad y qué cuentas no alcanzan a cubrir la ventana
+  // Cobertura: hasta cuándo hay estados de la sociedad y qué cuentas no alcanzan a cubrir la fecha de pago.
   let cobertura: { estadosHasta: string | null; cuentas: number; cuentasSinCobertura: { cuenta: string; banco: string | null; hasta: string | null }[] } | null = null;
   if (v.estado === "vencido" || v.estado === "sin_informacion") {
     const cuentas = (await cargarCoberturaCuentas()).get(v.sociedadId) ?? [];
@@ -69,6 +87,15 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     };
   }
 
+  const dias = Math.round((v.fecha.getTime() - hoy.getTime()) / MS_DIA);
+  const diasAviso = await diasDeAviso();
+  const textos = textosDePago({
+    estado: v.estado, motivo: v.motivo, fecha: iso(v.fecha), dias, diasAviso, diferenciaDias: v.diferenciaDias,
+    ventana: { desde: iso(desde), hasta: iso(hasta) },
+    cobertura: cobertura && { estadosHasta: cobertura.estadosHasta, cuentas: cobertura.cuentas, sinCobertura: cobertura.cuentasSinCobertura },
+    movimientos, grupo,
+  });
+
   return {
     id: v.id,
     proveedor: v.proveedor,
@@ -81,12 +108,14 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     movida: v.fechaOriginal !== null,
     estado: v.estado,
     motivo: v.motivo,
-    textoEstado: v.estado === "sin_informacion" ? textoSinInformacion(v.fecha, v.sinInfoHasta) : v.motivo,
+    textoEstado: v.estado === "sin_informacion" ? textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null) : v.motivo,
+    textos,
     diferenciaDias: v.diferenciaDias,
     sinInfoHasta: v.sinInfoHasta ? iso(v.sinInfoHasta) : null,
     responsableEfectivo: responsableEfectivo(v.obligacion).nombre,
     ventana: { desde: iso(desde), hasta: iso(hasta), diasAntes, diasDespues },
     cobertura,
+    grupo: grupo.length > 1 ? grupo : [],
     movimientos,
   };
 }

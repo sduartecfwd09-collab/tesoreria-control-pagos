@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { avisosDeDatos, type CuentaCorte } from "../src/domain/cobertura-corte.js";
-import { cruzar, MOTIVOS, textoSinInformacion, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
+import { cruzar, MOTIVOS, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
+import { nombresEnDescripcion } from "../src/config/alias-proveedores.js";
+import { textoFaltanEstados } from "../src/domain/textos-pago.js";
 import { patronIdentificador } from "../src/domain/identificadores.js";
 
 // Reglas del motor de cruce con datos inventados. Hoy = 2026-10-27, aviso 3 días, ventana 3 antes y 3 después.
@@ -202,8 +204,8 @@ describe("«Sin información» requiere atención y el parámetro de Vencido sin
   it("apagado (por defecto): sin información, nunca Vencido, con las fechas para explicarlo", () => {
     const r = estadoDe(correr(entrada), 10);
     expect(r.estado).toBe("sin_informacion");
-    expect(textoSinInformacion(F, r.sinInfoHasta)).toBe("Venció el 2026-10-15; no hay estado de cuenta cargado después del 2026-10-16");
-    expect(textoSinInformacion(F, null)).toBe("Venció el 2026-10-15; no hay estado de cuenta cargado de esa fecha");
+    expect(textoFaltanEstados("2026-10-16")).toBe("Faltan estados de cuenta desde el 17 oct 2026"); // el primer día sin datos
+    expect(textoFaltanEstados(null)).toBe("Faltan estados de cuenta de este período");
   });
 
   it("encendido: se muestra Vencido con la nota «sin estado de cuenta que lo confirme» y conserva la fecha de corte", () => {
@@ -236,5 +238,44 @@ describe("aviso de datos por sociedad", () => {
   it("un archivo del mes en curso sin movimientos aún no aporta corte: vale el mes anterior", () => {
     const c = new Map([[1, [{ cuentaId: 1, meses: new Map([["2026-09", dia(2026, 9, 30)], ["2026-10", null]]) }]]]);
     expect(avisosDeDatos(c, HOY, 5)[0]!.corte?.toISOString().slice(0, 10)).toBe("2026-09-30");
+  });
+});
+
+describe("grupo de obligaciones con el mismo identificador en una sociedad", () => {
+  // Cabletica vence el 15 y Movistar el 20: sus ventanas (3 y 3) son 12 al 18 y 17 al 23.
+  const grupo = [oblig(1, "99999", "Cabletica"), oblig(2, "99999", "Movistar")];
+  const vs = [venc(10, 1, F), venc(20, 2, dia(2026, 10, 20))];
+  const con = (descripcion: string, fecha: Date) => correr({ obligaciones: grupo, vencimientos: vs, movimientos: [mov(100, fecha, descripcion)] });
+
+  it("un movimiento sin certeza deja por revisar a TODO el grupo del mes, aunque solo caiga en la ventana de una fila", () => {
+    const r = con("PAGO SERVICIO 99999", dia(2026, 10, 13)); // solo en la ventana de Cabletica
+    expect(estadoDe(r, 10)).toMatchObject({ estado: "por_revisar", movimientoId: null });
+    expect(estadoDe(r, 20)).toMatchObject({ estado: "por_revisar", movimientoId: null }); // antes quedaba vencido: dos lecturas del mismo pago
+  });
+
+  it("«MOVIS» se reconoce como Movistar: con la fecha de Movistar el pago es suyo y Cabletica no se toca", () => {
+    expect(nombresEnDescripcion("Movistar")).toContain("movis");
+    const r = con("PAGO MOVIS 99999", dia(2026, 10, 19)); // solo en la ventana de Movistar
+    expect(estadoDe(r, 20)).toMatchObject({ estado: "pagado", movimientoId: 100 });
+    expect(estadoDe(r, 10).estado).toBe("vencido");
+  });
+
+  it("si el nombre dice una obligación y la fecha solo encaja con otra del grupo, no hay certeza: todo el grupo por revisar", () => {
+    const r = con("PAGO MOVIS 99999", dia(2026, 10, 13)); // nombre: Movistar; fecha: solo Cabletica
+    expect(estadoDe(r, 10).estado).toBe("por_revisar");
+    expect(estadoDe(r, 20).estado).toBe("por_revisar");
+  });
+
+  it("un grupo que sí se desempata (nombre y fecha de acuerdo) queda pagado solo en una fila", () => {
+    const r = con("PAGO CABLETICA 99999", dia(2026, 10, 17)); // en las dos ventanas; el nombre decide
+    expect(estadoDe(r, 10)).toMatchObject({ estado: "pagado", movimientoId: 100 });
+    expect(estadoDe(r, 20).estado).toBe("vencido");
+  });
+
+  it("el grupo se evalúa por mes: un movimiento dudoso de octubre no toca el vencimiento de septiembre", () => {
+    const sep = venc(30, 1, dia(2026, 9, 15));
+    const r = correr({ obligaciones: grupo, vencimientos: [...vs, sep, venc(40, 2, dia(2026, 9, 20))], movimientos: [mov(100, dia(2026, 10, 13), "PAGO SERVICIO 99999")] });
+    expect(estadoDe(r, 30).estado).toBe("vencido");
+    expect(estadoDe(r, 10).estado).toBe("por_revisar");
   });
 });

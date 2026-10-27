@@ -33,6 +33,10 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | El calendario de vencimientos llega hasta hoy + días de aviso (sin meses futuros). | Tesorería solo necesita ver lo que está por vencer o ya venció. |
 | 2026-10-27 | «Sin información» requiere atención (junto con Vencido) y nunca se muestra como Vencido, salvo el parámetro «Marcar Vencido aunque falte el estado de cuenta». Aviso de datos por sociedad. | Un estado de cuenta sin cargar no prueba que no se pagó (decide Saraí). |
 | 2026-10-27 | «Vencimientos» pasa a «Pagos del mes» (solo el mes elegido, cuatro tarjetas, pestañas y detalle de solo lectura) y se agrega «Vencidos» (todos los meses). Toda cifra se calcula con la base y el reloj; la maqueta manda en el diseño. | La maqueta es lo que vio Tesorería; sus textos y números de ejemplo no se copian. |
+| 2026-10-27 | Se elimina la tolerancia de monto por categoría (parámetro, siembra y pantalla). | Decisión del 2026-10-22 que nunca se cerró: el monto esperado es opcional y no se valida contra el pago. |
+| 2026-10-27 | Las obligaciones de una sociedad con el mismo número de servicio se evalúan como grupo: sin certeza por nombre y fecha, todo el grupo del mes queda Por revisar. «MOVIS» se reconoce como Movistar. | Evita leer distinto el mismo pago en cada fila. |
+| 2026-10-27 | El calendario genera todo el mes en curso; Programado = fuera de los días de aviso, Por vencer = dentro. | Así «Programados» tiene contenido y la maqueta se cumple. |
+| 2026-10-27 | Menú lateral negro de la maqueta, solo con pantallas que existen; el inicio es «Pagos del mes»; «Archivos importados» pasa a «Estados de cuenta». | La maqueta es lo que vio Tesorería. |
 
 ## Pendientes con Tesorería
 

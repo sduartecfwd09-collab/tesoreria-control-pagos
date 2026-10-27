@@ -5,7 +5,6 @@ import JSZip from "jszip";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
-import { NOTA_SIN_MOVIMIENTOS_CON_IMAGEN } from "../src/domain/cobertura.js";
 import { resumirImagenes } from "../src/domain/imagenes.js";
 import { importarCarpeta } from "../src/ingest/importar-carpeta.js";
 import { tieneImagenes } from "../src/ingest/quitar-dibujos.js";
@@ -82,12 +81,10 @@ describe("importación y pantalla de archivos importados", () => {
     expect(por).toEqual({ "2026-08": true, "2026-09": true, "2026-10": false });
   });
 
-  it("la celda de cobertura marca «Sin movimientos (con imagen): revisar» solo con imagen y cero movimientos, sin cambiar el estado leído", async () => {
+  it("un archivo con imagen y sin movimientos se muestra solo como «Sin movimientos»: la celda no lleva ninguna nota", async () => {
     const celdas = (await app.inject("/api/cobertura")).json().datos.filas[0].celdas;
-    expect(celdas["2026-08"]).toMatchObject({ estado: "leido", movimientos: 0, nota: NOTA_SIN_MOVIMIENTOS_CON_IMAGEN });
-    expect(celdas["2026-09"].nota).toBeUndefined();
-    expect(celdas["2026-10"]).toMatchObject({ estado: "leido", movimientos: 0 });
-    expect(celdas["2026-10"].nota).toBeUndefined();
+    for (const mes of ["2026-08", "2026-09", "2026-10"]) expect(celdas[mes].nota).toBeUndefined();
+    expect(celdas["2026-08"]).toMatchObject({ estado: "leido", movimientos: 0 });
   });
 
   it("no cambia cómo cuentan para la cobertura del cruce: el archivo con imagen y sin movimientos sigue siendo un archivo leído", async () => {

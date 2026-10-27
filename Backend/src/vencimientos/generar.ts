@@ -1,6 +1,6 @@
 // Calendario automático de vencimientos. El sistema crea solo, para cada obligación activa, los vencimientos desde su
-// «Control desde» hasta hoy + los días de aviso (una ventana en días, sin meses futuros) y mantiene al día los futuros.
-// Todos nacen «proyectado»: el estado real lo calcula el motor de cruce. Es idempotente y nunca toca un vencimiento
+// «Control desde» hasta el fin del mes en curso (o hoy + los días de aviso si eso cruza al mes siguiente; sin meses
+// futuros) y mantiene al día los futuros. Todos nacen «proyectado»: el estado real lo calcula el motor de cruce. Es idempotente y nunca toca un vencimiento
 // pasado, pagado, conciliado o con avisos.
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
@@ -32,7 +32,11 @@ export async function diasDeAviso(): Promise<number> {
 export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: number): Promise<ResumenSincronizacion> {
   const r: ResumenSincronizacion = { creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 };
   const hoy = hoyDe(reloj);
-  const limite = new Date(hoy.getTime() + (await diasDeAviso()) * MS_DIA);
+  // Se genera todo el mes en curso (hasta fin de mes) o, si hoy + los días de aviso cruza al mes siguiente, hasta ahí.
+  // Nunca se crean meses futuros por adelantado.
+  const finDeMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 0));
+  const conAviso = new Date(hoy.getTime() + (await diasDeAviso()) * MS_DIA);
+  const limite = conAviso > finDeMes ? conAviso : finDeMes;
   const obligaciones = obligacionId === undefined ? await obligacionesParaPlan() : [await obligacionParaPlan(obligacionId)].filter((o) => o !== null);
   const existentes = new Map<number, Awaited<ReturnType<typeof vencimientosDeObligaciones>>>();
   for (const v of await vencimientosDeObligaciones(obligaciones.map((o) => o.id))) {

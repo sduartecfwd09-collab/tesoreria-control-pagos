@@ -41,3 +41,11 @@ export function coberturaSegura(c: Cobertura): CoberturaSegura {
     sinUbicar: c.sinUbicar.map((s) => ({ archivo: nombreDeArchivoSeguro(s.ruta), error: textoSeguro(s.error) })),
   };
 }
+
+/**
+ * Como `enmascararNumerosLargos`, pero deja completo el número que es el identificador de la obligación (el que coincide
+ * con él, con o sin ceros a la izquierda): es el dato que la persona necesita para reconocer el pago.
+ */
+export function enmascararSalvo(texto: string, identificadorClave: string): string {
+  return texto.replace(/\d{8,}/g, (n) => (n.replace(/^0+/, "") === identificadorClave ? n : `****${n.slice(-4)}`));
+}

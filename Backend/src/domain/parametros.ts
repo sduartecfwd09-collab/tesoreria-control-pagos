@@ -7,7 +7,7 @@ export interface DefinicionParametro {
   etiqueta: string;
   ayuda: string;
   tipo: TipoParametro;
-  ambito: "global" | "categoria";
+  ambito: "global";
   valorInicial: string;
   unidad?: string;
   min?: number;
@@ -58,13 +58,6 @@ export const DEFINICIONES: DefinicionParametro[] = [
     ayuda:
       "Frecuencia que se asigna a las obligaciones cuando no se indica otra. La tabla de pagos frecuentes no trae este dato. SUPUESTO: mensual.",
     tipo: "texto", ambito: "global", valorInicial: "mensual", opciones: FRECUENCIAS, supuesto: true,
-  },
-  {
-    clave: "tolerancia_pct",
-    etiqueta: "Tolerancia de monto",
-    ayuda:
-      "Diferencia porcentual aceptada entre el monto esperado y el monto pagado. En el piloto NO se valida el monto, así que este valor todavía no se aplica. SUPUESTO: 10 %.",
-    tipo: "entero", ambito: "categoria", valorInicial: "10", unidad: "%", min: 0, max: 100, supuesto: true,
   },
 ];
 

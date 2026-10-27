@@ -127,7 +127,7 @@ describe("detalle de solo lectura", () => {
   it("por revisar: el motivo y los movimientos candidatos", async () => {
     const d = await detalle("Cabletica");
     expect(d.estado).toBe("por_revisar");
-    expect(d.motivo).toContain("comparten varias obligaciones");
+    expect(d.motivo).toContain("a cuál servicio corresponde");
     expect(d.movimientos).toHaveLength(1);
     expect(d.movimientos[0]).toMatchObject({ fecha: "2026-10-15", banco: "Banco Uno", cuenta: "****1111", delPago: false, descripcion: "PAGO SERVICIO 6664444" });
   });
@@ -135,7 +135,7 @@ describe("detalle de solo lectura", () => {
   it("sin información: desde cuándo y qué cuentas faltan", async () => {
     const d = await detalle("Net Seis");
     expect(d.estado).toBe("sin_informacion");
-    expect(d.textoEstado).toBe("Venció el 2026-10-14; no hay estado de cuenta cargado después del 2026-10-15");
+    expect(d.textoEstado).toBe("Faltan estados de cuenta desde el 16 oct 2026");
     expect(d.cobertura).toMatchObject({ estadosHasta: "2026-10-15", cuentas: 1 });
     expect(d.cobertura.cuentasSinCobertura).toEqual([{ cuenta: "****2222", banco: "Banco Dos", hasta: "2026-10-15" }]);
   });

@@ -128,7 +128,7 @@ describe("API de vencimientos: pago con moneda, textos y aviso de datos", () => 
     const app = await crearApp({ reloj });
     try {
       const v = async () => (await app.inject("/api/vencimientos?periodo=2026-10")).json().datos[0];
-      expect(await v()).toMatchObject({ estado: "sin_informacion", textoEstado: "Venció el 2026-10-15; no hay estado de cuenta cargado después del 2026-10-16" });
+      expect(await v()).toMatchObject({ estado: "sin_informacion", textoEstado: "Faltan estados de cuenta desde el 17 oct 2026" });
       await prisma.parametro.updateMany({ where: { clave: "marcar_vencido_sin_estado" }, data: { valor: "si" } });
       await actualizarVencimientos(reloj);
       expect(await v()).toMatchObject({ estado: "vencido", textoEstado: "Pasó la fecha de pago; sin estado de cuenta que lo confirme" });
@@ -143,7 +143,7 @@ describe("API de vencimientos: pago con moneda, textos y aviso de datos", () => 
     const app = await crearApp({ reloj });
     try {
       const r = (await app.inject("/api/vencimientos/avisos-datos")).json().datos;
-      expect(r).toEqual([expect.objectContaining({ sociedad: "Sociedad AAA", sinEstadosDesde: "2026-10-17", texto: "Sociedad AAA: sin estados desde 2026-10-17" })]);
+      expect(r).toEqual([expect.objectContaining({ sociedad: "Sociedad AAA", sinEstadosDesde: "2026-10-17", texto: "Sociedad AAA: los estados de cuenta llegan hasta el 16 oct 2026; faltan los posteriores." })]);
       await prisma.parametro.updateMany({ where: { clave: "aviso_datos_dias" }, data: { valor: "20" } });
       expect((await app.inject("/api/vencimientos/avisos-datos")).json().datos).toEqual([]);
     } finally {
@@ -192,7 +192,7 @@ describe("API de vencimientos: periodo con pendientes anteriores, filtro por est
     const app = await crearApp({ reloj });
     try {
       const textos = (await app.inject("/api/vencimientos/avisos-datos")).json().datos.map((a: { texto: string }) => a.texto);
-      expect(textos).toEqual(["Sociedad AAA: sin estados desde 2026-10-02", "Sociedad con obligación y sin estados: sin estados cargados"]);
+      expect(textos).toEqual(["Sociedad AAA: los estados de cuenta llegan hasta el 1 oct 2026; faltan los posteriores.", "Sociedad con obligación y sin estados: no hay estados de cuenta cargados."]);
       expect(textos.join()).not.toContain(otra.nombreLargo);
     } finally {
       await app.close();

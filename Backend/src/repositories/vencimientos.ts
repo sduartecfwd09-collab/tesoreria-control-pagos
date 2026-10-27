@@ -141,3 +141,12 @@ export async function debitosEnVentana(desde: Date, hasta: Date) {
 export async function datosDeCuentas(ids: number[]) {
   return prisma.cuenta.findMany({ where: { id: { in: ids } }, select: { id: true, numero: true, banco: true, sociedadId: true } });
 }
+
+/** Los vencimientos de una sociedad en un periodo, con su categoría y el identificador de su obligación (para armar el grupo). */
+export async function vencimientosDeSociedadEnPeriodo(sociedadId: number, periodo: string) {
+  return prisma.vencimiento.findMany({
+    where: { sociedadId, periodo, obligacion: { activa: true } },
+    include: { categoria: true, obligacion: { select: { identificador: true } } },
+    orderBy: { id: "asc" },
+  });
+}

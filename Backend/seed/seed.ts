@@ -20,17 +20,10 @@ const SOCIEDADES = [
 await asegurarRoles();
 
 for (const { codigo, nombreLargo } of SOCIEDADES) await sembrarSociedad(codigo, nombreLargo);
-const cats = [];
-for (const nombre of CATEGORIAS) cats.push(await asegurarCategoria(nombre));
+for (const nombre of CATEGORIAS) await asegurarCategoria(nombre);
 
 for (const d of DEFINICIONES) {
-  const ids = d.ambito === "categoria" ? cats.map((c) => c.id) : [0];
-  for (const categoriaId of ids) {
-    await asegurarParametro({
-      clave: d.clave, valor: d.valorInicial, tipo: d.tipo, ambito: d.ambito, categoriaId,
-      descripcion: d.ayuda,
-    });
-  }
+  await asegurarParametro({ clave: d.clave, valor: d.valorInicial, tipo: d.tipo, ambito: d.ambito, categoriaId: 0, descripcion: d.ayuda });
 }
 console.log(`Sociedades: ${SOCIEDADES.length} · parámetros listos: ${await contarParametros()}`);
 await prisma.$disconnect();

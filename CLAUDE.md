@@ -34,7 +34,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 - Modelo de datos: el responsable es un campo de la obligación; cada vencimiento guarda una copia de los datos de la obligación, su fecha original y su fecha vigente; las obligaciones se desactivan, no se borran; hay usuarios, roles y preferencias de aviso.
 
 ## Decisiones vigentes
-- **Monto:** el monto esperado lo digita Tesorería y es opcional, así que el campo admite nulo. En el piloto no se valida contra el pago: `tolerancia_pct` existe como parámetro pero no se aplica. Si falta, se muestra «Sin monto». **Hay montos mayores a ₡21,4 millones:** los campos de monto son `BigInt` (centavos) y la API los envía como número.
+- **Monto:** el monto esperado lo digita Tesorería y es opcional, así que el campo admite nulo. No se valida contra el pago (no hay tolerancia de monto: se eliminó el 2026-10-27). Si falta, se muestra «Sin monto». **Hay montos mayores a ₡21,4 millones:** los campos de monto son `BigInt` (centavos) y la API los envía como número.
 - **Cruce:** por identificador, sociedad, cuenta y fecha. Ventana de ±3 días calendario alrededor de la fecha esperada, que puede cruzar de un mes a otro (parámetro `ventana_dias`). Es automático solo si el resultado es claro; lo dudoso va a revisión humana. El extractor de identificador reconoce varios patrones (p. ej. `Pago:JASEC <8 dígitos>`, SINPE con «CONTRATO <9 dígitos>»).
 - **Frecuencias:** mensual, bimestral, trimestral, semestral y anual, con los meses de pago marcados. La proyección es el próximo mes marcado.
 - **«Control desde» (mes) por obligación:** antes de ese mes no se generan vencimientos. No hay mes de inicio global.
@@ -99,4 +99,3 @@ Nada de esta sección es una decisión vigente.
 - **`frecuencia_defecto`:** parámetro que existe en la base (supuesto, valor mensual). Uso propuesto: solo valor preseleccionado al crear una obligación; una obligación importada sin frecuencia no se asume mensual y va a revisión.
 - **Extensión de la cobertura:** si la fecha esperada más la ventana cae después del último movimiento cargado de esa cuenta y mes, queda «Sin información hasta <fecha>», no «pago no aparece».
 - **Subcarpetas:** profundidad máxima de lectura (supuesto: 5 niveles).
-- **Parámetro `tolerancia_pct`:** decidir si se oculta o se elimina de Configuración.

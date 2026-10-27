@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { responsableEfectivo } from "../domain/obligaciones.js";
 import { detalleDeVencimiento } from "../vencimientos/detalle.js";
 import { avisosDeDatos } from "../domain/cobertura-corte.js";
-import { textoSinInformacion } from "../domain/cruce.js";
+import { textoDatosDesactualizados, textoFaltanEstados } from "../domain/textos-pago.js";
 import { enmascararCuenta } from "../domain/enmascarar.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
@@ -56,7 +56,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
       datos: avisos.map((a) => {
         const nombre = sociedades.find((x) => x.id === a.sociedadId)?.nombreLargo ?? "Sociedad";
         const desde = a.corte ? new Date(a.corte.getTime() + 86_400_000).toISOString().slice(0, 10) : null; // primer día sin datos
-        return { sociedadId: a.sociedadId, sociedad: nombre, sinEstadosDesde: desde, texto: desde ? `${nombre}: sin estados desde ${desde}` : `${nombre}: sin estados cargados` };
+        return { sociedadId: a.sociedadId, sociedad: nombre, estadosHasta: a.corte ? a.corte.toISOString().slice(0, 10) : null, sinEstadosDesde: desde, texto: textoDatosDesactualizados(nombre, a.corte ? a.corte.toISOString().slice(0, 10) : null) };
       }).sort((a, b) => a.sociedad.localeCompare(b.sociedad, "es")),
     };
   });
@@ -88,7 +88,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         estado: v.estado,
         motivo: v.motivo,
         // «Sin información» requiere atención y se explica con fechas; nunca se presenta como Vencido
-        textoEstado: v.estado === "sin_informacion" ? textoSinInformacion(v.fecha, v.sinInfoHasta) : v.motivo,
+        textoEstado: v.estado === "sin_informacion" ? textoFaltanEstados(v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null) : v.motivo,
         // el pago que respalda el estado; la moneda es la de la cuenta que pagó (null = sin dato: sin símbolo ni código)
         pago: v.movimiento ? { fecha: v.movimiento.fecha.toISOString().slice(0, 10), monto: aNumero(v.movimiento.debito), moneda: v.movimiento.cuenta.moneda, banco: v.movimiento.cuenta.banco, cuenta: enmascararCuenta(v.movimiento.cuenta.numero) } : null,
         diferenciaDias: v.diferenciaDias,

@@ -16,9 +16,7 @@ describe("API de parámetros", () => {
     expect(d.some((p) => p.clave === "ventana_dias")).toBe(false);
     expect(d.find((p) => p.clave === "aviso_dias")?.valor).toBe("3");
     expect(d.find((p) => p.clave === "frecuencia_defecto")?.valor).toBe("mensual");
-    const tol = d.filter((p) => p.clave === "tolerancia_pct");
-    expect(tol.map((p) => p.categoria).sort()).toEqual(["CCSS", "Cable", "Electricidad", "Internet", "Teléfono"]);
-    expect(tol.every((p) => p.valor === "10")).toBe(true);
+    expect(d.some((p) => p.clave === "tolerancia_pct")).toBe(false); // se eliminó: el monto no se valida
   });
 
   it("edita un parámetro válido y lo persiste", async () => {
