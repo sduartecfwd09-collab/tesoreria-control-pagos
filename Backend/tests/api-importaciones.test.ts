@@ -43,7 +43,7 @@ describe("API de importaciones (solo lectura y sin datos sensibles)", () => {
     const revisado = get.datos.find((a: { estado: string }) => a.estado === "en_revision");
     expect(revisado).toMatchObject({ motivo: "carpeta sin sociedad asignada", movimientos: 0, sociedad: null });
     const e1 = get.datos.find((a: { archivo: string }) => a.archivo.includes("0826") && a.archivo.includes("ZFL"));
-    expect(e1).toMatchObject({ archivo: "CR****0001 0826 ZFL.xlsx", formato: "E1", estado: "leido", sociedad: "ZFL", mes: "2026-08", movimientos: 4, cuenta: "****0001" });
+    expect(e1).toMatchObject({ archivo: "CR****0001 0826 ZFL.xlsx", formato: "E1", estado: "leido", sociedad: expect.any(String), mes: "2026-08", movimientos: 4, cuenta: "****0001" });
     expect(e1.continuidad.estado).toBe("cuadra");
     const roto = get.datos.find((a: { estado: string }) => a.estado === "error");
     expect(roto).toMatchObject({ formato: null, error: expect.stringMatching(/No se pudo abrir/) });

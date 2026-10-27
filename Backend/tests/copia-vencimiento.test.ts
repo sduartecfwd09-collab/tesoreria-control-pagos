@@ -68,7 +68,7 @@ describe("copia de los datos de la obligación en cada vencimiento", () => {
     const app = await crearApp({ reloj });
     try {
       const r = (await app.inject("/api/vencimientos?periodo=2026-08")).json();
-      expect(r.datos[0]).toMatchObject({ sociedad: "AAA", proveedor: "Fono Uno", moneda: "USD" });
+      expect(r.datos[0]).toMatchObject({ sociedad: "Sociedad AAA", proveedor: "Fono Uno", moneda: "USD" });
       expect((await app.inject("/api/vencimientos?q=otro nombre")).json().total).toBe(0); // la búsqueda también usa la copia
       expect((await app.inject("/api/vencimientos?q=fono uno")).json().total).toBe(4);
     } finally {

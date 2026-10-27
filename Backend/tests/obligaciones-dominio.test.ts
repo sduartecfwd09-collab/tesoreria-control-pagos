@@ -28,7 +28,7 @@ describe("alertas de calidad del catálogo", () => {
     expect(pareceIban("000999888777")).toBe(false);
   });
 
-  it("cuenta faltantes y supuestos, y lista las sociedades sin obligaciones activas", () => {
+  it("cuenta faltantes y supuestos, y separa las sociedades sin obligaciones según tengan o no estados de cuenta", () => {
     const c = calidadCatalogo(
       [
         ob({ montoEsperado: 100, cuentaEsperadaId: 1, responsable: "X", frecuenciaPorConfirmar: false, monedaPorConfirmar: false }),
@@ -36,11 +36,12 @@ describe("alertas de calidad del catálogo", () => {
         ob({ identificador: "CR12000000000000000001" }),
         ob({ sociedad: "CCC", activa: false }),
       ],
-      ["AAA", "CCC", "DM"],
+      [{ nombre: "AAA", conEstados: true }, { nombre: "CCC", conEstados: true }, { nombre: "DM", conEstados: false }, { nombre: "EEE", conEstados: false }],
     );
     expect(c).toMatchObject({
       total: 4, activas: 3, inactivas: 1, sinDia: 1, sinMonto: 2, sinCuenta: 2, sinResponsable: 2,
-      sinMesArranque: 1, frecuenciaPorConfirmar: 2, monedaPorConfirmar: 2, sociedadesSinObligaciones: ["CCC", "DM"],
+      sinMesArranque: 1, frecuenciaPorConfirmar: 2, monedaPorConfirmar: 2, sociedadesSinObligaciones: ["CCC"],
+      sociedadesSinEstadosNiObligaciones: ["DM", "EEE"],
     });
     expect(c.formatoIban).toHaveLength(1);
   });

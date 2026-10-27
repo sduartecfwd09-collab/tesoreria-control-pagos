@@ -92,7 +92,7 @@ describe("catálogo: lectura", () => {
 
   it("cada obligación trae sus etiquetas, incluidas las alertas por confirmar con Tesorería", async () => {
     const o = await porId("00012345");
-    expect(o).toMatchObject({ sociedad: "AAA", diaEsperadoPago: 15, frecuencia: "mensual", moneda: "CRC", montoEsperado: null, cuentaEsperada: null });
+    expect(o).toMatchObject({ sociedad: "Sociedad AAA", diaEsperadoPago: 15, frecuencia: "mensual", moneda: "CRC", montoEsperado: null, cuentaEsperada: null });
     expect(o.etiquetas.map((e) => e.codigo)).toEqual(["falta_monto", "falta_cuenta", "falta_responsable", "por_confirmar"]);
     expect((await porId("77777777", "Fono Uno")).etiquetas.map((e) => e.codigo)).toContain("id_repetido");
     expect((await porId("CR12000000000000000001")).etiquetas.map((e) => e.codigo)).toContain("formato_iban");
@@ -102,11 +102,12 @@ describe("catálogo: lectura", () => {
     const r = (await app.inject("/api/obligaciones/resumen")).json().datos;
     expect(r).toMatchObject({
       total: 6, activas: 6, sinMonto: 6, sinCuenta: 6, sinResponsable: 6, sinDia: 0,
-      sociedadesSinObligaciones: ["DM"], porSociedad: { AAA: 4, BBB: 2, DM: 0 },
+      sociedadesSinObligaciones: [], sociedadesSinEstadosNiObligaciones: ["Sociedad DM"],
+      porSociedad: { "Sociedad AAA": 4, "Sociedad BBB": 2, "Sociedad DM": 0 },
       porCategoria: { Electricidad: 3, Telecom: 2, CCSS: 1 },
     });
-    expect(r.identificadoresRepetidos).toEqual([expect.objectContaining({ sociedad: "AAA", identificador: "77777777", proveedores: ["Fono Uno", "Fono Dos"] })]);
-    expect(r.formatoIban).toEqual([expect.objectContaining({ sociedad: "BBB", proveedor: "Luz Dos" })]);
+    expect(r.identificadoresRepetidos).toEqual([expect.objectContaining({ sociedad: "Sociedad AAA", identificador: "77777777", proveedores: ["Fono Uno", "Fono Dos"] })]);
+    expect(r.formatoIban).toEqual([expect.objectContaining({ sociedad: "Sociedad BBB", proveedor: "Luz Dos" })]);
   });
 });
 
@@ -119,7 +120,7 @@ describe("identificador duplicado: avisa, no bloquea", () => {
     expect(aviso.statusCode).toBe(409);
     expect(aviso.json()).toMatchObject({
       campo: "identificador",
-      advertencia: { tipo: "identificador_duplicado", otras: [{ sociedad: "AAA", categoria: "Electricidad", proveedor: "Luz Uno", activa: true }] },
+      advertencia: { tipo: "identificador_duplicado", otras: [{ sociedad: "Sociedad AAA", categoria: "Electricidad", proveedor: "Luz Uno", activa: true }] },
     });
     expect(JSON.stringify(aviso.json())).not.toContain("12345"); // el aviso no repite el identificador
     expect(await prisma.obligacion.count({ where: { proveedor: "Proveedor Nuevo" } })).toBe(0);
@@ -149,7 +150,7 @@ describe("identificador duplicado: avisa, no bloquea", () => {
     await patch(o.id, { activa: false });
     const r = await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "Otro Nuevo", identificador: "999888777" });
     expect(r.statusCode).toBe(409);
-    expect(r.json().advertencia.otras[0]).toMatchObject({ activa: false, sociedad: "BBB" });
+    expect(r.json().advertencia.otras[0]).toMatchObject({ activa: false, sociedad: "Sociedad BBB" });
     await patch(o.id, { activa: true });
   });
 });
@@ -228,7 +229,7 @@ describe("catálogo: edición y alta", () => {
     const crear = alta;
     const r = await crear({ sociedad: "dm", categoriaId: cat.id, proveedor: "Agua Uno", identificador: "000555", diaEsperadoPago: 5 });
     expect(r.statusCode).toBe(201);
-    expect(r.json().datos).toMatchObject({ sociedad: "DM", identificador: "000555", origen: "manual", frecuencia: "mensual", frecuenciaPorConfirmar: true });
+    expect(r.json().datos).toMatchObject({ sociedad: "Sociedad DM", identificador: "000555", origen: "manual", frecuencia: "mensual", frecuenciaPorConfirmar: true });
     expect((await app.inject("/api/obligaciones/resumen")).json().datos.sociedadesSinObligaciones).toEqual([]);
 
     const dup = await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "AGUA UNO", identificador: "000555" });

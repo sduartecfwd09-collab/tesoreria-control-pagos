@@ -1,8 +1,8 @@
 import { normalizar } from "../ingest/utiles.js";
 
-// La abreviatura de una sociedad es opcional: donde se necesita un texto corto se usa la abreviatura
-// y, si no tiene, el nombre largo.
-export const etiquetaSociedad = (s: { codigo: string | null; nombreLargo: string }): string => s.codigo ?? s.nombreLargo;
+// En pantalla y en las respuestas de la API una sociedad se muestra siempre con su nombre largo (oficial); la abreviatura
+// es interna y no se muestra.
+export const etiquetaSociedad = (s: { nombreLargo: string }): string => s.nombreLargo;
 
 /**
  * Clave de comparación del nombre de una sociedad: sin mayúsculas, tildes, puntuación ni espacios sobrantes.

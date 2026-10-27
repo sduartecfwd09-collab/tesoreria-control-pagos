@@ -9,13 +9,13 @@ import { env } from "../config/env.js";
 import { hayImportacionCatalogoEnCurso, importarCatalogo } from "../catalogo/importar.js";
 import {
   CAMPOS_EDITABLES, calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe,
-  identificadoresRepetidos, primerError, type ObligacionCalidad,
+  identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
   actualizarObligacion, buscarPorClave, buscarPorIdentificador, crearObligacion, listarCategorias, listarObligaciones, listarSociedades,
-  obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorId, todasLasObligaciones,
+  obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorId, sociedadesConEstados, todasLasObligaciones,
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
@@ -38,7 +38,9 @@ const consulta = z.object({
 
 const idParam = z.coerce.number().int().positive();
 
-const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({ ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad) });
+const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
+  ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad), responsable: responsableEfectivo(o).nombre,
+});
 
 function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>) {
   return {
@@ -50,7 +52,9 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     frecuencia: o.frecuencia, frecuenciaPorConfirmar: o.frecuenciaPorConfirmar, mesArranque: o.mesArranque,
     montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
     cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: enmascararCuenta(o.cuentaEsperada.numero), banco: o.cuentaEsperada.banco } : null,
-    responsable: o.responsable, activa: o.activa, origen: o.origen,
+    // `responsable` es el propio de la obligación (lo que se edita); `responsableEfectivo` es el que se muestra (el propio o el tesorero)
+    responsable: o.responsable, responsableEfectivo: responsableEfectivo(o).nombre, responsableDe: responsableEfectivo(o).de,
+    activa: o.activa, origen: o.origen,
     controlDesde: periodoDeControl(o.controlDesde),
     actualizado: o.actualizado.toISOString(),
     etiquetas: etiquetasDe(aCalidad(o), repetidos),
@@ -94,12 +98,12 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
   });
 
   app.get("/api/obligaciones/resumen", async () => {
-    const [obs, sociedades] = await Promise.all([todasLasObligaciones(), listarSociedades()]);
+    const [obs, sociedades, conEstados] = await Promise.all([todasLasObligaciones(), listarSociedades(), sociedadesConEstados()]);
     const activas = obs.filter((o) => o.activa);
     const contar = (xs: string[]) => xs.reduce<Record<string, number>>((m, x) => ({ ...m, [x]: (m[x] ?? 0) + 1 }), {});
     return {
       datos: {
-        ...calidadCatalogo(obs.map(aCalidad), sociedades.map(etiquetaSociedad)),
+        ...calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) }))),
         porSociedad: { ...Object.fromEntries(sociedades.map((s) => [etiquetaSociedad(s), 0])), ...contar(activas.map((o) => etiquetaSociedad(o.sociedad))) },
         porCategoria: contar(activas.map((o) => o.categoria.nombre)),
       },

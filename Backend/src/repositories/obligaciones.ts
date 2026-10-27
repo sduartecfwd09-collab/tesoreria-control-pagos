@@ -11,7 +11,7 @@ export const MOTIVO_CATEGORIA_DESCONOCIDA = "La categoría no existe: solo Jefat
 export const MOTIVO_ESTADO_DESCONOCIDO = "El estado de la fila no es «ACTIVA» ni «INACTIVA»: no se cargó, una persona decide";
 export const MOTIVO_SOCIEDAD_SIN_COINCIDENCIA = "La sociedad no coincide con ninguna sociedad existente";
 
-const incluir = { sociedad: true, categoria: true, cuentaEsperada: true } as const;
+const incluir = { sociedad: { include: { tesorero: { select: { nombre: true } } } }, categoria: true, cuentaEsperada: true } as const;
 export type ObligacionCompleta = Prisma.ObligacionGetPayload<{ include: typeof incluir }>;
 
 const claveObligacion = (sociedadId: number, proveedor: string, identificador: string, categoriaId: number) =>
@@ -112,7 +112,8 @@ export interface FiltroObligaciones {
 const FALTA: Record<NonNullable<FiltroObligaciones["falta"]>, Prisma.ObligacionWhereInput> = {
   monto: { montoEsperado: null },
   cuenta: { cuentaEsperadaId: null },
-  responsable: { responsable: null },
+  // sin responsable propio y sin tesorero en su sociedad (el responsable efectivo es el propio o, si falta, el tesorero)
+  responsable: { responsable: null, sociedad: { tesoreroId: null } },
   dia: { diaEsperadoPago: null },
 };
 
@@ -124,7 +125,7 @@ export async function listarObligaciones(f: FiltroObligaciones) {
     ...(f.activa !== undefined ? { activa: f.activa } : {}),
     ...(f.falta ? FALTA[f.falta] : {}),
     ...(f.q
-      ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }, { responsable: { contains: f.q } }] }
+      ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }, { responsable: { contains: f.q } }, { responsable: null, sociedad: { tesorero: { nombre: { contains: f.q } } } }] }
       : {}),
   };
   const [total, datos] = await Promise.all([
@@ -132,7 +133,7 @@ export async function listarObligaciones(f: FiltroObligaciones) {
     prisma.obligacion.findMany({
       where,
       include: incluir,
-      orderBy: [{ sociedad: { codigo: "asc" } }, { categoria: { nombre: "asc" } }, { proveedor: "asc" }, { identificador: "asc" }],
+      orderBy: [{ sociedad: { nombreLargo: "asc" } }, { categoria: { nombre: "asc" } }, { proveedor: "asc" }, { identificador: "asc" }],
       skip: (f.pagina - 1) * f.porPagina,
       take: f.porPagina,
     }),
@@ -171,9 +172,15 @@ export async function actualizarObligacion(id: number, data: Prisma.ObligacionUn
   return prisma.obligacion.update({ where: { id }, data, include: incluir });
 }
 
+/** Identificadores de las sociedades que tienen algún estado de cuenta cargado. */
+export async function sociedadesConEstados(): Promise<Set<number>> {
+  const g = await prisma.archivoImportado.groupBy({ by: ["sociedadId"], where: { sociedadId: { not: null } } });
+  return new Set(g.map((x) => x.sociedadId!));
+}
+
 export async function listarSociedades() {
   return prisma.sociedad.findMany({
-    orderBy: { codigo: "asc" },
+    orderBy: { nombreLargo: "asc" },
     include: { _count: { select: { obligaciones: true, cuentas: true } } },
   });
 }

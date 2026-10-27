@@ -51,8 +51,8 @@ describe("GET /api/vencimientos", () => {
   it("lista por periodo con el estado proyectado y marca los futuros según el reloj", async () => {
     const r = (await app.inject("/api/vencimientos?periodo=2026-09")).json();
     expect(r).toMatchObject({ total: 2, hoy: "2026-09-10" });
-    expect(r.datos[0]).toMatchObject({ sociedad: "AAA", proveedor: "Fono", fecha: "2026-09-15", estado: "proyectado", conciliado: false, futuro: true, moneda: "CRC" });
-    expect(r.datos[1]).toMatchObject({ sociedad: "BBB", fecha: "2026-09-30" });
+    expect(r.datos[0]).toMatchObject({ sociedad: "Sociedad AAA", proveedor: "Fono", fecha: "2026-09-15", estado: "proyectado", conciliado: false, futuro: true, moneda: "CRC" });
+    expect(r.datos[1]).toMatchObject({ sociedad: "Sociedad BBB", fecha: "2026-09-30" });
     const ago = (await app.inject("/api/vencimientos?periodo=2026-08")).json();
     expect(ago.datos.every((v: { futuro: boolean }) => !v.futuro)).toBe(true);
   });

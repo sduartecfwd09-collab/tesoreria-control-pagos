@@ -89,6 +89,13 @@ export function errorMesArranque(frecuencia: string, mesArranque: number | null 
 
 // --- Etiquetas y calidad ------------------------------------------------------------------------
 
+/** El responsable de la obligación es el suyo y, si no lo tiene, el tesorero de su sociedad. */
+export function responsableEfectivo(o: { responsable: string | null; sociedad: { tesorero: { nombre: string } | null } }): { nombre: string | null; de: "obligacion" | "tesorero" | null } {
+  if (o.responsable) return { nombre: o.responsable, de: "obligacion" };
+  if (o.sociedad.tesorero) return { nombre: o.sociedad.tesorero.nombre, de: "tesorero" };
+  return { nombre: null, de: null };
+}
+
 export interface ObligacionCalidad {
   id: number;
   sociedad: string;
@@ -102,6 +109,7 @@ export interface ObligacionCalidad {
   montoEsperado: number | null;
   monedaPorConfirmar: boolean;
   cuentaEsperadaId: number | null;
+  /** responsable efectivo: el de la obligación o, si no tiene, el tesorero de su sociedad */
   responsable: string | null;
 }
 
@@ -131,7 +139,7 @@ export function etiquetasDe(o: ObligacionCalidad, repetidos: ReturnType<typeof i
   if (o.diaEsperadoPago === null) e.push({ codigo: "falta_dia", texto: "Falta día", ayuda: "Sin día esperado de pago no se pueden generar sus vencimientos. Indíquelo al editar." });
   if (o.montoEsperado === null) e.push({ codigo: "falta_monto", texto: "Falta monto", ayuda: "Monto esperado sin definir. Es opcional: en el piloto el monto no se valida." });
   if (o.cuentaEsperadaId === null) e.push({ codigo: "falta_cuenta", texto: "Falta cuenta", ayuda: "No se indicó desde qué cuenta bancaria se paga. Es opcional." });
-  if (o.responsable === null) e.push({ codigo: "falta_responsable", texto: "Sin responsable", ayuda: "Nadie asignado. Es opcional: en el piloto todos ven todo." });
+  if (o.responsable === null) e.push({ codigo: "falta_responsable", texto: "Sin responsable", ayuda: "La obligación no tiene responsable y su sociedad no tiene tesorero asignado." });
   if (o.frecuencia !== "mensual" && o.mesArranque === null) {
     e.push({ codigo: "falta_mes_arranque", texto: "Falta mes de arranque", ayuda: "Para una frecuencia no mensual indique en qué mes toca el primer pago." });
   }
@@ -150,9 +158,16 @@ export function etiquetasDe(o: ObligacionCalidad, repetidos: ReturnType<typeof i
   return e;
 }
 
-export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: string[]) {
+/** Una sociedad con su nombre y si tiene estados de cuenta cargados (para separar las que están fuera del piloto). */
+export interface SociedadParaCalidad {
+  nombre: string;
+  conEstados: boolean;
+}
+
+export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: SociedadParaCalidad[]) {
   const activas = obs.filter((o) => o.activa);
   const conActivas = new Set(activas.map((o) => o.sociedad));
+  const sinObligaciones = sociedades.filter((s) => !conActivas.has(s.nombre));
   const n = (f: (o: ObligacionCalidad) => boolean) => activas.filter(f).length;
   return {
     total: obs.length,
@@ -167,6 +182,9 @@ export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: string[]) 
     monedaPorConfirmar: n((o) => o.monedaPorConfirmar),
     identificadoresRepetidos: identificadoresRepetidos(obs),
     formatoIban: activas.filter((o) => pareceIban(o.identificador)).map((o) => ({ id: o.id, sociedad: o.sociedad, proveedor: o.proveedor, identificador: o.identificador })),
-    sociedadesSinObligaciones: sociedades.filter((s) => !conActivas.has(s)).sort(),
+    // con estados de cuenta pero sin obligaciones: aviso individual (algo falta en el catálogo)
+    sociedadesSinObligaciones: sinObligaciones.filter((s) => s.conEstados).map((s) => s.nombre).sort(),
+    // sin estados de cuenta ni obligaciones: una sola línea resumen (sociedades fuera del piloto)
+    sociedadesSinEstadosNiObligaciones: sinObligaciones.filter((s) => !s.conEstados).map((s) => s.nombre).sort(),
   };
 }

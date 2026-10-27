@@ -33,7 +33,7 @@ describe.skipIf(!hayArchivo)("importación del catálogo real", () => {
 
     const c = calidadCatalogo(
       (await todasLasObligaciones()).map((o) => ({ ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad) })),
-      (await listarSociedades()).map(etiquetaSociedad),
+      (await listarSociedades()).map((s) => ({ nombre: etiquetaSociedad(s), conEstados: false })),
     );
     expect(c.total).toBe(r.creadas);
 
