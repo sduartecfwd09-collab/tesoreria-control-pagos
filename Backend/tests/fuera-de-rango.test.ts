@@ -5,7 +5,7 @@ import type { CuentaCorte } from "../src/domain/cobertura-corte.js";
 import { cruzar, MOTIVOS, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
 import { textoSinEstadosAnteriores } from "../src/domain/textos-pago.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
 
 const dia = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 const HOY = dia(2026, 10, 27);
@@ -75,6 +75,7 @@ describe("detalle de Vencido: pago con el mismo número fuera del rango", () => 
   let n = 0;
 
   beforeAll(async () => {
+    await fijarDiasDespues(3);
     await vaciarImportaciones();
     const categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
     const sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
@@ -98,6 +99,7 @@ describe("detalle de Vencido: pago con el mismo número fuera del rango", () => 
   });
   afterAll(async () => {
     await app.close();
+    await fijarDiasDespues(12);
     await vaciarImportaciones();
   });
 

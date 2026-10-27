@@ -30,8 +30,8 @@ export const DEFINICIONES: DefinicionParametro[] = [
     clave: "ventana_dias_despues",
     etiqueta: "Días después de la fecha de pago",
     ayuda:
-      "Cuántos días después de la fecha de pago se acepta un pago como válido para esa obligación. Pasado ese margen sin pago, el vencimiento queda vencido (si hay estados de cuenta que lo confirmen).",
-    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 15, supuesto: false,
+      "Cuántos días después de la fecha de pago se sigue buscando el pago en los estados de cuenta. Pasado ese plazo sin encontrarlo, el vencimiento queda vencido (si hay estados de cuenta que lo confirmen). Se cuentan días calendario y pueden cruzar de un mes a otro.",
+    tipo: "entero", ambito: "global", valorInicial: "12", unidad: "días", min: 0, max: 15, supuesto: false,
   },
   {
     clave: "aviso_dias",

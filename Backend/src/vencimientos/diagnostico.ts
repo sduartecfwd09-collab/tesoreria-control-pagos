@@ -12,7 +12,7 @@ export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInf
   const nombre = (id: number) => sociedades.find((s) => s.id === id)?.codigo ?? `sociedad ${id}`;
   const L: string[] = [];
   const { hoy } = r.parametros;
-  L.push(`Cruce al ${iso(hoy)} · ventana ${r.parametros.diasAntes} días antes y ${r.parametros.diasDespues} después · aviso ${r.parametros.diasAviso} días`);
+  L.push(`Cruce al ${iso(hoy)} · rango de búsqueda ${r.parametros.diasAntes} días antes y ${r.parametros.diasDespues} después · aviso ${r.parametros.diasAviso} días`);
   L.push(`Vencimientos evaluados: ${r.vencimientos} · débitos considerados: ${r.datos.movimientos.length}`);
 
   L.push("", "Vencimientos por estado:");

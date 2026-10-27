@@ -8,7 +8,7 @@ import { movimientosParaGrupos } from "../src/repositories/cruce.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeGruposCompartidos } from "../src/vencimientos/diagnostico-grupos.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
 
 // Textos de la pantalla: con datos reales, sin valores técnicos crudos y sin huecos aunque falte un dato.
 const CRUDO = /por_revisar|sin_informacion|pagado_con_inconsistencia|\bnull\b|undefined|NaN|\[object|\{|\}|\(\s*\)|\s{2,}|\s[,.;:]|,\s*,|:\s*\./i;
@@ -113,6 +113,7 @@ describe("grupo de obligaciones con el mismo número de servicio: detalle de Por
   };
 
   beforeAll(async () => {
+    await fijarDiasDespues(3);
     await vaciarImportaciones();
     sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
     cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001111", banco: "Banco Uno", moneda: "CRC" } })).id;
@@ -132,6 +133,7 @@ describe("grupo de obligaciones con el mismo número de servicio: detalle de Por
   });
   afterAll(async () => {
     await app.close();
+    await fijarDiasDespues(12);
     await vaciarImportaciones();
   });
 

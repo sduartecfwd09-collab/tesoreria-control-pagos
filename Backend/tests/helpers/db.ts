@@ -40,3 +40,9 @@ export async function generarRango(desde: string, hasta: string) {
   const [y, m] = hasta.split("-").map(Number) as [number, number];
   return sincronizarVencimientos(() => new Date(y, m, 0, 10, 0));
 }
+
+/** Fija el parámetro «días después de la fecha de pago» (el valor inicial del sistema es 12; varias pruebas fijan 3 para probar el borde). */
+export async function fijarDiasDespues(valor: number) {
+  exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
+  await prisma.parametro.updateMany({ where: { clave: "ventana_dias_despues" }, data: { valor: String(valor) } });
+}

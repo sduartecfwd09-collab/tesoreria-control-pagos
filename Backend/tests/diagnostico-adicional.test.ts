@@ -5,7 +5,7 @@ import { cargarDescripcionesPorSociedad, primerasFechasPorCuenta } from "../src/
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeAdicionalCruce } from "../src/vencimientos/diagnostico-adicional.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
 
 // Diagnóstico adicional con datos inventados. Hoy = 2026-10-27, ventana -3/+3.
 const reloj = () => new Date(2026, 9, 27, 10, 0);
@@ -32,6 +32,7 @@ async function informe() {
 
 beforeEach(async () => {
   await vaciarImportaciones();
+  await fijarDiasDespues(3);
   sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
   cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001234" } })).id;
   categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
@@ -41,7 +42,10 @@ beforeEach(async () => {
   }
   await mov(dia(2026, 10, 26), "COMISION SIN RELACION", 100n); // último día con datos
 });
-afterAll(vaciarImportaciones);
+afterAll(async () => {
+  await fijarDiasDespues(12);
+  await vaciarImportaciones();
+});
 
 const obligacion = (proveedor: string, identificador: string, extra: object = {}) =>
   prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor, identificador, diaEsperadoPago: 15, controlDesde: dia(2026, 10, 1), ...extra } });

@@ -35,7 +35,7 @@ Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README
 
 ## Decisiones vigentes
 - **Monto:** el monto esperado lo digita Tesorería y es opcional, así que el campo admite nulo. No se valida contra el pago (no hay tolerancia de monto: se eliminó el 2026-10-27). Si falta, se muestra «Sin monto». **Hay montos mayores a ₡21,4 millones:** los campos de monto son `BigInt` (centavos) y la API los envía como número.
-- **Cruce:** por identificador, sociedad, cuenta y fecha. Ventana de ±3 días calendario alrededor de la fecha esperada, que puede cruzar de un mes a otro (parámetro `ventana_dias`). Es automático solo si el resultado es claro; lo dudoso va a revisión humana. El extractor de identificador reconoce varios patrones (p. ej. `Pago:JASEC <8 dígitos>`, SINPE con «CONTRATO <9 dígitos>»).
+- **Cruce:** por identificador, sociedad, cuenta y fecha. Rango de búsqueda de 3 días antes y 12 días después de la fecha esperada (días calendario), que puede cruzar de un mes a otro (parámetros `ventana_dias_antes` y `ventana_dias_despues`). Es automático solo si el resultado es claro; lo dudoso va a revisión humana. El extractor de identificador reconoce varios patrones (p. ej. `Pago:JASEC <8 dígitos>`, SINPE con «CONTRATO <9 dígitos>»).
 - **Frecuencias:** mensual, bimestral, trimestral, semestral y anual, con los meses de pago marcados. La proyección es el próximo mes marcado.
 - **«Control desde» (mes) por obligación:** antes de ese mes no se generan vencimientos. No hay mes de inicio global.
 - **Fecha del catálogo:** el día del catálogo («15 DIA») es la fecha normal de pago aproximada, no el vencimiento.

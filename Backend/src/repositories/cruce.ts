@@ -123,3 +123,30 @@ export async function movimientosParaGrupos() {
   });
   return filas.map((f) => ({ sociedadId: f.cuenta.sociedadId, fecha: f.fecha, descripcion: f.descripcion, esDebito: f.debito > 0n }));
 }
+
+/** Para el diagnóstico: nombre de la categoría de cada obligación activa. */
+export async function categoriasPorObligacion(): Promise<Map<number, string>> {
+  const filas = await prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, categoria: { select: { nombre: true } } } });
+  return new Map(filas.map((f) => [f.id, f.categoria.nombre]));
+}
+
+export interface DebitoParaFormato {
+  formato: string | null;
+  codigoBanco: string | null;
+  tieneIdExtraido: boolean;
+  descripcion: string | null;
+  referencia: string | null;
+  codigo: string | null;
+}
+
+/** Para el diagnóstico por banco y formato: los textos de cada débito vigente. Nunca salen del proceso. */
+export async function debitosParaFormato(): Promise<DebitoParaFormato[]> {
+  const filas = await prisma.movimiento.findMany({
+    where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
+    select: { descripcion: true, referencia: true, codigo: true, idExtraido: true, cuenta: { select: { formato: true, codigoBanco: true } } },
+  });
+  return filas.map((f) => ({
+    formato: f.cuenta.formato, codigoBanco: f.cuenta.codigoBanco, tieneIdExtraido: f.idExtraido !== null,
+    descripcion: f.descripcion, referencia: f.referencia, codigo: f.codigo,
+  }));
+}

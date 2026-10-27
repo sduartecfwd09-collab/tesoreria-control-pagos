@@ -7,7 +7,7 @@ import { listarSociedades } from "../src/repositories/obligaciones.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../src/vencimientos/diagnostico.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
 
 // Cruce contra la base de pruebas con datos inventados. Hoy = 2026-10-27.
 const reloj = () => new Date(2026, 9, 27, 10, 0);
@@ -24,6 +24,7 @@ const venc = () => prisma.vencimiento.findFirstOrThrow({ where: { obligacionId, 
 
 beforeEach(async () => {
   await vaciarImportaciones();
+  await fijarDiasDespues(3);
   sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
   cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001234" } })).id;
   const categoria = await prisma.categoria.findFirstOrThrow();
@@ -38,7 +39,10 @@ beforeEach(async () => {
   await mov(dia(2026, 9, 3), "COMISION INICIAL"); // los datos empiezan antes de cualquier rango de búsqueda
   await mov(dia(2026, 10, 26), "COMISION SIN RELACION");
 });
-afterAll(vaciarImportaciones);
+afterAll(async () => {
+  await fijarDiasDespues(12);
+  await vaciarImportaciones();
+});
 
 describe("cruce sobre la base", () => {
   it("genera el calendario, cruza y es idempotente", async () => {

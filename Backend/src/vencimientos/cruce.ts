@@ -26,7 +26,7 @@ export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
   const datos = await cargarDatosCruce();
   const parametros = {
     diasAntes: await entero("ventana_dias_antes", 3),
-    diasDespues: await entero("ventana_dias_despues", 3),
+    diasDespues: await entero("ventana_dias_despues", 12),
     diasAviso: await diasDeAviso(),
     marcarVencidoSinEstado: (await valorGlobal("marcar_vencido_sin_estado")) === "si",
     hoy: hoyDe(reloj),

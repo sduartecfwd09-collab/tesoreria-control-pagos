@@ -12,7 +12,7 @@ describe("API de parámetros", () => {
   it("expone los parámetros iniciales", async () => {
     const d = await lista();
     expect(d.find((p) => p.clave === "ventana_dias_antes")?.valor).toBe("3");
-    expect(d.find((p) => p.clave === "ventana_dias_despues")?.valor).toBe("3");
+    expect(d.find((p) => p.clave === "ventana_dias_despues")?.valor).toBe("12");
     expect(d.some((p) => p.clave === "ventana_dias")).toBe(false);
     expect(d.find((p) => p.clave === "aviso_dias")?.valor).toBe("3");
     expect(d.find((p) => p.clave === "frecuencia_defecto")?.valor).toBe("mensual");

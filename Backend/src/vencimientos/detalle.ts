@@ -32,7 +32,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
   if (!v) return null;
   const hoy = hoyDe(reloj);
   const diasAntes = await entero("ventana_dias_antes", 3);
-  const diasDespues = await entero("ventana_dias_despues", 3);
+  const diasDespues = await entero("ventana_dias_despues", 12);
   const desde = new Date(v.fecha.getTime() - diasAntes * MS_DIA);
   const hasta = new Date(v.fecha.getTime() + diasDespues * MS_DIA);
   const clave = identificadorClave(v.obligacion.identificador);

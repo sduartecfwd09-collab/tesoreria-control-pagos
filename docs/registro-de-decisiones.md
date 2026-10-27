@@ -39,6 +39,7 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | Menú lateral negro de la maqueta, solo con pantallas que existen; el inicio es «Pagos del mes»; «Archivos importados» pasa a «Estados de cuenta». | La maqueta es lo que vio Tesorería. |
 | 2026-10-27 | Si el rango de búsqueda de un vencimiento empieza antes de la primera fecha con movimientos cargados y no hay pago, el estado es Sin información, no Vencido. | El pago pudo hacerse antes de que empezaran los estados de cuenta. |
 | 2026-10-27 | El detalle de Vencido dice si hay un pago con el mismo número fuera del margen (el más cercano que no respalda otro vencimiento). | Un «no se encontró» sin más sugería que el pago no existía en ningún estado. |
+| 2026-10-27 | Los días después de la fecha de pago pasan de 3 a 12 (sigue siendo parámetro editable); los días antes se quedan en 3. | Los pagos de servicios llegan al banco varios días después de la fecha del catálogo; el diagnóstico con datos reales mostrará si 12 es suficiente. |
 
 ## Pendientes con Tesorería
 
