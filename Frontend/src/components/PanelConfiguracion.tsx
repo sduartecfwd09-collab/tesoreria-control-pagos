@@ -35,11 +35,6 @@ function FilaParametro({ p, alGuardar }: { p: Parametro; alGuardar: (p: Parametr
       <div>
         <label htmlFor={idCampo} className="font-semibold">
           {p.categoria ? p.categoria : p.etiqueta}
-          {p.supuesto && (
-            <span className="ml-2 align-middle text-xs font-medium bg-ambar-fondo text-ambar-texto rounded px-2 py-0.5">
-              Por confirmar con Tesorería
-            </span>
-          )}
         </label>
         <p id={`${idCampo}-ayuda`} className="mt-1 text-sm text-suave max-w-xl">
           {p.ayuda} {rango}
@@ -154,7 +149,7 @@ export function PanelConfiguracion() {
           Tolerancia de monto por categoría
         </h2>
         <p className="mt-2 text-sm text-suave max-w-2xl">
-          En el piloto el monto no se valida: estos valores se guardan para cuando Tesorería active esa regla.
+          Diferencia aceptada entre el monto esperado y el monto pagado, según la categoría.
         </p>
         {porCategoria.map((p) => (
           <FilaParametro key={p.id} p={p} alGuardar={alGuardar} />

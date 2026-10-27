@@ -14,9 +14,9 @@ export function ResumenCalidad({
 }) {
   const tarjetas: { falta?: Falta; titulo: string; n: number; ayuda: string }[] = [
     { titulo: "Obligaciones activas", n: r.activas, ayuda: r.inactivas ? `${r.inactivas} inactivas` : "ninguna inactiva" },
-    { falta: "monto", titulo: "Falta monto", n: r.sinMonto, ayuda: "opcional en el piloto" },
-    { falta: "cuenta", titulo: "Falta cuenta", n: r.sinCuenta, ayuda: "cuenta de pago esperada" },
-    { falta: "responsable", titulo: "Sin responsable", n: r.sinResponsable, ayuda: "opcional" },
+    { falta: "monto", titulo: "Falta monto", n: r.sinMonto, ayuda: "dato opcional" },
+    { falta: "cuenta", titulo: "Falta cuenta", n: r.sinCuenta, ayuda: "dato opcional" },
+    { falta: "responsable", titulo: "Sin responsable", n: r.sinResponsable, ayuda: "ni propio ni del tesorero" },
     ...(r.sinDia > 0 ? [{ falta: "dia" as const, titulo: "Falta día", n: r.sinDia, ayuda: "no generan vencimientos" }] : []),
   ];
   const fuera = r.sociedadesSinEstadosNiObligaciones;
@@ -70,7 +70,7 @@ export function ResumenCalidad({
             {r.identificadoresRepetidos.map((g) => (
               <li key={`${g.sociedad}-${g.identificador}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>
-                  <strong>Identificador repetido</strong> en {g.sociedad}: <span className="font-mono">{g.identificador}</span> aparece con {g.proveedores.join(" y ")}. Confirme cuál es el correcto.
+                  <strong>Identificador repetido</strong> en {g.sociedad}: <span className="font-mono">{g.identificador}</span>. El mismo identificador aparece con otro proveedor ({g.proveedores.join(", ")}). Verifique cuál es el correcto.
                 </span>
                 <button type="button" className={`${claseBotonSecundario} py-1 text-sm`} onClick={() => alBuscar(g.sociedad, g.identificador)}>
                   Ver
@@ -80,7 +80,7 @@ export function ResumenCalidad({
             {r.formatoIban.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>
-                  <strong>Identificador con formato de IBAN</strong> en {o.sociedad} ({o.proveedor}): parece una cuenta bancaria y no un número de servicio.
+                  <strong>Identificador con formato de IBAN</strong> en {o.sociedad} ({o.proveedor}): parece una cuenta bancaria y no un número de servicio. Verifique cuál es el correcto.
                 </span>
                 <button type="button" className={`${claseBotonSecundario} py-1 text-sm`} onClick={() => alBuscar(o.sociedad, o.identificador)}>
                   Ver
@@ -110,9 +110,9 @@ export function ResumenCalidad({
             )}
           </ul>
         )}
-        {(r.frecuenciaPorConfirmar > 0 || r.sinMesArranque > 0) && (
+        {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0 || r.sinMesArranque > 0) && (
           <p className="mt-3 text-sm text-suave">
-            {r.frecuenciaPorConfirmar > 0 && `${r.frecuenciaPorConfirmar} obligaciones tienen la frecuencia supuesta (mensual) por confirmar. `}
+            {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0) && "La tabla de pagos no trae frecuencia, moneda, monto ni cuenta; se aplicó mensual y colones. "}
             {r.sinMesArranque > 0 && `${r.sinMesArranque} con frecuencia no mensual no tienen mes de arranque y no generan vencimientos.`}
           </p>
         )}

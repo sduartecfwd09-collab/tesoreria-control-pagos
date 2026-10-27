@@ -8,6 +8,7 @@ import type {
   ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad,
 } from "@/lib/tipos";
 import { CajaError, claseBoton, claseBotonSecundario, claseControl, FinDeLista } from "../ui";
+import { SelectorSociedad } from "../SelectorSociedad";
 import { FormularioObligacion } from "./FormularioObligacion";
 import { ResumenCalidad } from "./ResumenCalidad";
 import { TablaObligaciones } from "./TablaObligaciones";
@@ -163,24 +164,25 @@ export function PanelObligaciones() {
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
-          <label className="text-sm font-medium">
-            Sociedad
-            <select className={`${claseControl} mt-1 w-full`} title={catalogos.sociedades.find((s) => s.id === filtro.sociedadId)?.nombreLargo} value={filtro.sociedadId ?? ""} onChange={(e) => cambiarFiltro({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
-              <option value="">Todas</option>
-              {catalogos.sociedades.map((s) => (
-                <option key={s.id} value={s.id} title={s.nombreLargo}>
-                  {s.nombreLargo} ({s.obligaciones})
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="text-sm font-medium">
+            <label htmlFor="filtro-sociedad">Sociedad</label>
+            <div className="mt-1">
+              <SelectorSociedad
+                id="filtro-sociedad"
+                opciones={catalogos.sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombreLargo }))}
+                valor={filtro.sociedadId ? String(filtro.sociedadId) : ""}
+                alCambiar={(v) => cambiarFiltro({ sociedadId: v ? Number(v) : undefined })}
+                textoTodas="Todas"
+              />
+            </div>
+          </div>
           <label className="text-sm font-medium">
             Categoría
             <select className={`${claseControl} mt-1 w-full`} value={filtro.categoria ?? ""} onChange={(e) => cambiarFiltro({ categoria: e.target.value ? Number(e.target.value) : undefined })}>
               <option value="">Todas</option>
               {catalogos.categorias.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nombre} ({c.obligaciones})
+                  {c.nombre}
                 </option>
               ))}
             </select>
@@ -235,8 +237,8 @@ export function PanelObligaciones() {
           </>
         )}
         <p className="mt-4 text-sm text-suave">
-          Etiquetas: <strong>Falta monto</strong> y <strong>Falta cuenta</strong> son datos opcionales sin completar. <strong>Por confirmar con Tesorería</strong> marca valores supuestos o
-          dudosos (pase el cursor sobre la etiqueta o abra «Editar» para ver el detalle). <strong>Falta día</strong> y <strong>Falta mes de arranque</strong> impiden generar vencimientos.
+          <strong>Observaciones</strong> señala solo problemas reales: un identificador repetido o con formato de IBAN, y la falta del día de pago o del mes de arranque, sin los cuales no se
+          generan vencimientos. Pase el cursor sobre una observación para ver el detalle.
         </p>
       </section>
 

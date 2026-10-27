@@ -5,6 +5,7 @@ import { nombrePeriodo, ordenarSociedades, periodoActual } from "@/lib/formato";
 import type { Categoria, FiltroVencimientos, Sociedad } from "@/lib/tipos";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import { CajaError, claseControl, FinDeLista } from "../ui";
+import { SelectorSociedad } from "../SelectorSociedad";
 import { GenerarVencimientos } from "./GenerarVencimientos";
 import { TablaVencimientos } from "./TablaVencimientos";
 
@@ -69,8 +70,7 @@ export function PanelVencimientos() {
     <>
       <div className="mt-6 rounded border-l-4 border-control bg-fondo-suave p-4 text-sm max-w-3xl">
         <p>
-          <strong>Estados:</strong> por ahora todos los vencimientos están en estado <strong>Proyectado</strong> (se espera el pago en esa fecha). Los estados
-          Por vencer, Vencido, Pagado, Pagado con inconsistencia y Sin información llegan con el cruce de pagos (Hito 4).
+          <strong>Proyectado</strong> significa que se espera el pago en esa fecha. Los demás estados aparecen cuando los pagos se cruzan con los estados de cuenta.
         </p>
       </div>
 
@@ -96,21 +96,24 @@ export function PanelVencimientos() {
                 <select className={`${claseControl} mt-1 w-full`} value={filtro.periodo ?? ""} onChange={(e) => cambiar({ periodo: e.target.value || undefined })}>
                   {base.periodos.map((p) => (
                     <option key={p.periodo} value={p.periodo}>
-                      {nombrePeriodo(p.periodo)} ({p.total})
+                      {nombrePeriodo(p.periodo)}
                     </option>
                   ))}
                   <option value="">Todos los periodos</option>
                 </select>
               </label>
-              <label className="text-sm font-medium">
-                Sociedad
-                <select className={`${claseControl} mt-1 w-full`} title={base.sociedades.find((x) => x.id === filtro.sociedadId)?.nombreLargo} value={filtro.sociedadId ?? ""} onChange={(e) => cambiar({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
-                  <option value="">Todas</option>
-                  {base.sociedades.map((s) => (
-                    <option key={s.id} value={s.id} title={s.nombreLargo}>{s.nombreLargo}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="text-sm font-medium">
+                <label htmlFor="filtro-sociedad">Sociedad</label>
+                <div className="mt-1">
+                  <SelectorSociedad
+                    id="filtro-sociedad"
+                    opciones={base.sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombreLargo }))}
+                    valor={filtro.sociedadId ? String(filtro.sociedadId) : ""}
+                    alCambiar={(v) => cambiar({ sociedadId: v ? Number(v) : undefined })}
+                    textoTodas="Todas"
+                  />
+                </div>
+              </div>
               <label className="text-sm font-medium">
                 Categoría
                 <select className={`${claseControl} mt-1 w-full`} value={filtro.categoria ?? ""} onChange={(e) => cambiar({ categoria: e.target.value ? Number(e.target.value) : undefined })}>

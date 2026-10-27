@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useForm, useWatch, type FieldPath } from "react-hook-form";
+import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { ErrorApi } from "@/lib/api";
 import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_MONEDA, SIMBOLO } from "@/lib/formato";
 import type { CambiosObligacion, Categoria, Cuenta, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir, Etiqueta } from "../ui";
+import { SelectorSociedad } from "../SelectorSociedad";
 
 const MONTO_MAXIMO = Number.MAX_SAFE_INTEGER; // centavos (el mismo límite del Backend)
 
@@ -104,7 +105,7 @@ export function FormularioObligacion({
   const [frecuencia, mesArranque, moneda, sociedad] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda", "sociedad"] });
   const cuentasSociedad = useMemo(() => {
     const elegida = sociedades.find((s) => String(s.id) === sociedad);
-    return elegida ? cuentas.filter((c) => c.sociedad === (elegida.codigo ?? elegida.nombreLargo)) : [];
+    return elegida ? cuentas.filter((c) => c.sociedad === elegida.nombreLargo) : [];
   }, [cuentas, sociedades, sociedad]);
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
 
@@ -122,7 +123,7 @@ export function FormularioObligacion({
   }
 
   const desc = (id: keyof Valores, ayuda = true) => describir(`f-${id}`, ayuda, !!errors[id]);
-  const avisos = obligacion?.etiquetas.filter((e) => e.codigo !== "falta_responsable") ?? [];
+  const avisos = obligacion?.etiquetas ?? [];
 
   return (
     <dialog
@@ -155,7 +156,7 @@ export function FormularioObligacion({
               <ul className="mt-2 space-y-2 text-sm">
                 {avisos.map((a) => (
                   <li key={a.codigo}>
-                    <Etiqueta tono={a.codigo === "falta_dia" || a.codigo === "falta_mes_arranque" ? "rojo" : a.codigo.startsWith("falta") ? "suave" : "ambar"}>{a.texto}</Etiqueta>{" "}
+                    <Etiqueta tono={a.codigo === "falta_dia" || a.codigo === "falta_mes_arranque" ? "rojo" : "ambar"}>{a.texto}</Etiqueta>{" "}
                     {a.ayuda}
                   </li>
                 ))}
@@ -167,12 +168,22 @@ export function FormularioObligacion({
             <fieldset className="grid gap-4 sm:grid-cols-2">
               <legend className="mb-2 text-lg font-bold">Datos de la obligación</legend>
               <Campo id="f-sociedad" etiqueta="Sociedad" error={errors.sociedad?.message}>
-                <select id="f-sociedad" className={`${claseControl} w-full`} aria-describedby={desc("sociedad", false)} {...register("sociedad", { required: "Elija la sociedad" })}>
-                  <option value="">Elija una sociedad…</option>
-                  {sociedades.map((s) => (
-                    <option key={s.id} value={String(s.id)}>{s.nombreLargo}</option>
-                  ))}
-                </select>
+                <Controller
+                  name="sociedad"
+                  control={control}
+                  rules={{ required: "Elija la sociedad" }}
+                  render={({ field }) => (
+                    <SelectorSociedad
+                      id="f-sociedad"
+                      opciones={sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombreLargo }))}
+                      valor={field.value}
+                      alCambiar={field.onChange}
+                      alPerderFoco={field.onBlur}
+                      describedBy={desc("sociedad", false)}
+                      invalido={!!errors.sociedad}
+                    />
+                  )}
+                />
               </Campo>
               <Campo id="f-categoriaId" etiqueta="Categoría" error={errors.categoriaId?.message}>
                 <select id="f-categoriaId" className={`${claseControl} w-full`} aria-describedby={desc("categoriaId", false)} {...register("categoriaId", { required: "Elija la categoría" })}>
@@ -219,8 +230,7 @@ export function FormularioObligacion({
             <Campo
               id="f-frecuencia"
               etiqueta="Frecuencia"
-              extra={obligacion?.frecuenciaPorConfirmar && <span className="ml-2 align-middle"><Etiqueta tono="ambar">Por confirmar con Tesorería</Etiqueta></span>}
-              ayuda="Cada cuánto se paga. La tabla de pagos no trae este dato: se supuso mensual."
+              ayuda="Cada cuánto se paga."
               error={errors.frecuencia?.message}
             >
               <select id="f-frecuencia" className={`${claseControl} w-full`} aria-describedby={desc("frecuencia")} {...register("frecuencia")}>
@@ -230,7 +240,7 @@ export function FormularioObligacion({
               </select>
               <label className="mt-2 flex items-center gap-2 text-sm">
                 <input type="checkbox" className="h-4 w-4" {...register("frecuenciaConfirmada")} />
-                Confirmada con Tesorería
+                Confirmada
               </label>
             </Campo>
             {frecuencia !== "mensual" && (
@@ -261,8 +271,7 @@ export function FormularioObligacion({
             <Campo
               id="f-moneda"
               etiqueta="Moneda"
-              extra={obligacion?.monedaPorConfirmar && <span className="ml-2 align-middle"><Etiqueta tono="ambar">Por confirmar con Tesorería</Etiqueta></span>}
-              ayuda="La tabla de pagos no trae la moneda: se supuso colones."
+              ayuda="Moneda en que se paga."
               error={errors.moneda?.message}
             >
               <select id="f-moneda" className={`${claseControl} w-full`} aria-describedby={desc("moneda")} {...register("moneda")}>
@@ -272,13 +281,13 @@ export function FormularioObligacion({
               </select>
               <label className="mt-2 flex items-center gap-2 text-sm">
                 <input type="checkbox" className="h-4 w-4" {...register("monedaConfirmada")} />
-                Confirmada con Tesorería
+                Confirmada
               </label>
             </Campo>
             <Campo
               id="f-monto"
               etiqueta={`Monto esperado (${SIMBOLO[moneda]})`}
-              ayuda="Opcional. Solo números, con hasta 2 decimales (p. ej. 15000 o 15000,50). En el piloto el monto no se valida contra el pago."
+              ayuda="Opcional. Solo números, con hasta 2 decimales (p. ej. 15000 o 15000,50)."
               error={errors.monto?.message}
             >
               <input
@@ -314,7 +323,7 @@ export function FormularioObligacion({
                 ))}
               </select>
             </Campo>
-            <Campo id="f-responsable" etiqueta="Responsable" ayuda="Opcional. Persona de Tesorería a cargo; en el piloto todos ven todo." error={errors.responsable?.message}>
+            <Campo id="f-responsable" etiqueta="Responsable" ayuda="Opcional. Persona de Tesorería a cargo." error={errors.responsable?.message}>
               <input id="f-responsable" className={`${claseControl} w-full`} placeholder="Sin asignar" aria-describedby={desc("responsable")} {...register("responsable", { maxLength: { value: 80, message: "Máximo 80 caracteres" } })} />
             </Campo>
           </fieldset>

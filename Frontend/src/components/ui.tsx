@@ -56,10 +56,10 @@ export function FinDeLista({ cantidad, total, unidad, hayMas, cargando, alLlegar
   );
 }
 
-/** Nombre largo de una sociedad: hasta 2 líneas en listas y tablas, con el nombre completo al pasar el cursor. */
+/** Nombre largo de una sociedad en tablas: peso normal, letra pequeña y hasta 3 líneas, con el nombre completo al pasar el cursor. */
 export function NombreSociedad({ nombre, className = "" }: { nombre: string; className?: string }) {
   return (
-    <span title={nombre} className={`line-clamp-2 ${className}`}>
+    <span title={nombre} className={`line-clamp-3 text-xs ${className}`}>
       {nombre}
     </span>
   );

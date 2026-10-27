@@ -1,6 +1,6 @@
 "use client";
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
-import { monto, nombreFecha } from "@/lib/formato";
+import { nombreFecha } from "@/lib/formato";
 import type { EstadoVencimiento, Vencimiento } from "@/lib/tipos";
 import { Etiqueta, NombreSociedad, type Tono } from "../ui";
 
@@ -17,7 +17,7 @@ const ESTADO: Record<EstadoVencimiento, { texto: string; tono: Tono }> = {
 const col = createColumnHelper<Vencimiento>();
 const columnas = [
   col.accessor("fecha", { header: "Vence", cell: (c) => <span className="whitespace-nowrap font-medium">{nombreFecha(c.getValue())}</span> }),
-  col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="font-semibold min-w-40 max-w-64" /> }),
+  col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="min-w-40 max-w-64" /> }),
   col.accessor("proveedor", {
     header: "Proveedor",
     cell: (c) => (
@@ -30,10 +30,6 @@ const columnas = [
     ),
   }),
   col.accessor("identificador", { header: "Identificador", cell: (c) => <span className="font-mono text-sm whitespace-nowrap">{c.getValue()}</span> }),
-  col.accessor("montoEsperado", {
-    header: "Monto esperado",
-    cell: (c) => (c.getValue() === null ? <span className="text-suave">Monto sin definir</span> : <span className="whitespace-nowrap">{monto(c.getValue(), c.row.original.moneda)}</span>),
-  }),
   col.accessor("estado", {
     header: "Estado",
     cell: (c) => {

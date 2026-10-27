@@ -2,6 +2,8 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { compararSociedades } from "@/lib/formato";
+import { SelectorSociedad } from "./SelectorSociedad";
+import { NombreSociedad } from "./ui";
 import type { ArchivoImportado, CeldaCobertura, Cobertura, Importaciones } from "@/lib/tipos";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -152,7 +154,6 @@ export function PanelArchivos() {
     () => (cob?.filas ?? []).filter((f) => !sociedad || f.sociedad === sociedad).sort((a, b) => compararSociedades(a.sociedad, b.sociedad)),
     [cob, sociedad],
   );
-  const pendientesMoneda = (cob?.filas ?? []).filter((f) => f.monedaPorConfirmar).length;
 
   if (error)
     return (
@@ -194,25 +195,9 @@ export function PanelArchivos() {
         <label className="text-sm font-medium" htmlFor="filtro-sociedad">
           Sociedad
         </label>
-        <select
-          id="filtro-sociedad"
-          value={sociedad}
-          onChange={(e) => setSociedad(e.target.value)}
-          title={sociedad || undefined}
-          className="border-2 border-control bg-fondo rounded px-3 py-1.5 max-w-full sm:max-w-xl"
-        >
-          <option value="">Todas</option>
-          {sociedades.map((s) => (
-            <option key={s} value={s} title={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        {pendientesMoneda > 0 && (
-          <span className="text-sm text-suave">
-            <Etiqueta tono="ambar">Por confirmar</Etiqueta> {pendientesMoneda} cuenta(s) con moneda sin confirmar
-          </span>
-        )}
+        <div className="w-full sm:w-96">
+          <SelectorSociedad id="filtro-sociedad" opciones={sociedades.map((x) => ({ valor: x, nombre: x }))} valor={sociedad} alCambiar={setSociedad} textoTodas="Todas" />
+        </div>
       </div>
 
       <div className="mt-4 overflow-x-auto border border-divisor rounded">
@@ -241,8 +226,8 @@ export function PanelArchivos() {
               <Fragment key={`${f.sociedad}|${f.cuentaId ?? f.cuenta}|${i}`}>
                 {(i === 0 || filas[i - 1]!.sociedad !== f.sociedad) && (
                   <tr className="bg-fondo-suave">
-                    <th scope="colgroup" colSpan={3 + cob.meses.length} className="px-3 py-1.5 text-left font-bold border-t border-divisor">
-                      <span className="line-clamp-2" title={f.sociedad}>{f.sociedad}</span>
+                    <th scope="colgroup" colSpan={3 + cob.meses.length} className="px-3 py-1.5 text-left font-normal border-t border-divisor">
+                      <NombreSociedad nombre={f.sociedad} />
                     </th>
                   </tr>
                 )}
@@ -252,19 +237,9 @@ export function PanelArchivos() {
                   </th>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {f.banco ?? <span className="text-suave">Sin dato</span>}
-                    {f.bancoPorConfirmar && (
-                      <span className="ml-1">
-                        <Etiqueta tono="ambar">Por confirmar</Etiqueta>
-                      </span>
-                    )}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {f.moneda ?? <span className="text-suave">Sin dato</span>}
-                    {f.monedaPorConfirmar && (
-                      <span className="ml-1">
-                        <Etiqueta tono="ambar">Por confirmar</Etiqueta>
-                      </span>
-                    )}
                   </td>
                   {cob.meses.map((m) => (
                     <td key={m} className="px-2 py-2 min-w-36">

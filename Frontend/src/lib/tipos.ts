@@ -104,9 +104,8 @@ export interface Cuenta {
 export type Frecuencia = "mensual" | "bimestral" | "trimestral" | "semestral" | "anual";
 export type Moneda = "CRC" | "USD";
 
-export type CodigoEtiqueta =
-  | "falta_dia" | "falta_monto" | "falta_cuenta" | "falta_responsable" | "falta_mes_arranque"
-  | "por_confirmar" | "id_repetido" | "formato_iban";
+export type CodigoEtiqueta = "falta_dia" | "falta_mes_arranque" | "id_repetido" | "formato_iban";
+export type EstadoObligacion = "activa" | "inactiva" | "en_revision";
 
 export interface EtiquetaObligacion {
   codigo: CodigoEtiqueta;
@@ -137,7 +136,9 @@ export interface Obligacion {
   activa: boolean;
   origen: "catalogo" | "manual";
   actualizado: string;
+  /** observaciones: solo problemas reales */
   etiquetas: EtiquetaObligacion[];
+  estado: EstadoObligacion;
 }
 
 /** Campos que se envían al crear o editar (en la edición solo los que cambiaron). */

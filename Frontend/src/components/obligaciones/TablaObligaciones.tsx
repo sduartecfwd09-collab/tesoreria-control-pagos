@@ -1,25 +1,28 @@
 "use client";
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { useMemo } from "react";
-import { MESES_CORTOS, monto } from "@/lib/formato";
-import type { EtiquetaObligacion, Obligacion } from "@/lib/tipos";
+import { MESES_CORTOS } from "@/lib/formato";
+import type { EstadoObligacion, EtiquetaObligacion, Obligacion } from "@/lib/tipos";
 import { Etiqueta, NombreSociedad, type Tono } from "../ui";
 
 const col = createColumnHelper<Obligacion>();
 
-const tonoDe = (e: EtiquetaObligacion): Tono =>
-  e.codigo === "falta_dia" || e.codigo === "falta_mes_arranque" ? "rojo" : e.codigo.startsWith("falta") ? "suave" : "ambar";
+const ESTADO: Record<EstadoObligacion, { texto: string; tono: Tono }> = {
+  activa: { texto: "Activa", tono: "verde" },
+  inactiva: { texto: "Inactiva", tono: "suave" },
+  en_revision: { texto: "En revisión", tono: "ambar" },
+};
 
-/** Una etiqueta por texto (varias razones de "Por confirmar con Tesorería" se juntan en una, con todas en el título). */
-function Etiquetas({ o }: { o: Obligacion }) {
-  const grupos = new Map<string, EtiquetaObligacion[]>();
-  for (const e of o.etiquetas) if (e.codigo !== "falta_responsable") grupos.set(e.texto, [...(grupos.get(e.texto) ?? []), e]);
+const tonoDe = (e: EtiquetaObligacion): Tono => (e.codigo === "falta_dia" || e.codigo === "falta_mes_arranque" ? "rojo" : "ambar");
+
+/** Solo problemas reales (identificador repetido o con formato de IBAN, sin día o sin mes de arranque); el detalle va en el título. */
+function Observaciones({ o }: { o: Obligacion }) {
+  if (o.etiquetas.length === 0) return <span className="text-suave">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
-      {!o.activa && <Etiqueta tono="suave">Inactiva</Etiqueta>}
-      {[...grupos.entries()].map(([texto, es]) => (
-        <Etiqueta key={texto} tono={tonoDe(es[0]!)} titulo={es.map((e) => e.ayuda).join("\n")}>
-          {texto}
+      {o.etiquetas.map((e) => (
+        <Etiqueta key={e.codigo} tono={tonoDe(e)} titulo={e.ayuda}>
+          {e.texto}
         </Etiqueta>
       ))}
     </div>
@@ -29,7 +32,7 @@ function Etiquetas({ o }: { o: Obligacion }) {
 export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; alEditar: (o: Obligacion) => void }) {
   const columnas = useMemo(
     () => [
-      col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="font-semibold min-w-40 max-w-64" /> }),
+      col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="min-w-40 max-w-64" /> }),
       col.accessor("proveedor", {
         header: "Proveedor",
         cell: (c) => (
@@ -53,10 +56,6 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
           </>
         ),
       }),
-      col.accessor("montoEsperado", {
-        header: "Monto esperado",
-        cell: (c) => <span className="whitespace-nowrap">{monto(c.getValue(), c.row.original.moneda)}</span>,
-      }),
       col.accessor("responsableEfectivo", {
         header: "Responsable",
         cell: ({ row: { original: o } }) =>
@@ -69,7 +68,12 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
             </>
           ),
       }),
-      col.display({ id: "avisos", header: "Estado y avisos", cell: ({ row }) => <Etiquetas o={row.original} /> }),
+      col.display({
+        id: "estado",
+        header: "Estado",
+        cell: ({ row: { original: o } }) => <Etiqueta tono={ESTADO[o.estado].tono}>{ESTADO[o.estado].texto}</Etiqueta>,
+      }),
+      col.display({ id: "observaciones", header: "Observaciones", cell: ({ row }) => <Observaciones o={row.original} /> }),
       col.display({
         id: "acciones",
         header: () => <span className="sr-only">Acciones</span>,
