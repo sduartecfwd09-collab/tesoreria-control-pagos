@@ -230,11 +230,3 @@ export interface FiltroVencimientos {
   porPagina: number;
 }
 
-export interface ResumenGeneracion {
-  desde: string;
-  hasta: string;
-  creados: number;
-  yaExistentes: number;
-  porPeriodo: { periodo: string; creados: number; yaExistentes: number }[];
-  omitidas: { obligacionId: number; motivo: string; sociedad: string; proveedor: string; identificador: string; texto: string }[];
-}

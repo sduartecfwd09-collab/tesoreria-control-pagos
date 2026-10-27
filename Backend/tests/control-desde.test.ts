@@ -8,9 +8,9 @@ import { prisma } from "../src/db.js";
 import { advertenciaDiaYaPaso, mesSiguiente, periodoMasAntiguo } from "../src/domain/control-desde.js";
 import { planificar, type ObligacionPlan } from "../src/domain/vencimientos.js";
 import { completarControlDesdePendientes } from "../src/repositories/obligaciones.js";
-import { generarVencimientos, regenerarObligacion } from "../src/vencimientos/generar.js";
+import { sincronizarVencimientos } from "../src/vencimientos/generar.js";
 import { catalogo, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { generarRango, vaciarImportaciones } from "./helpers/db.js";
 
 const reloj = (y: number, m: number, d: number) => () => new Date(y, m - 1, d, 10, 0);
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
@@ -53,18 +53,18 @@ describe("generación y regeneración con «Control desde»", () => {
   });
   afterAll(vaciarImportaciones);
 
-  it("generarVencimientos no crea nada antes de ese mes", async () => {
-    const r = await generarVencimientos("2026-08", "2026-12");
+  it("el calendario no crea nada antes de ese mes", async () => {
+    const r = await generarRango("2026-08", "2026-12");
     expect(r.creados).toBe(3);
     const v = await prisma.vencimiento.findMany({ where: { obligacionId: id }, orderBy: { periodo: "asc" } });
     expect(v.map((x) => x.periodo)).toEqual(["2026-10", "2026-11", "2026-12"]);
   });
 
   it("al mover «Control desde» a un mes posterior se quitan los futuros sin pagar anteriores; los pagados y los pasados se conservan", async () => {
-    await generarVencimientos("2026-10", "2026-12");
+    await generarRango("2026-10", "2026-12");
     await prisma.vencimiento.updateMany({ where: { obligacionId: id, periodo: "2026-10" }, data: { estado: "pagado" } });
     await prisma.obligacion.update({ where: { id }, data: { controlDesde: new Date(Date.UTC(2026, 11, 1)) } });
-    const r = await regenerarObligacion(id, reloj(2026, 9, 1));
+    const r = await sincronizarVencimientos(reloj(2026, 9, 1), id);
     expect(r).toMatchObject({ eliminados: 1, protegidos: 1 }); // se va noviembre; octubre está pagado
     const v = await prisma.vencimiento.findMany({ where: { obligacionId: id }, orderBy: { periodo: "asc" } });
     expect(v.map((x) => x.periodo)).toEqual(["2026-10", "2026-12"]);

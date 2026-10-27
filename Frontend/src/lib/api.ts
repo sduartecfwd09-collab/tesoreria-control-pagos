@@ -1,6 +1,6 @@
 import type {
   CambiosObligacion, Categoria, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
-  Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, ResumenGeneracion, Sociedad, Vencimiento,
+  Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
@@ -64,6 +64,4 @@ export const api = {
 
   listarVencimientos: (f: FiltroVencimientos) => pedir<Pagina<Vencimiento> & { hoy: string }>(`/api/vencimientos${consulta(f)}`),
   periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[] }>("/api/vencimientos/periodos")).datos,
-  generarVencimientos: async (desde: string, hasta: string) =>
-    (await pedir<{ datos: ResumenGeneracion }>("/api/vencimientos/generar", { method: "POST", body: JSON.stringify({ desde, hasta }) })).datos,
 };

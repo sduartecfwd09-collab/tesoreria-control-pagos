@@ -7,6 +7,7 @@ import { FRECUENCIAS } from "../domain/parametros.js";
 import { leerLibro } from "../ingest/lector.js";
 import { completarControlDesdePendientes, sincronizarCatalogo, type ResultadoSincronizacion } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
+import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 import { leerCatalogo, type ProblemaFila, type VarianteNombre } from "./lector.js";
 
 export interface ResumenCatalogo extends ResultadoSincronizacion {
@@ -38,6 +39,7 @@ export async function importarCatalogo(ruta: string, reloj: Reloj = relojSistema
     const r = await sincronizarCatalogo(leido.filas, frecuencia);
     // «Control desde» por defecto: mes más antiguo con estados cargados; sin estados, el mes en que se carga la obligación
     await completarControlDesdePendientes(mesDeAlta(hoyDe(reloj)));
+    await actualizarVencimientos(reloj); // las obligaciones nuevas o cambiadas reciben su calendario y su cruce
     return {
       ...r,
       hoja: leido.hoja,

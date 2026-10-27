@@ -6,7 +6,6 @@ import type { Categoria, FiltroVencimientos, Sociedad } from "@/lib/tipos";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import { CajaError, claseControl, FinDeLista } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
-import { GenerarVencimientos } from "./GenerarVencimientos";
 import { TablaVencimientos } from "./TablaVencimientos";
 
 const POR_PAGINA = 100;
@@ -74,19 +73,11 @@ export function PanelVencimientos() {
         </p>
       </div>
 
-      <GenerarVencimientos
-        activas={base.activas}
-        alGenerar={(r) => {
-          setFiltro((f) => ({ ...f, periodo: r.desde }));
-          setIntento((n) => n + 1);
-        }}
-      />
-
       <section aria-labelledby="h-venc" className="mt-10">
         <h2 id="h-venc" className="text-lg font-bold border-b-2 border-acento pb-1">Vencimientos por periodo</h2>
         {base.periodos.length === 0 ? (
           <p className="mt-4 rounded border border-divisor bg-fondo-suave p-6 max-w-2xl">
-            Aún no hay vencimientos. Elija los meses arriba y pulse <strong>Generar vencimientos</strong>.
+            Aún no hay vencimientos. Se generan solos a partir de las obligaciones activas.
           </p>
         ) : (
           <>

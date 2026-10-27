@@ -1,5 +1,6 @@
 import { prisma } from "../../src/db.js";
 import { exigirBaseDePruebas } from "../../src/config/proteccion-pruebas.js";
+import { sincronizarVencimientos } from "../../src/vencimientos/generar.js";
 
 /** Deja vacías las tablas de importación para que cada archivo de pruebas parta de cero. */
 export async function vaciarImportaciones() {
@@ -29,3 +30,13 @@ export async function vaciarUsuarios() {
 export const copiaDeObligacion = (o: { sociedadId: number; categoriaId: number; proveedor: string; cuentaEsperadaId: number | null; moneda: string; diaEsperadoPago: number | null }) => ({
   dia: o.diaEsperadoPago, sociedadId: o.sociedadId, categoriaId: o.categoriaId, proveedor: o.proveedor, cuentaEsperadaId: o.cuentaEsperadaId, moneda: o.moneda,
 });
+
+/**
+ * Crea los vencimientos de todas las obligaciones entre dos meses (AAAA-MM) sin esperar al reloj: las que no tienen
+ * «Control desde» lo reciben en `desde`, y el calendario se sincroniza con «hoy» = último día de `hasta`.
+ */
+export async function generarRango(desde: string, hasta: string) {
+  await prisma.obligacion.updateMany({ where: { controlDesde: null }, data: { controlDesde: new Date(`${desde}-01T00:00:00Z`) } });
+  const [y, m] = hasta.split("-").map(Number) as [number, number];
+  return sincronizarVencimientos(() => new Date(y, m, 0, 10, 0));
+}

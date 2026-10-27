@@ -2,8 +2,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { cambiarDiaPermanente } from "../src/obligaciones/cambiar-dia.js";
-import { generarVencimientos, regenerarObligacion } from "../src/vencimientos/generar.js";
-import { vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
+import { sincronizarVencimientos } from "../src/vencimientos/generar.js";
+import { generarRango, vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
 
 // Datos inventados. Hoy = 2026-09-10.
 const reloj = () => new Date(2026, 8, 10, 10, 0);
@@ -28,7 +28,7 @@ beforeEach(async () => {
       moneda: "USD", cuentaEsperadaId: cuenta.id,
     },
   })).id;
-  await generarVencimientos("2026-08", "2026-11");
+  await generarRango("2026-08", "2026-11");
 });
 afterAll(async () => {
   await vaciarImportaciones();
@@ -47,7 +47,7 @@ describe("copia de los datos de la obligación en cada vencimiento", () => {
   it("si la obligación se edita o se desactiva, el Histórico (vencimientos pasados y pagados) no cambia; los futuros sin pagar sí se ponen al día", async () => {
     await prisma.vencimiento.update({ where: { id: (await venc("2026-10")).id }, data: { estado: "pagado" } });
     await prisma.obligacion.update({ where: { id: obligacion }, data: { categoriaId: categoria2, proveedor: "Fono Renombrado", moneda: "CRC", montoEsperado: 2000n } });
-    await regenerarObligacion(obligacion, reloj);
+    await sincronizarVencimientos(reloj, obligacion);
 
     const ago = await venc("2026-08"); // pasado
     const sep = await venc("2026-09"); // futuro sin pagar
@@ -57,7 +57,7 @@ describe("copia de los datos de la obligación en cada vencimiento", () => {
 
     // desactivar conserva los pasados y los pagados con su copia
     await prisma.obligacion.update({ where: { id: obligacion }, data: { activa: false } });
-    await regenerarObligacion(obligacion, reloj);
+    await sincronizarVencimientos(reloj, obligacion);
     expect((await venc("2026-08")).proveedor).toBe("Fono Uno");
     expect((await venc("2026-10")).proveedor).toBe("Fono Uno");
     await expect(venc("2026-09")).rejects.toThrow(); // el futuro sin pagar se retiró

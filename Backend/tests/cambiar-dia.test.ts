@@ -2,8 +2,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { ErrorDeServicio } from "../src/domain/permisos.js";
 import { cambiarDiaPermanente, cambiarFechaDeUnaVez } from "../src/obligaciones/cambiar-dia.js";
-import { generarVencimientos, regenerarObligacion } from "../src/vencimientos/generar.js";
-import { vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
+import { sincronizarVencimientos } from "../src/vencimientos/generar.js";
+import { generarRango, vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
 
 // Datos inventados. Hoy = 2026-09-10.
 const reloj = () => new Date(2026, 8, 10, 10, 0);
@@ -39,7 +39,7 @@ beforeEach(async () => {
   await prisma.sociedad.create({ data: { codigo: "BBB", nombreLargo: "Sociedad BBB", tesoreroId: tesBBB } });
   const c = await prisma.categoria.findFirstOrThrow();
   obligacion = (await prisma.obligacion.create({ data: { sociedadId: a.id, categoriaId: c.id, proveedor: "Fono", identificador: "0001", diaEsperadoPago: 15 } })).id;
-  await generarVencimientos("2026-08", "2026-11");
+  await generarRango("2026-08", "2026-11");
 });
 afterAll(async () => {
   await vaciarImportaciones();
@@ -153,7 +153,7 @@ describe("cambio de una sola vez", () => {
     const nov = await vencimiento("2026-11");
     await cambiarFechaDeUnaVez({ actorId: jefe, vencimientoId: nov.id, fechaNueva: "2026-11-30", motivo: "Prórroga" });
     await prisma.obligacion.update({ where: { id: obligacion }, data: { activa: false } });
-    const r = await regenerarObligacion(obligacion, reloj);
+    const r = await sincronizarVencimientos(reloj, obligacion);
     expect(r.eliminados).toBe(2); // sep y oct, sin pagar ni mover
     expect(iso((await vencimiento("2026-11")).fecha)).toBe("2026-11-30"); // el movido queda, con su historial
   });
@@ -164,7 +164,7 @@ describe("vencimiento movido «solo este mes» frente a regenerar", () => {
     const nov = await vencimiento("2026-11");
     await cambiarFechaDeUnaVez({ actorId: jefe, vencimientoId: nov.id, fechaNueva: "2026-11-27", motivo: "Prórroga" });
     await prisma.obligacion.update({ where: { id: obligacion }, data: { frecuencia: "bimestral", mesArranque: 10 } }); // toca oct y dic: noviembre ya no corresponde
-    const r = await regenerarObligacion(obligacion, reloj);
+    const r = await sincronizarVencimientos(reloj, obligacion);
     expect(r.eliminados).toBe(1); // septiembre (futuro, sin pagar ni mover)
     expect(r.protegidos).toBe(1); // noviembre: guarda una decisión con motivo
     const v = await vencimiento("2026-11");
@@ -176,7 +176,7 @@ describe("vencimiento movido «solo este mes» frente a regenerar", () => {
     const oct = await vencimiento("2026-10");
     await cambiarFechaDeUnaVez({ actorId: jefe, vencimientoId: oct.id, fechaNueva: "2026-10-29", motivo: "Prórroga" });
     await prisma.obligacion.update({ where: { id: obligacion }, data: { montoEsperado: 7000n } });
-    await regenerarObligacion(obligacion, reloj);
+    await sincronizarVencimientos(reloj, obligacion);
     const v = await vencimiento("2026-10");
     expect(iso(v.fecha)).toBe("2026-10-29");
     expect(iso(v.fechaOriginal)).toBe("2026-10-15");

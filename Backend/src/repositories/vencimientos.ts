@@ -4,8 +4,6 @@ import { periodoDeControl } from "../domain/control-desde.js";
 import { aNumero } from "../domain/montos.js";
 import { ESTADOS_PAGADOS, type CopiaObligacion, type ObligacionPlan, type VencimientoPlan } from "../domain/vencimientos.js";
 
-const clave = (obligacionId: number, periodo: string) => `${obligacionId}|${periodo}`;
-
 const camposPlan = { id: true, sociedadId: true, categoriaId: true, proveedor: true, cuentaEsperadaId: true, moneda: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true, controlDesde: true } as const;
 
 const aPlan = (o: { montoEsperado: bigint | null; controlDesde: Date | null } & Omit<ObligacionPlan, "montoEsperado" | "controlDesde">): ObligacionPlan => ({
@@ -23,34 +21,18 @@ export async function obligacionParaPlan(id: number): Promise<ObligacionPlan | n
   return o ? aPlan(o) : null;
 }
 
-/** Datos para mostrar las obligaciones omitidas (proveedor, sociedad e identificador). */
-export async function describirObligaciones(ids: number[]) {
-  return prisma.obligacion.findMany({ where: { id: { in: ids } }, include: { sociedad: true }, orderBy: { id: "asc" } });
-}
-
-/** Crea en una transacción los vencimientos que no existen (uno por obligación y periodo). */
-export async function crearFaltantes(plan: VencimientoPlan[]) {
-  return prisma.$transaction(async (tx) => {
-    const periodos = [...new Set(plan.map((v) => v.periodo))];
-    const existentes = await tx.vencimiento.findMany({ where: { periodo: { in: periodos } }, select: { obligacionId: true, periodo: true } });
-    const hay = new Set(existentes.map((v) => clave(v.obligacionId, v.periodo)));
-    const nuevos = plan.filter((v) => !hay.has(clave(v.obligacionId, v.periodo)));
-    if (nuevos.length > 0) await tx.vencimiento.createMany({ data: nuevos });
-    const creados = new Set(nuevos.map((v) => clave(v.obligacionId, v.periodo)));
-    return plan.map((v) => ({ periodo: v.periodo, creado: creados.has(clave(v.obligacionId, v.periodo)) }));
-  });
-}
-
-/** Último periodo con vencimientos generados (el horizonte), o null si no hay ninguno. */
-export async function horizonte(): Promise<string | null> {
-  return (await prisma.vencimiento.aggregate({ _max: { periodo: true } }))._max.periodo;
-}
-
-export async function vencimientosDeObligacionDesde(obligacionId: number, periodo: string) {
+/** Todos los vencimientos de las obligaciones dadas, con lo que impide tocarlos. */
+export async function vencimientosDeObligaciones(obligacionIds: number[]) {
   return prisma.vencimiento.findMany({
-    where: { obligacionId, periodo: { gte: periodo } },
+    where: { obligacionId: { in: obligacionIds } },
     include: { _count: { select: { conciliaciones: true, alertas: true, cambiosDia: true } } },
   });
+}
+
+/** Último periodo con vencimientos de cada obligación (para calcular el próximo pago). */
+export async function ultimosPeriodos(obligacionIds: number[]): Promise<Map<number, string>> {
+  const g = await prisma.vencimiento.groupBy({ by: ["obligacionId"], where: { obligacionId: { in: obligacionIds } }, _max: { periodo: true } });
+  return new Map(g.flatMap((x) => (x._max.periodo ? [[x.obligacionId, x._max.periodo] as [number, string]] : [])));
 }
 
 export interface CambiosVencimientos {

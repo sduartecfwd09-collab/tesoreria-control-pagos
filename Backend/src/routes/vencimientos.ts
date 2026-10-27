@@ -3,9 +3,8 @@ import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { z } from "zod";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
-import { esPeriodo, MAX_MESES_GENERACION, periodosEntre } from "../domain/vencimientos.js";
+import { esPeriodo } from "../domain/vencimientos.js";
 import { listarVencimientos, periodosGenerados } from "../repositories/vencimientos.js";
-import { generarVencimientos, hayGeneracionEnCurso } from "../vencimientos/generar.js";
 
 const periodo = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM)` }).refine(esPeriodo, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe tener el formato AAAA-MM (por ejemplo 2026-08)`);
 
@@ -21,25 +20,7 @@ const consulta = z.object({
   porPagina: z.coerce.number().int().min(1).max(500, "Se pueden pedir como máximo 500 por página").default(50),
 });
 
-const cuerpoGenerar = z
-  .object({ desde: periodo("el mes inicial"), hasta: periodo("el mes final") }, { error: "Indique desde y hasta (AAAA-MM)" })
-  .refine((c) => c.desde <= c.hasta, { message: "El mes inicial no puede ser posterior al mes final", path: ["hasta"] })
-  .refine((c) => periodosEntre(c.desde, c.hasta).length <= MAX_MESES_GENERACION, {
-    message: `Se pueden generar como máximo ${MAX_MESES_GENERACION} meses a la vez`,
-    path: ["hasta"],
-  });
-
 export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Reloj }) {
-  app.post("/api/vencimientos/generar", async (req, reply) => {
-    const r = cuerpoGenerar.safeParse(req.body ?? {});
-    if (!r.success) {
-      const i = r.error.issues[0];
-      return reply.code(422).send({ error: i?.message ?? "Datos inválidos", ...(i?.path[0] ? { campo: String(i.path[0]) } : {}) });
-    }
-    if (hayGeneracionEnCurso()) return reply.code(409).send({ error: "Ya hay una generación de vencimientos en curso" });
-    return { datos: await generarVencimientos(r.data.desde, r.data.hasta) };
-  });
-
   app.get("/api/vencimientos/periodos", async () => ({ datos: await periodosGenerados() }));
 
   app.get("/api/vencimientos", async (req, reply) => {
@@ -62,6 +43,9 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         montoEsperado: aNumero(v.montoEsperado),
         moneda: v.moneda,
         estado: v.estado,
+        motivo: v.motivo,
+        diferenciaDias: v.diferenciaDias,
+        sinInfoHasta: v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null,
         conciliado: v._count.conciliaciones > 0,
         futuro: v.fecha >= hoy,
       })),

@@ -19,8 +19,10 @@ import {
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
+import { ultimosPeriodos } from "../repositories/vencimientos.js";
+import { proximoPago } from "../domain/vencimientos.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
-import { regenerarObligacion } from "../vencimientos/generar.js";
+import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 
 // Campos que cambian los vencimientos: al editarlos se regeneran los futuros sin conciliación.
 const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "montoEsperado", "activa", "controlDesde"];
@@ -42,7 +44,7 @@ const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
   ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad), responsable: responsableEfectivo(o).nombre,
 });
 
-function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>) {
+function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null) {
   const observaciones = etiquetasDe(aCalidad(o), repetidos);
   return {
     id: o.id,
@@ -57,10 +59,21 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     responsable: o.responsable, responsableEfectivo: responsableEfectivo(o).nombre, responsableDe: responsableEfectivo(o).de,
     activa: o.activa, origen: o.origen,
     controlDesde: periodoDeControl(o.controlDesde),
+    proximoPago, // dato calculado según la frecuencia a partir del último vencimiento
     actualizado: o.actualizado.toISOString(),
     etiquetas: observaciones,
     estado: estadoDeObligacion(o.activa, observaciones),
   };
+}
+
+/** Próximo pago calculado de cada obligación (fecha ISO o null). */
+async function proximosPagos(obs: ObligacionCompleta[], reloj: Reloj): Promise<Map<number, string | null>> {
+  const ultimos = await ultimosPeriodos(obs.map((o) => o.id));
+  const hoy = hoyDe(reloj);
+  return new Map(obs.map((o) => {
+    const f = proximoPago({ ...o, controlDesde: periodoDeControl(o.controlDesde) }, ultimos.get(o.id) ?? null, hoy);
+    return [o.id, f ? f.toISOString().slice(0, 10) : null];
+  }));
 }
 
 async function repetidosActuales() {
@@ -93,8 +106,9 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const q = consulta.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
     const [{ total, datos }, repetidos] = await Promise.all([listarObligaciones(q.data), repetidosActuales()]);
+    const proximos = await proximosPagos(datos, opts.reloj);
     return {
-      datos: datos.map((o) => aDto(o, repetidos)),
+      datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null)),
       total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
     };
   });
@@ -117,7 +131,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
     const o = await obtenerObligacion(id.data);
     if (!o) return reply.code(404).send({ error: "Obligación no encontrada" });
-    return { datos: aDto(o, await repetidosActuales()) };
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null) };
   });
 
   app.post("/api/obligaciones", async (req, reply) => {
@@ -166,8 +180,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       monedaPorConfirmar: d.monedaPorConfirmar ?? d.moneda === undefined,
       origen: "manual",
     });
-    const regeneracion = await regenerarObligacion(o.id, opts.reloj);
-    return reply.code(201).send({ datos: aDto(o, await repetidosActuales()), regeneracion, advertencias: advertencia ? [advertencia] : [] });
+    const regeneracion = (await actualizarVencimientos(opts.reloj, o.id)).calendario;
+    return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null), regeneracion, advertencias: advertencia ? [advertencia] : [] });
   });
 
   app.patch("/api/obligaciones/:id", async (req, reply) => {
@@ -203,8 +217,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       ...(d.frecuencia !== undefined && d.frecuenciaPorConfirmar === undefined ? { frecuenciaPorConfirmar: false } : {}),
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
     });
-    const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? await regenerarObligacion(o.id, opts.reloj) : null;
-    return { datos: aDto(o, await repetidosActuales()), regeneracion };
+    const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? (await actualizarVencimientos(opts.reloj, o.id)).calendario : null;
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null), regeneracion };
   });
 
   app.post("/api/catalogo/importar", async (_req, reply) => {

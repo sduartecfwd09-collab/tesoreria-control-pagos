@@ -1,11 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { generarRango, vaciarImportaciones } from "./helpers/db.js";
 
 let app: Awaited<ReturnType<typeof crearApp>>;
 let mensual: number;
-const generar = (payload: object) => app.inject({ method: "POST", url: "/api/vencimientos/generar", payload });
 
 beforeAll(async () => {
   await vaciarImportaciones();
@@ -15,6 +14,7 @@ beforeAll(async () => {
   mensual = (await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "Fono", identificador: "0001", diaEsperadoPago: 15 } })).id;
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "Otro", identificador: "0002", diaEsperadoPago: 31 } });
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "SinDia", identificador: "0003" } });
+  await generarRango("2026-08", "2026-09");
   app = await crearApp({ reloj: () => new Date(2026, 8, 10, 9, 0) }); // hoy: 10 sep 2026
 });
 afterAll(async () => {
@@ -22,28 +22,13 @@ afterAll(async () => {
   await vaciarImportaciones();
 });
 
-describe("POST /api/vencimientos/generar", () => {
-  it("valida el rango con mensajes claros", async () => {
-    const casos: [object, RegExp][] = [
-      [{}, /Indique el mes inicial/],
-      [{ desde: "2026-8", hasta: "2026-09" }, /formato AAAA-MM/],
-      [{ desde: "2026-13", hasta: "2026-12" }, /formato AAAA-MM/],
-      [{ desde: "2026-10", hasta: "2026-09" }, /no puede ser posterior/],
-      [{ desde: "2026-01", hasta: "2028-01" }, /como máximo 24 meses/],
-    ];
-    for (const [payload, msg] of casos) {
-      const r = await generar(payload);
-      expect(r.statusCode, JSON.stringify(payload)).toBe(422);
-      expect(r.json().error).toMatch(msg);
-    }
+describe("calendario automático", () => {
+  it("ya no hay ruta para generar vencimientos a mano", async () => {
+    expect((await app.inject({ method: "POST", url: "/api/vencimientos/generar", payload: {} })).statusCode).toBe(404);
   });
 
-  it("genera, reporta las omitidas y es idempotente", async () => {
-    const r1 = (await generar({ desde: "2026-08", hasta: "2026-09" })).json().datos;
-    expect(r1).toMatchObject({ creados: 4, yaExistentes: 0 });
-    expect(r1.omitidas).toEqual([expect.objectContaining({ proveedor: "SinDia", motivo: "falta_dia", texto: "Falta el día esperado de pago" })]);
-    const r2 = (await generar({ desde: "2026-08", hasta: "2026-09" })).json().datos;
-    expect(r2).toMatchObject({ creados: 0, yaExistentes: 4 });
+  it("generó los vencimientos de las obligaciones con día y omitió la que no lo tiene", async () => {
+    expect(await prisma.vencimiento.count()).toBe(4);
   });
 });
 

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { relojSistema, type Reloj } from "../domain/reloj.js";
+import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 import { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE } from "../domain/estado-archivo.js";
 import { clavesDeDeduplicacion } from "./clave-dedup.js";
 import { ErrorLectura, LECTOR_VERSION, leerEstadoDeCuenta, leerLibro } from "./lector.js";
@@ -75,12 +77,13 @@ interface Lectura {
   error?: string;
 }
 
-export async function importarCarpeta(raiz: string): Promise<ResumenImportacion> {
+export async function importarCarpeta(raiz: string, reloj: Reloj = relojSistema): Promise<ResumenImportacion> {
   if (enCurso) throw new Error("Ya hay una importación en curso");
   enCurso = true;
   try {
     const resumen = await ejecutar(raiz);
     await completarControlDesdePendientes(); // los estados nuevos pueden definir «Control desde» de obligaciones que aún no lo tienen
+    await actualizarVencimientos(reloj); // calendario y cruce con los estados de cuenta nuevos
     return resumen;
   } finally {
     enCurso = false;

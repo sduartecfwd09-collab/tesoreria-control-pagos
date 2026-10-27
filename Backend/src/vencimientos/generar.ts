@@ -1,110 +1,78 @@
-// Generación y regeneración de vencimientos. Todos nacen "proyectado": los demás estados llegan con el
-// cruce (Hito 4). Un vencimiento con conciliación nunca se toca.
+// Calendario automático de vencimientos. El sistema crea solo, para cada obligación activa, los vencimientos desde su
+// «Control desde» hasta hoy + los días de aviso (una ventana en días, sin meses futuros) y mantiene al día los futuros.
+// Todos nacen «proyectado»: el estado real lo calcula el motor de cruce. Es idempotente y nunca toca un vencimiento
+// pasado, pagado, conciliado o con avisos.
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
-import { etiquetaSociedad } from "../domain/sociedades.js";
-import { copiaDe, ESTADOS_PAGADOS, periodosEntre, planificar, TEXTO_OMISION, type Omitida, type VencimientoPlan } from "../domain/vencimientos.js";
-import {
-  aplicarCambios, type CambiosVencimientos, crearFaltantes, describirObligaciones, horizonte, obligacionesParaPlan, obligacionParaPlan,
-  vencimientosDeObligacionDesde,
-} from "../repositories/vencimientos.js";
+import { copiaDe, ESTADOS_PAGADOS, periodosEntre, planificar, type VencimientoPlan } from "../domain/vencimientos.js";
+import { valorGlobal } from "../repositories/parametros.js";
+import { aplicarCambios, type CambiosVencimientos, obligacionesParaPlan, obligacionParaPlan, vencimientosDeObligaciones } from "../repositories/vencimientos.js";
 
-export interface OmitidaDetalle extends Omitida {
-  sociedad: string;
-  proveedor: string;
-  identificador: string;
-  texto: string;
-}
+const MS_DIA = 86_400_000;
 
-export interface ResumenGeneracion {
-  desde: string;
-  hasta: string;
-  creados: number;
-  yaExistentes: number;
-  porPeriodo: { periodo: string; creados: number; yaExistentes: number }[];
-  omitidas: OmitidaDetalle[];
-}
-
-let enCurso = false;
-export const hayGeneracionEnCurso = () => enCurso;
-
-/** Crea los vencimientos que faltan de las obligaciones activas entre desde y hasta (AAAA-MM). Idempotente. */
-export async function generarVencimientos(desde: string, hasta: string): Promise<ResumenGeneracion> {
-  enCurso = true;
-  try {
-    const periodos = periodosEntre(desde, hasta);
-    const { vencimientos, omitidas } = planificar(await obligacionesParaPlan(), periodos);
-    const resultado = await crearFaltantes(vencimientos);
-    const porPeriodo = periodos.map((periodo) => {
-      const del = resultado.filter((r) => r.periodo === periodo);
-      const creados = del.filter((r) => r.creado).length;
-      return { periodo, creados, yaExistentes: del.length - creados };
-    });
-    const info = new Map((await describirObligaciones(omitidas.map((o) => o.obligacionId))).map((o) => [o.id, o]));
-    return {
-      desde, hasta,
-      creados: porPeriodo.reduce((s, p) => s + p.creados, 0),
-      yaExistentes: porPeriodo.reduce((s, p) => s + p.yaExistentes, 0),
-      porPeriodo,
-      omitidas: omitidas.map((o) => {
-        const d = info.get(o.obligacionId)!;
-        return { ...o, sociedad: etiquetaSociedad(d.sociedad), proveedor: d.proveedor, identificador: d.identificador, texto: TEXTO_OMISION[o.motivo] };
-      }),
-    };
-  } finally {
-    enCurso = false;
-  }
-}
-
-export interface ResumenRegeneracion {
+export interface ResumenSincronizacion {
   creados: number;
   actualizados: number;
   eliminados: number;
-  /** vencimientos futuros que no se tocaron por tener conciliación */
+  /** vencimientos futuros que no se tocaron por estar pagados, conciliados, con avisos o movidos a mano */
   protegidos: number;
 }
 
-/**
- * Tras editar una obligación, ajusta sus vencimientos de hoy en adelante, hasta el horizonte ya generado:
- * crea los que faltan, corrige fecha y monto de los que siguen correspondiendo y elimina los que ya no
- * corresponden (frecuencia distinta o desactivada). Solo borra vencimientos futuros, no pagados y sin conciliación;
- * nunca toca los pasados, los pagados ni los conciliados. Los vencimientos pasados de una obligación desactivada se conservan.
- */
-export async function regenerarObligacion(obligacionId: number, reloj: Reloj): Promise<ResumenRegeneracion> {
-  const r: ResumenRegeneracion = { creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 };
-  const o = await obligacionParaPlan(obligacionId);
-  if (!o) return r;
-  const hoy = hoyDe(reloj);
-  const desde = periodoDe(hoy);
-  const fin = await horizonte();
-  const plan = fin && fin >= desde ? planificar([o], periodosEntre(desde, fin)).vencimientos : [];
-  const deseados = new Map(plan.map((v) => [v.periodo, v]));
+/** Días de aviso (parámetro de Configuración): hasta cuántos días por delante de hoy se generan vencimientos. */
+export async function diasDeAviso(): Promise<number> {
+  const n = Number(await valorGlobal("aviso_dias"));
+  return Number.isInteger(n) && n >= 0 ? n : 3;
+}
 
-  const actualizar: CambiosVencimientos["actualizar"] = [];
-  const eliminar: number[] = [];
-  const ocupados = new Set<string>();
-  for (const v of await vencimientosDeObligacionDesde(obligacionId, desde)) {
-    ocupados.add(v.periodo);
-    if (v.fecha < hoy) continue; // pasado: no se toca
-    if (v._count.conciliaciones > 0 || v._count.alertas > 0 || ESTADOS_PAGADOS.includes(v.estado)) { r.protegidos++; continue; }
-    const d = deseados.get(v.periodo);
-    const movido = v.fechaOriginal !== null; // movido «de una sola vez»: conserva su fecha vigente y su historial
-    if (!d) {
-      if (movido || v._count.cambiosDia > 0) r.protegidos++;
-      else eliminar.push(v.id);
-      continue;
-    }
-    const fecha = movido ? v.fecha : d.fecha;
-    const fechaOriginal = movido && d.fecha.getTime() !== v.fecha.getTime() ? d.fecha : null;
-    // la copia de los datos de la obligación también se actualiza (solo en estos vencimientos futuros, no pagados y sin conciliación)
-    const copia = copiaDe(o);
-    const copiaIgual = (Object.keys(copia) as (keyof typeof copia)[]).every((k) => v[k] === copia[k]);
-    if (!copiaIgual || fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
-      actualizar.push({ id: v.id, fecha, fechaOriginal, montoEsperado: d.montoEsperado, ...copia });
-    }
+/**
+ * Deja el calendario al día. Sin `obligacionId` revisa todas las obligaciones; con él, solo esa. Crea los vencimientos
+ * que faltan, corrige fecha, monto y copia de los futuros que siguen correspondiendo y elimina los futuros que ya no
+ * corresponden (frecuencia distinta o desactivada). Los pasados y los pagados nunca se tocan.
+ */
+export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: number): Promise<ResumenSincronizacion> {
+  const r: ResumenSincronizacion = { creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 };
+  const hoy = hoyDe(reloj);
+  const limite = new Date(hoy.getTime() + (await diasDeAviso()) * MS_DIA);
+  const obligaciones = obligacionId === undefined ? await obligacionesParaPlan() : [await obligacionParaPlan(obligacionId)].filter((o) => o !== null);
+  const existentes = new Map<number, Awaited<ReturnType<typeof vencimientosDeObligaciones>>>();
+  for (const v of await vencimientosDeObligaciones(obligaciones.map((o) => o.id))) {
+    const lista = existentes.get(v.obligacionId);
+    if (lista) lista.push(v);
+    else existentes.set(v.obligacionId, [v]);
   }
-  // solo se crean los que caen de hoy en adelante; un existente futuro sí puede moverse a una fecha ya pasada del mes
-  const crear: VencimientoPlan[] = plan.filter((v) => !ocupados.has(v.periodo) && v.fecha >= hoy);
-  await aplicarCambios({ crear, actualizar, eliminar });
-  return { ...r, creados: crear.length, actualizados: actualizar.length, eliminados: eliminar.length };
+
+  const cambios: CambiosVencimientos = { crear: [], actualizar: [], eliminar: [] };
+  for (const o of obligaciones) {
+    const propios = existentes.get(o.id) ?? [];
+    // sin «Control desde» definido se controla desde el mes de hoy
+    const desde = o.controlDesde ?? periodoDe(hoy);
+    const ultimo = propios.reduce((m, v) => (v.periodo > m ? v.periodo : m), periodoDe(limite));
+    const plan = desde <= ultimo ? planificar([o], periodosEntre(desde, ultimo)).vencimientos : [];
+    const deseados = new Map(plan.map((v) => [v.periodo, v]));
+    const ocupados = new Set(propios.map((v) => v.periodo));
+
+    for (const v of propios) {
+      if (v.fecha < hoy) continue; // pasado: no se toca
+      if (v._count.conciliaciones > 0 || v._count.alertas > 0 || ESTADOS_PAGADOS.includes(v.estado)) { r.protegidos++; continue; }
+      const d = deseados.get(v.periodo);
+      const movido = v.fechaOriginal !== null; // movido «de una sola vez»: conserva su fecha vigente y su historial
+      if (!d) {
+        if (movido || v._count.cambiosDia > 0) r.protegidos++;
+        else cambios.eliminar.push(v.id);
+        continue;
+      }
+      const fecha = movido ? v.fecha : d.fecha;
+      const fechaOriginal = movido && d.fecha.getTime() !== v.fecha.getTime() ? d.fecha : null;
+      // la copia de los datos de la obligación también se actualiza (solo en estos vencimientos futuros, no pagados y sin conciliación)
+      const copia = copiaDe(o);
+      const copiaIgual = (Object.keys(copia) as (keyof typeof copia)[]).every((k) => v[k] === copia[k]);
+      if (!copiaIgual || fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
+        cambios.actualizar.push({ id: v.id, fecha, fechaOriginal, montoEsperado: d.montoEsperado, ...copia });
+      }
+    }
+    const nuevos: VencimientoPlan[] = plan.filter((v) => !ocupados.has(v.periodo) && v.fecha <= limite);
+    cambios.crear.push(...nuevos);
+  }
+  await aplicarCambios(cambios);
+  return { ...r, creados: cambios.crear.length, actualizados: cambios.actualizar.length, eliminados: cambios.eliminar.length };
 }
