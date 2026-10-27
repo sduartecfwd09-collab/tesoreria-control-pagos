@@ -74,13 +74,6 @@ export interface Importaciones {
   datos: ArchivoImportado[];
   /** archivos = leídos + con error + sin sociedad; los retirados de la carpeta no cuentan */
   resumen: { archivos: number; leidos: number; conError: number; sinSociedad: number; retirados: number; movimientos: number };
-  /** archivos que traen imágenes (el lector las ignora), por sociedad y mes */
-  imagenes: {
-    filas: { sociedad: string; mes: string; archivos: number; conImagen: number; conImagenSinMovimientos: number }[];
-    conImagen: number;
-    conImagenSinMovimientos: number;
-    sinDato: number;
-  };
   enCurso: boolean;
 }
 
@@ -242,6 +235,10 @@ export interface Vencimiento {
   montoEsperado: number | null;
   moneda: Moneda;
   estado: EstadoVencimiento;
+  /** el de la obligación o, si falta, el tesorero de la sociedad */
+  responsableEfectivo: string | null;
+  /** días de hoy a la fecha vigente (negativo = ya pasó); se calcula en el servidor con su reloj */
+  dias: number;
   motivo: string | null;
   /** pago menos fecha vigente, en días (positivo = pagó después) */
   diferenciaDias: number | null;
@@ -273,3 +270,37 @@ export interface FiltroVencimientos {
   porPagina: number;
 }
 
+
+/** Detalle de solo lectura de un vencimiento (GET /api/vencimientos/:id). */
+export interface MovimientoDetalle {
+  fecha: string;
+  monto: number; // centavos
+  moneda: string | null; // la de la cuenta; null = sin dato
+  banco: string | null;
+  cuenta: string; // últimos 4
+  sociedad: string;
+  descripcion: string | null; // con los números largos enmascarados
+  /** es el movimiento que respalda el estado */
+  delPago: boolean;
+}
+
+export interface DetalleVencimiento {
+  id: number;
+  proveedor: string;
+  categoria: string;
+  identificador: string;
+  sociedad: string;
+  periodo: string;
+  fecha: string;
+  fechaOriginal: string;
+  movida: boolean;
+  estado: EstadoVencimiento;
+  motivo: string | null;
+  textoEstado: string | null;
+  diferenciaDias: number | null;
+  sinInfoHasta: string | null;
+  responsableEfectivo: string | null;
+  ventana: { desde: string; hasta: string; diasAntes: number; diasDespues: number };
+  cobertura: { estadosHasta: string | null; cuentas: number; cuentasSinCobertura: { cuenta: string; banco: string | null; hasta: string | null }[] } | null;
+  movimientos: MovimientoDetalle[];
+}

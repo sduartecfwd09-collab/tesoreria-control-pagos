@@ -29,7 +29,9 @@
   /* Estados — POR CONFIRMAR con Tesorería */
   --estado-rojo: #b3261e;
   --estado-rojo-fondo: #fde7e5;
+  --estado-ambar: #f2a900; /* Por vencer (maqueta): texto negro encima; nunca como texto */
   --estado-ambar-fondo: #fbe7a1;
+  --linea: #e3e3e3; /* divisores de tabla (maqueta) */
   --estado-ambar-texto: var(--garnier-negro);
 }
 
@@ -46,6 +48,8 @@
   --color-sobre-cabecera: var(--texto-sobre-cabecera);
   --color-rojo: var(--estado-rojo);
   --color-rojo-fondo: var(--estado-rojo-fondo);
+  --color-ambar: var(--estado-ambar);
+  --color-linea: var(--linea);
   --color-ambar-fondo: var(--estado-ambar-fondo);
   --color-ambar-texto: var(--estado-ambar-texto);
   --font-sans: Montserrat, Poppins, Arial, Helvetica, sans-serif;

@@ -1,5 +1,5 @@
 import type {
-  AvisoDatos, CambiosObligacion, Categoria, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
+  AvisoDatos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 
@@ -62,7 +62,22 @@ export const api = {
   editarObligacion: (id: number, c: CambiosObligacion) =>
     pedir<{ datos: Obligacion; regeneracion: Regeneracion | null }>(`/api/obligaciones/${id}`, { method: "PATCH", body: JSON.stringify(c) }),
 
-  listarVencimientos: (f: FiltroVencimientos) => pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number> }>(`/api/vencimientos${consulta(f)}`),
+  listarVencimientos: (f: FiltroVencimientos) =>
+    pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number }>(`/api/vencimientos${consulta(f)}`),
+  /** Todas las páginas de un filtro (los meses y la lista de vencidos son cortos), con el conteo por estado y el «hoy» del servidor. */
+  listarTodosVencimientos: async (f: Omit<FiltroVencimientos, "pagina" | "porPagina">) => {
+    let pagina = 1;
+    const datos: Vencimiento[] = [];
+    for (;;) {
+      const r = await pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number }>(`/api/vencimientos${consulta({ ...f, pagina, porPagina: 500 })}`);
+      datos.push(...r.datos);
+      if (pagina >= r.paginas) return { datos, resumen: r.resumen, hoy: r.hoy, diasAviso: r.diasAviso };
+      pagina++;
+    }
+  },
+  detalleVencimiento: async (id: number) => (await pedir<{ datos: DetalleVencimiento }>(`/api/vencimientos/${id}`)).datos,
   avisosDatos: async () => (await pedir<{ datos: AvisoDatos[] }>("/api/vencimientos/avisos-datos")).datos,
-  periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[] }>("/api/vencimientos/periodos")).datos,
+  periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[]; hoy: string }>("/api/vencimientos/periodos")).datos,
+  /** La fecha de hoy según el servidor (reloj inyectable). */
+  hoy: async () => (await pedir<{ datos: unknown; hoy: string }>("/api/vencimientos/periodos")).hoy,
 };

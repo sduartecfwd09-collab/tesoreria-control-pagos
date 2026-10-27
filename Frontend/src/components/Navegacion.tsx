@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 // Las pestañas "pronto" abren una página Próximamente (no un error) que explica en qué hito llegan.
 const PANTALLAS = [
   { href: "/", texto: "Tablero", pronto: true },
-  { href: "/vencimientos", texto: "Vencimientos", pronto: false },
+  { href: "/pagos-del-mes", texto: "Pagos del mes", pronto: false },
+  { href: "/vencidos", texto: "Vencidos", pronto: false },
   { href: "/obligaciones", texto: "Obligaciones", pronto: false },
   { href: "/conciliacion", texto: "Conciliación", pronto: true },
   { href: "/inconsistencias", texto: "Inconsistencias", pronto: true },

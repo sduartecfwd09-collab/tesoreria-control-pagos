@@ -89,44 +89,6 @@ function Resumen({ r }: { r: Importaciones["resumen"] }) {
   );
 }
 
-function Imagenes({ r }: { r: Importaciones["imagenes"] }) {
-  if (r.conImagen === 0 && r.sinDato === 0) return null;
-  return (
-    <section className="mt-8" aria-label="Archivos con imágenes">
-      <h3 className="font-bold">
-        Archivos con imágenes <span className="font-normal text-suave">({numero(r.conImagen)})</span>
-      </h3>
-      <p className="mt-1 text-sm text-suave max-w-2xl">
-        El sistema no lee el contenido de las imágenes de un archivo. De los que traen imágenes, {numero(r.conImagenSinMovimientos)} no tienen movimientos: conviene revisarlos.
-        {r.sinDato > 0 && ` Hay ${numero(r.sinDato)} archivos leídos antes de registrar este dato; se completa al volver a importar.`}
-      </p>
-      {r.filas.length > 0 && (
-        <table className="mt-3 text-sm border border-divisor rounded">
-          <caption className="sr-only">Archivos con imágenes por sociedad y mes</caption>
-          <thead className="bg-fondo-suave text-left">
-            <tr>
-              <th scope="col" className="px-3 py-2">Sociedad</th>
-              <th scope="col" className="px-3 py-2">Mes</th>
-              <th scope="col" className="px-3 py-2">Con imagen</th>
-              <th scope="col" className="px-3 py-2">De ellos, sin movimientos</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-divisor">
-            {r.filas.map((f) => (
-              <tr key={f.sociedad + f.mes}>
-                <td className="px-3 py-2">{f.sociedad}</td>
-                <td className="px-3 py-2">{f.mes}</td>
-                <td className="px-3 py-2">{numero(f.conImagen)} de {numero(f.archivos)}</td>
-                <td className="px-3 py-2">{numero(f.conImagenSinMovimientos)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
-}
-
 function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda: string; vacio: string; filas: { ruta: string; texto: string; id?: number }[] }) {
   return (
     <section className="mt-8" aria-label={titulo}>
@@ -255,7 +217,6 @@ export function PanelArchivos() {
   return (
     <>
       <Resumen r={imp.resumen} />
-      <Imagenes r={imp.imagenes} />
 
       <h2 className="mt-12 text-lg font-bold border-b-2 border-acento pb-1">Cobertura por cuenta y mes</h2>
       <p className="mt-2 text-sm text-suave max-w-2xl">

@@ -34,6 +34,9 @@ const pares = [
   ["Error: rojo sobre fondo", "estado-rojo", "fondo", 4.5],
   ["Error: rojo sobre fondo de error", "estado-rojo", "estado-rojo-fondo", 4.5],
   ["Ámbar: texto sobre fondo ámbar", "estado-ambar-texto", "estado-ambar-fondo", 4.5],
+  ["Por vencer: texto negro sobre ámbar", "texto", "estado-ambar", 4.5],
+  ["Vencido: texto blanco sobre rojo", "fondo", "estado-rojo", 4.5],
+  ["Texto negro sobre fondo suave", "texto", "fondo-suave", 4.5],
 ];
 let fallos = 0;
 for (const [d, f, b, min] of pares) {

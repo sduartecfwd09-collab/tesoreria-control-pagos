@@ -17,8 +17,8 @@ export function Proximamente({ titulo, hito, descripcion }: { titulo: string; hi
             obligaciones
           </Link>
           , los{" "}
-          <Link href="/vencimientos" className="underline font-medium text-texto">
-            vencimientos
+          <Link href="/pagos-del-mes" className="underline font-medium text-texto">
+            pagos del mes
           </Link>{" "}
           y los{" "}
           <Link href="/archivos" className="underline font-medium text-texto">
