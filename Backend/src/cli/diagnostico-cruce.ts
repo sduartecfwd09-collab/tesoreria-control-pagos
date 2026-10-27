@@ -5,13 +5,13 @@ import { cruzar } from "../domain/cruce.js";
 import { resumirImagenes } from "../domain/imagenes.js";
 import { relojSistema } from "../domain/reloj.js";
 import { listarArchivos } from "../repositories/consultas.js";
-import { cargarDescripcionesPorSociedad, categoriasPorObligacion, contarCuentasPorMoneda, debitosParaFormato, primerasFechasPorCuenta } from "../repositories/cruce.js";
+import { cargarDescripcionesPorSociedad, categoriasPorObligacion, contarCuentasPorMoneda, creditosParaDiagnostico, debitosParaFormato, primerasFechasPorCuenta } from "../repositories/cruce.js";
 import { listarSociedades } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { cruzarVencimientos } from "../vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../vencimientos/diagnostico.js";
 import { informeAdicionalCruce } from "../vencimientos/diagnostico-adicional.js";
-import { informeMargenCruce } from "../vencimientos/diagnostico-margen.js";
+import { DIAS_LEJOS_DEFECTO, informeMargenCruce } from "../vencimientos/diagnostico-margen.js";
 
 // Uso: npm run cruzar:diagnostico
 // Recalcula el cruce de la base de DATABASE_URL e imprime SOLO conteos y fechas agregadas por sociedad y mes:
@@ -26,14 +26,14 @@ if (base.endsWith("_test")) {
 }
 const r = await cruzarVencimientos(relojSistema);
 const anterior = cruzar({ ...r.datos, ...r.parametros, diasDespues: DIAS_DESPUES_ANTERIOR });
-const porEstadoAnterior: Record<string, number> = {};
-for (const q of anterior.resultados) porEstadoAnterior[q.estado] = (porEstadoAnterior[q.estado] ?? 0) + 1;
 console.log(`Base: ${base}`);
+const lejos = Number(await valorGlobal("diagnostico_dias_lejos"));
+const diasLejos = Number.isInteger(lejos) && lejos > 0 ? lejos : DIAS_LEJOS_DEFECTO;
 const avisoDias = Number(await valorGlobal("aviso_datos_dias"));
 const sociedades = (await listarSociedades()).map((s) => ({ id: s.id, codigo: s.codigo, nombreLargo: s.nombreLargo }));
 const archivos = (await listarArchivos()).filter((a) => a.retiradoEn === null);
 console.log(informeDiagnosticoCruce(r, sociedades, await contarCuentasPorMoneda(), Number.isInteger(avisoDias) ? avisoDias : 5, resumirImagenes(archivos)));
 console.log(informeAdicionalCruce(r, sociedades, { descripcionesPorSociedad: await cargarDescripcionesPorSociedad(), primeraFechaPorCuenta: await primerasFechasPorCuenta(), archivos }));
 console.log("", "\nMARGEN DE BUSQUEDA");
-console.log(informeMargenCruce(r, { diasDespues: DIAS_DESPUES_ANTERIOR, porEstado: porEstadoAnterior }, sociedades, { categorias: await categoriasPorObligacion(), debitosFormato: await debitosParaFormato() }));
+console.log(informeMargenCruce(r, { diasDespues: DIAS_DESPUES_ANTERIOR, resultados: anterior.resultados }, sociedades, { categorias: await categoriasPorObligacion(), debitosFormato: await debitosParaFormato(), creditos: await creditosParaDiagnostico(), archivos, diasLejos }));
 await prisma.$disconnect();

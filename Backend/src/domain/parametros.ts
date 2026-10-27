@@ -34,6 +34,13 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "12", unidad: "días", min: 0, max: 15, supuesto: false,
   },
   {
+    clave: "diagnostico_dias_lejos",
+    etiqueta: "Distancia máxima para el diagnóstico de pagos",
+    ayuda:
+      "Solo para el diagnóstico: hasta cuántos días antes o después del rango de búsqueda se mira un pago con el mismo número para explicar por qué un vencimiento no quedó pagado. No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "45", unidad: "días", min: 1, max: 365, supuesto: false,
+  },
+  {
     clave: "aviso_dias",
     etiqueta: "Días de aviso antes del vencimiento",
     ayuda: "Con cuántos días de anticipación un vencimiento pasa a “por vencer”, se prepara el aviso por correo y se genera en el calendario.",

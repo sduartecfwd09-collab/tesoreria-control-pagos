@@ -131,6 +131,8 @@ export async function categoriasPorObligacion(): Promise<Map<number, string>> {
 }
 
 export interface DebitoParaFormato {
+  sociedadId: number;
+  fecha: Date;
   formato: string | null;
   codigoBanco: string | null;
   tieneIdExtraido: boolean;
@@ -143,10 +145,21 @@ export interface DebitoParaFormato {
 export async function debitosParaFormato(): Promise<DebitoParaFormato[]> {
   const filas = await prisma.movimiento.findMany({
     where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
-    select: { descripcion: true, referencia: true, codigo: true, idExtraido: true, cuenta: { select: { formato: true, codigoBanco: true } } },
+    select: { fecha: true, descripcion: true, referencia: true, codigo: true, idExtraido: true, cuenta: { select: { sociedadId: true, formato: true, codigoBanco: true } } },
   });
   return filas.map((f) => ({
-    formato: f.cuenta.formato, codigoBanco: f.cuenta.codigoBanco, tieneIdExtraido: f.idExtraido !== null,
+    sociedadId: f.cuenta.sociedadId, fecha: f.fecha, formato: f.cuenta.formato, codigoBanco: f.cuenta.codigoBanco, tieneIdExtraido: f.idExtraido !== null,
     descripcion: f.descripcion, referencia: f.referencia, codigo: f.codigo,
   }));
+}
+
+export interface CreditoParaDiagnostico { sociedadId: number; formato: string | null; fecha: Date; descripcion: string }
+
+/** Para el diagnóstico: créditos vigentes con descripción (en mayúsculas), sociedad, formato y fecha. Nunca salen del proceso. */
+export async function creditosParaDiagnostico(): Promise<CreditoParaDiagnostico[]> {
+  const filas = await prisma.movimiento.findMany({
+    where: { credito: { gt: 0n }, archivo: { retiradoEn: null }, descripcion: { not: null } },
+    select: { descripcion: true, fecha: true, cuenta: { select: { sociedadId: true, formato: true } } },
+  });
+  return filas.map((f) => ({ sociedadId: f.cuenta.sociedadId, formato: f.cuenta.formato, fecha: f.fecha, descripcion: f.descripcion!.toUpperCase() }));
 }
