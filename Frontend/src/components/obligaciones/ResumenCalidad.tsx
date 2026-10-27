@@ -111,7 +111,7 @@ export function ResumenCalidad({
         )}
         {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0 || r.sinMesArranque > 0) && (
           <p className="mt-3 text-sm text-suave">
-            {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0) && "La tabla de pagos no trae frecuencia, moneda, monto ni cuenta; se aplicó mensual y colones. "}
+            {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0) && "La tabla de pagos no trae frecuencia, moneda ni monto; se aplicó mensual y colones. "}
             {r.sinMesArranque > 0 && `${r.sinMesArranque} con frecuencia no mensual no tienen mes de arranque y no generan vencimientos.`}
           </p>
         )}

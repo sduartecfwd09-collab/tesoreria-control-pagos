@@ -39,6 +39,7 @@ describe("archivos retirados de la carpeta", () => {
     mkdirSync(path.dirname(path.join(raiz, rel)), { recursive: true });
     writeFileSync(path.join(raiz, rel), c);
   };
+  let contenidoA: Buffer; // el mismo contenido al devolverlo: el libro generado lleva la hora de creación
   const A = "ZFL/CR91010710102200000001 0826 ZFL.xlsx";
   const B = "ZFL/CR97015107510000000007 0926 ZFL.xlsx";
   const importaciones = async () => (await app.inject("/api/importaciones")).json();
@@ -48,7 +49,8 @@ describe("archivos retirados de la carpeta", () => {
     await vaciarImportaciones();
     await sembrarSociedad("ZFL", "Sociedad inventada ZFL");
     raiz = mkdtempSync(path.join(tmpdir(), "estados-retirados-"));
-    poner(A, await M.e1());
+    contenidoA = await M.e1();
+    poner(A, contenidoA);
     poner(B, await M.e7());
     poner("ZFL/CR96010710102100000006 0826 ZFL.xlsx", "roto");
     poner("SINSOC/CR91010710102200000009 0826 SINSOC.xlsx", await M.e1({ iban: "CR91010710102200000009" }));
@@ -94,10 +96,12 @@ describe("archivos retirados de la carpeta", () => {
   });
 
   it("si el archivo vuelve a aparecer se reactiva", async () => {
-    poner(A, await M.e1());
+    poner(A, contenidoA);
     const r = await importarCarpeta(raiz);
     expect(r.retirados).toBe(0);
-    expect(r.sinCambios).toBe(1); // mismo contenido: no se vuelve a leer, solo se reactiva
+    const registro = await prisma.archivoImportado.findUniqueOrThrow({ where: { ruta: A } });
+    expect(registro).toMatchObject({ estado: "leido", retiradoEn: null }); // reactivado, con su historial
+    expect(await prisma.movimiento.count({ where: { archivoId: registro.id } })).toBeGreaterThan(0);
     const { resumen } = await importaciones();
     expect(resumen).toMatchObject({ archivos: 4, leidos: 2, retirados: 0 });
     expect((await prisma.archivoImportado.findMany({ where: { retiradoEn: { not: null } } })).length).toBe(0);
