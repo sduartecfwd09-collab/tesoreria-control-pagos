@@ -113,9 +113,7 @@ export interface ObligacionCalidad {
   responsable: string | null;
 }
 
-export type CodigoEtiqueta =
-  | "falta_dia" | "falta_monto" | "falta_cuenta" | "falta_responsable" | "falta_mes_arranque"
-  | "por_confirmar" | "id_repetido" | "formato_iban";
+export type CodigoEtiqueta = "falta_dia" | "falta_mes_arranque" | "id_repetido" | "formato_iban";
 
 export interface Etiqueta {
   codigo: CodigoEtiqueta;
@@ -134,31 +132,34 @@ export function identificadoresRepetidos(obs: ObligacionCalidad[]) {
     .map((g) => ({ sociedad: g[0]!.sociedad, identificador: g[0]!.identificador, proveedores: g.map((o) => o.proveedor), obligaciones: g.map((o) => o.id) }));
 }
 
+/**
+ * Observaciones de una obligación: solo problemas reales. Monto, cuenta y responsable son datos opcionales y no se
+ * señalan; frecuencia y moneda por confirmar siguen guardadas como dato interno, pero no se muestran como observación.
+ */
 export function etiquetasDe(o: ObligacionCalidad, repetidos: ReturnType<typeof identificadoresRepetidos>): Etiqueta[] {
   const e: Etiqueta[] = [];
   if (o.diaEsperadoPago === null) e.push({ codigo: "falta_dia", texto: "Falta día", ayuda: "Sin día esperado de pago no se pueden generar sus vencimientos. Indíquelo al editar." });
-  if (o.montoEsperado === null) e.push({ codigo: "falta_monto", texto: "Falta monto", ayuda: "Monto esperado sin definir. Es opcional: en el piloto el monto no se valida." });
-  if (o.cuentaEsperadaId === null) e.push({ codigo: "falta_cuenta", texto: "Falta cuenta", ayuda: "No se indicó desde qué cuenta bancaria se paga. Es opcional." });
-  if (o.responsable === null) e.push({ codigo: "falta_responsable", texto: "Sin responsable", ayuda: "La obligación no tiene responsable y su sociedad no tiene tesorero asignado." });
   if (o.frecuencia !== "mensual" && o.mesArranque === null) {
     e.push({ codigo: "falta_mes_arranque", texto: "Falta mes de arranque", ayuda: "Para una frecuencia no mensual indique en qué mes toca el primer pago." });
-  }
-  const supuestos = [o.frecuenciaPorConfirmar && "frecuencia", o.monedaPorConfirmar && "moneda"].filter(Boolean);
-  if (supuestos.length > 0) {
-    e.push({ codigo: "por_confirmar", texto: "Por confirmar con Tesorería", ayuda: `Valor supuesto (no viene en la tabla de pagos): ${supuestos.join(" y ")}. Confírmelo al editar.` });
   }
   const rep = repetidos.find((g) => g.obligaciones.includes(o.id));
   if (rep) {
     const otros = rep.proveedores.filter((p) => p !== o.proveedor).join(", ");
-    e.push({ codigo: "id_repetido", texto: "Por confirmar con Tesorería", ayuda: `El mismo identificador aparece en ${rep.sociedad} con otro proveedor (${otros}). Confirme cuál es el correcto.` });
+    e.push({ codigo: "id_repetido", texto: "Identificador repetido", ayuda: `El mismo identificador aparece con otro proveedor (${otros}). Verifique cuál es el correcto.` });
   }
   if (pareceIban(o.identificador)) {
-    e.push({ codigo: "formato_iban", texto: "Por confirmar con Tesorería", ayuda: "El identificador tiene formato de IBAN (cuenta bancaria), no de número de servicio. Confirme cuál es el correcto." });
+    e.push({ codigo: "formato_iban", texto: "Formato de IBAN", ayuda: "El identificador tiene formato de IBAN (cuenta bancaria), no de número de servicio. Verifique cuál es el correcto." });
   }
   return e;
 }
 
-/** Una sociedad con su nombre y si tiene estados de cuenta cargados (para separar las que están fuera del piloto). */
+export type EstadoObligacion = "activa" | "inactiva" | "en_revision";
+
+/** Inactiva; activa con alguna observación = en revisión; activa sin observaciones = activa. */
+export const estadoDeObligacion = (activa: boolean, observaciones: Etiqueta[]): EstadoObligacion =>
+  !activa ? "inactiva" : observaciones.length > 0 ? "en_revision" : "activa";
+
+/** Una sociedad con su nombre y si tiene estados de cuenta cargados (para separar las que no tienen estados). */
 export interface SociedadParaCalidad {
   nombre: string;
   conEstados: boolean;
@@ -184,7 +185,7 @@ export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: SociedadPa
     formatoIban: activas.filter((o) => pareceIban(o.identificador)).map((o) => ({ id: o.id, sociedad: o.sociedad, proveedor: o.proveedor, identificador: o.identificador })),
     // con estados de cuenta pero sin obligaciones: aviso individual (algo falta en el catálogo)
     sociedadesSinObligaciones: sinObligaciones.filter((s) => s.conEstados).map((s) => s.nombre).sort(),
-    // sin estados de cuenta ni obligaciones: una sola línea resumen (sociedades fuera del piloto)
+    // sin estados de cuenta ni obligaciones: una sola línea resumen (sociedades sin movimiento cargado)
     sociedadesSinEstadosNiObligaciones: sinObligaciones.filter((s) => !s.conEstados).map((s) => s.nombre).sort(),
   };
 }

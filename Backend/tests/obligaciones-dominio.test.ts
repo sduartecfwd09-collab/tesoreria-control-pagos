@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe, identificadoresRepetidos,
+  calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, estadoDeObligacion, etiquetasDe, identificadoresRepetidos,
   pareceIban, primerError, type ObligacionCalidad,
 } from "../src/domain/obligaciones.js";
 
@@ -48,21 +48,21 @@ describe("alertas de calidad del catálogo", () => {
 });
 
 describe("etiquetas por obligación", () => {
-  it("marca lo que falta y lo que está por confirmar con Tesorería", () => {
+  it("solo señala problemas reales: sin día o sin mes de arranque; monto, cuenta, responsable y lo supuesto no", () => {
     const o = ob({ diaEsperadoPago: null, frecuencia: "anual" });
-    expect(etiquetasDe(o, []).map((e) => e.codigo)).toEqual([
-      "falta_dia", "falta_monto", "falta_cuenta", "falta_responsable", "falta_mes_arranque", "por_confirmar",
-    ]);
-    const completa = ob({ montoEsperado: 1, cuentaEsperadaId: 2, responsable: "Y", frecuenciaPorConfirmar: false, monedaPorConfirmar: false });
-    expect(etiquetasDe(completa, [])).toEqual([]);
+    expect(etiquetasDe(o, []).map((e) => e.codigo)).toEqual(["falta_dia", "falta_mes_arranque"]);
+    expect(etiquetasDe(ob({}), [])).toEqual([]); // sin monto, cuenta ni responsable y con frecuencia y moneda supuestas
+    expect(estadoDeObligacion(true, [])).toBe("activa");
+    expect(estadoDeObligacion(false, [])).toBe("inactiva");
+    expect(estadoDeObligacion(true, etiquetasDe(o, []))).toBe("en_revision");
   });
 
   it("explica el identificador repetido y el formato de IBAN", () => {
     const a = ob({ identificador: "CR12000000000000000001", proveedor: "Uno" });
     const b = ob({ identificador: "CR12000000000000000001", proveedor: "Dos" });
     const e = etiquetasDe(a, identificadoresRepetidos([a, b]));
-    expect(e.find((x) => x.codigo === "id_repetido")).toMatchObject({ texto: "Por confirmar con Tesorería", ayuda: expect.stringContaining("(Dos)") });
-    expect(e.find((x) => x.codigo === "formato_iban")?.texto).toBe("Por confirmar con Tesorería");
+    expect(e.find((x) => x.codigo === "id_repetido")).toMatchObject({ texto: "Identificador repetido", ayuda: "El mismo identificador aparece con otro proveedor (Dos). Verifique cuál es el correcto." });
+    expect(e.find((x) => x.codigo === "formato_iban")?.texto).toBe("Formato de IBAN");
   });
 });
 

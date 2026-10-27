@@ -90,11 +90,13 @@ describe("catálogo: lectura", () => {
     }
   });
 
-  it("cada obligación trae sus etiquetas, incluidas las alertas por confirmar con Tesorería", async () => {
+  it("cada obligación trae sus observaciones (solo problemas reales) y su estado; monto, cuenta y responsable ausentes no se señalan", async () => {
     const o = await porId("00012345");
     expect(o).toMatchObject({ sociedad: "Sociedad AAA", diaEsperadoPago: 15, frecuencia: "mensual", moneda: "CRC", montoEsperado: null, cuentaEsperada: null });
-    expect(o.etiquetas.map((e) => e.codigo)).toEqual(["falta_monto", "falta_cuenta", "falta_responsable", "por_confirmar"]);
-    expect((await porId("77777777", "Fono Uno")).etiquetas.map((e) => e.codigo)).toContain("id_repetido");
+    expect(o).toMatchObject({ etiquetas: [], estado: "activa", frecuenciaPorConfirmar: true, monedaPorConfirmar: true }); // lo supuesto se conserva como dato, no como observación
+    const repetido = await porId("77777777", "Fono Uno");
+    expect(repetido.etiquetas.map((e) => e.codigo)).toContain("id_repetido");
+    expect(repetido.estado).toBe("en_revision");
     expect((await porId("CR12000000000000000001")).etiquetas.map((e) => e.codigo)).toContain("formato_iban");
   });
 

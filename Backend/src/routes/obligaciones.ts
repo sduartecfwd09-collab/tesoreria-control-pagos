@@ -9,7 +9,7 @@ import { env } from "../config/env.js";
 import { hayImportacionCatalogoEnCurso, importarCatalogo } from "../catalogo/importar.js";
 import {
   CAMPOS_EDITABLES, calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe,
-  identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
+  estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
@@ -43,6 +43,7 @@ const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
 });
 
 function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>) {
+  const observaciones = etiquetasDe(aCalidad(o), repetidos);
   return {
     id: o.id,
     sociedadId: o.sociedadId, sociedad: etiquetaSociedad(o.sociedad),
@@ -57,7 +58,8 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     activa: o.activa, origen: o.origen,
     controlDesde: periodoDeControl(o.controlDesde),
     actualizado: o.actualizado.toISOString(),
-    etiquetas: etiquetasDe(aCalidad(o), repetidos),
+    etiquetas: observaciones,
+    estado: estadoDeObligacion(o.activa, observaciones),
   };
 }
 
