@@ -132,8 +132,13 @@ model Vencimiento {
   proveedor        String         @db.VarChar(150)
   cuentaEsperadaId Int?
   moneda           String         @db.VarChar(10)
-  // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion
+  // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion | por_revisar (lo calcula el cruce)
   estado           String         @default("proyectado") @db.VarChar(40)
+  movimientoId     Int? // movimiento del banco que respalda el estado (el pago); null = ninguno
+  movimiento       Movimiento?    @relation(fields: [movimientoId], references: [id], onDelete: SetNull)
+  motivo           String?        @db.VarChar(200) // texto fijo del sistema que explica el estado (nunca datos del archivo)
+  diferenciaDias   Int? // fecha del pago menos fecha vigente, en días (positivo = pagó después); solo con pago
+  sinInfoHasta     DateTime?      @db.Date // si estado = sin_informacion: hasta qué fecha hay datos de la sociedad; null = sin datos
   creadoEn         DateTime       @default(now()) @db.DateTime(3)
   actualizado      DateTime       @updatedAt @db.DateTime(3)
   conciliaciones   Conciliacion[]
@@ -143,6 +148,7 @@ model Vencimiento {
   @@unique([obligacionId, periodo])
   @@index([sociedadId])
   @@index([categoriaId])
+  @@index([movimientoId])
 }
 
 // Filas del catálogo que la importación no pudo asignar o que piden una decisión de una persona.
@@ -233,6 +239,7 @@ model Movimiento {
   actualizado    DateTime         @updatedAt @db.DateTime(3)
   conciliaciones Conciliacion[]
   alertas        Alerta[]
+  vencimientos   Vencimiento[]
 
   @@index([cuentaId, fecha])
   @@index([periodo])

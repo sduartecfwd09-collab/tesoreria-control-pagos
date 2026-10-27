@@ -20,16 +20,23 @@ export const FRECUENCIAS = ["mensual", "bimestral", "trimestral", "semestral", "
 
 export const DEFINICIONES: DefinicionParametro[] = [
   {
-    clave: "ventana_dias",
-    etiqueta: "Ventana de cruce",
+    clave: "ventana_dias_antes",
+    etiqueta: "Días antes de la fecha de pago",
     ayuda:
-      "Cuántos días antes o después de la fecha esperada se acepta un pago como válido para esa obligación. Se cuentan días calendario y pueden cruzar de un mes a otro.",
-    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días (±)", min: 0, max: 15, supuesto: false,
+      "Cuántos días antes de la fecha de pago se acepta un pago como válido para esa obligación (se puede pagar antes). Se cuentan días calendario y pueden cruzar de un mes a otro.",
+    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 15, supuesto: false,
+  },
+  {
+    clave: "ventana_dias_despues",
+    etiqueta: "Días después de la fecha de pago",
+    ayuda:
+      "Cuántos días después de la fecha de pago se acepta un pago como válido para esa obligación. Pasado ese margen sin pago, el vencimiento queda vencido (si hay estados de cuenta que lo confirmen).",
+    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 15, supuesto: false,
   },
   {
     clave: "aviso_dias",
     etiqueta: "Días de aviso antes del vencimiento",
-    ayuda: "Con cuántos días de anticipación un vencimiento pasa a “por vencer” y se prepara el aviso por correo.",
+    ayuda: "Con cuántos días de anticipación un vencimiento pasa a “por vencer”, se prepara el aviso por correo y se genera en el calendario.",
     tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 60, supuesto: false,
   },
   {

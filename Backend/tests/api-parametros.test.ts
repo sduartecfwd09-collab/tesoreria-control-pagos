@@ -11,7 +11,9 @@ const lista = async () => (await app.inject("/api/parametros")).json().datos as 
 describe("API de parámetros", () => {
   it("expone los parámetros iniciales", async () => {
     const d = await lista();
-    expect(d.find((p) => p.clave === "ventana_dias")?.valor).toBe("3");
+    expect(d.find((p) => p.clave === "ventana_dias_antes")?.valor).toBe("3");
+    expect(d.find((p) => p.clave === "ventana_dias_despues")?.valor).toBe("3");
+    expect(d.some((p) => p.clave === "ventana_dias")).toBe(false);
     expect(d.find((p) => p.clave === "aviso_dias")?.valor).toBe("3");
     expect(d.find((p) => p.clave === "frecuencia_defecto")?.valor).toBe("mensual");
     const tol = d.filter((p) => p.clave === "tolerancia_pct");
@@ -20,7 +22,7 @@ describe("API de parámetros", () => {
   });
 
   it("edita un parámetro válido y lo persiste", async () => {
-    const id = (await lista()).find((p) => p.clave === "ventana_dias")!.id;
+    const id = (await lista()).find((p) => p.clave === "ventana_dias_antes")!.id;
     const r = await app.inject({ method: "PUT", url: `/api/parametros/${id}`, payload: { valor: 5 } });
     expect(r.statusCode).toBe(200);
     expect((await lista()).find((p) => p.id === id)?.valor).toBe("5");
