@@ -110,13 +110,7 @@ export function PanelConfiguracion() {
     setDatos((d) => d && d.map((x) => (x.id === p.id ? { ...x, valor } : x)));
   }, []);
 
-  const { globales, porCategoria } = useMemo(
-    () => ({
-      globales: (datos ?? []).filter((p) => p.ambito === "global"),
-      porCategoria: (datos ?? []).filter((p) => p.ambito === "categoria"),
-    }),
-    [datos],
-  );
+  const globales = useMemo(() => (datos ?? []).filter((p) => p.ambito === "global"), [datos]);
 
   if (error)
     return (
@@ -141,17 +135,6 @@ export function PanelConfiguracion() {
           Reglas de cruce y avisos
         </h2>
         {globales.map((p) => (
-          <FilaParametro key={p.id} p={p} alGuardar={alGuardar} />
-        ))}
-      </section>
-      <section aria-labelledby="h-tol">
-        <h2 id="h-tol" className="text-lg font-bold border-b-2 border-acento pb-1">
-          Tolerancia de monto por categoría
-        </h2>
-        <p className="mt-2 text-sm text-suave max-w-2xl">
-          Diferencia aceptada entre el monto esperado y el monto pagado, según la categoría.
-        </p>
-        {porCategoria.map((p) => (
           <FilaParametro key={p.id} p={p} alGuardar={alGuardar} />
         ))}
       </section>

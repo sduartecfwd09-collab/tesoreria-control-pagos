@@ -52,11 +52,6 @@ function Celda({ c }: { c: CeldaCobertura }) {
   return (
     <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}`} className="rounded border border-control px-2 py-1.5">
       <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
-      {c.nota && (
-        <span className="mt-1 block">
-          <Etiqueta tono="ambar">{c.nota}</Etiqueta>
-        </span>
-      )}
       {c.saldo === "no_cuadra" && (
         <span className="mt-1 block">
           <Etiqueta tono="ambar">Saldo no cuadra</Etiqueta>

@@ -5,7 +5,7 @@ export interface Parametro {
   clave: string;
   valor: string;
   tipo: "entero" | "texto";
-  ambito: "global" | "categoria";
+  ambito: "global";
   categoria: string | null;
   etiqueta: string;
   ayuda: string;
@@ -29,8 +29,6 @@ export interface CeldaCobertura {
   duplicados: number;
   saldo?: "cuadra" | "no_cuadra" | "no_verificable";
   error?: string | null;
-  /** aviso para revisar a mano (no cambia cómo cuenta el archivo para la cobertura) */
-  nota?: string;
 }
 
 export interface FilaCobertura {
@@ -253,6 +251,7 @@ export interface Vencimiento {
 export interface AvisoDatos {
   sociedadId: number;
   sociedad: string;
+  estadosHasta: string | null;
   sinEstadosDesde: string | null;
   texto: string;
 }
@@ -284,6 +283,14 @@ export interface MovimientoDetalle {
   delPago: boolean;
 }
 
+export interface ObligacionDelGrupo {
+  proveedor: string;
+  categoria: string;
+  diaPago: number | null;
+  /** estado de su vencimiento del mes; null si no tiene */
+  estado: string | null;
+}
+
 export interface DetalleVencimiento {
   id: number;
   proveedor: string;
@@ -302,5 +309,9 @@ export interface DetalleVencimiento {
   responsableEfectivo: string | null;
   ventana: { desde: string; hasta: string; diasAntes: number; diasDespues: number };
   cobertura: { estadosHasta: string | null; cuentas: number; cuentasSinCobertura: { cuenta: string; banco: string | null; hasta: string | null }[] } | null;
+  /** textos armados por el servidor con los datos reales: qué pasó, por qué y qué hacer */
+  textos: { resumen: string; parrafos: string[]; queHacer: string | null };
+  /** obligaciones de la sociedad con el mismo número de servicio (vacío si no se comparte) */
+  grupo: ObligacionDelGrupo[];
   movimientos: MovimientoDetalle[];
 }

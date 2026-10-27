@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { MESES, sumarMeses } from "@/lib/formato";
-import type { EstadoVencimiento, Vencimiento } from "@/lib/tipos";
+import type { AvisoDatos, EstadoVencimiento, Vencimiento } from "@/lib/tipos";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { ORDEN } from "./EstadoPago";
@@ -58,6 +58,7 @@ export function PagosDelMes() {
   const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; diasAviso: number } | null>(null);
   const [pestana, setPestana] = useState<Pestana>("atencion");
   const [abierto, setAbierto] = useState<number | null>(null);
+  const [avisos, setAvisos] = useState<AvisoDatos[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
 
@@ -65,6 +66,14 @@ export function PagosDelMes() {
   useEffect(() => {
     let vigente = true;
     api.hoy().then((h) => vigente && (setHoy(h), setPeriodo((p) => p ?? h.slice(0, 7)))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    return () => {
+      vigente = false;
+    };
+  }, [intento]);
+
+  useEffect(() => {
+    let vigente = true;
+    api.avisosDatos().then((a) => vigente && setAvisos(a)).catch(() => vigente && setAvisos([]));
     return () => {
       vigente = false;
     };
@@ -114,6 +123,17 @@ export function PagosDelMes() {
         </div>
       </header>
 
+      {avisos.length > 0 && (
+        <section role="status" aria-label="Datos desactualizados" className="mt-6 max-w-3xl rounded-xl border-2 border-texto bg-ambar-fondo p-4 text-texto">
+          <h2 className="font-bold">Datos desactualizados</h2>
+          <ul className="mt-1 list-disc pl-5 text-sm">
+            {avisos.map((a) => (
+              <li key={a.sociedadId}>{a.texto}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section aria-label="Resumen del mes" className="mt-7 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         <Tarjeta titulo="Vencidos" acento="bg-rojo" detalle="Sin pago encontrado" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></Icono>}
           insignia={<Insignia clase="bg-rojo text-fondo">Atender hoy</Insignia>}>{cuenta("vencido")}</Tarjeta>
@@ -122,7 +142,7 @@ export function PagosDelMes() {
         <Tarjeta titulo="Pagados" acento="bg-acento" barra={pct} icono={<Icono><path d="M20 6L9 17l-5-5" /></Icono>} insignia={<Insignia clase="bg-acento text-sobre-acento">de {N}</Insignia>}>
           {pagados}
         </Tarjeta>
-        <Tarjeta titulo="Sin información" acento="bg-suave" detalle="Falta el estado de cuenta que lo confirme" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M9.5 9.2a2.6 2.6 0 1 1 3.7 2.4c-.8.4-1.2 1-1.2 1.9M12 17h.01" /></Icono>}
+        <Tarjeta titulo="Sin información" acento="bg-suave" detalle="Faltan estados de cuenta" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M9.5 9.2a2.6 2.6 0 1 1 3.7 2.4c-.8.4-1.2 1-1.2 1.9M12 17h.01" /></Icono>}
           insignia={<Insignia clase="bg-ambar-fondo text-texto border border-dashed border-texto">Revisar datos</Insignia>}>{cuenta("sin_informacion")}</Tarjeta>
       </section>
 

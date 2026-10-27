@@ -73,7 +73,7 @@ export const ESTADO: Record<EstadoVencimiento, Definicion> = {
     ayuda: "Se pagó, pero por otra sociedad o más de una vez.",
   },
   pagado: { texto: "Pagado", clase: "bg-acento text-sobre-acento", ayuda: "El pago aparece en un estado de cuenta de la sociedad." },
-  proyectado: { texto: "Proyectado", clase: "bg-fondo text-texto border border-dashed border-control", ayuda: "Todavía falta tiempo: aún no se espera el pago." },
+  proyectado: { texto: "Programado", clase: "bg-fondo text-texto border border-dashed border-control", ayuda: "Todavía falta tiempo: la fecha de pago está fuera de los días de aviso." },
 };
 
 /** Orden de las filas: primero lo que más urgencia tiene. */

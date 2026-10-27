@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
-import type { DetalleVencimiento, MovimientoDetalle } from "@/lib/tipos";
+import type { DetalleVencimiento, EstadoVencimiento, MovimientoDetalle } from "@/lib/tipos";
 import { ESTADO, EstadoPago } from "./EstadoPago";
 
-const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
+const ESTADOS: EstadoVencimiento[] = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"];
 
 function TablaMovimientos({ movimientos, conSociedad }: { movimientos: MovimientoDetalle[]; conSociedad: boolean }) {
   return (
@@ -18,7 +18,7 @@ function TablaMovimientos({ movimientos, conSociedad }: { movimientos: Movimient
             <th scope="col" className="px-3 py-2 font-semibold">Banco y cuenta</th>
             {conSociedad && <th scope="col" className="px-3 py-2 font-semibold">Sociedad</th>}
             <th scope="col" className="px-3 py-2 font-semibold text-right">Monto</th>
-            <th scope="col" className="px-3 py-2 font-semibold">Descripción</th>
+            <th scope="col" className="px-3 py-2 font-semibold">Lo que dice el banco</th>
           </tr>
         </thead>
         <tbody>
@@ -43,110 +43,47 @@ function TablaMovimientos({ movimientos, conSociedad }: { movimientos: Movimient
   );
 }
 
+/** Obligaciones de la misma sociedad que comparten el número de servicio, con el estado de su vencimiento del mes. */
+function TablaGrupo({ grupo }: { grupo: DetalleVencimiento["grupo"] }) {
+  return (
+    <div className="mt-2 overflow-x-auto rounded border border-linea">
+      <table className="w-full text-sm">
+        <caption className="sr-only">Obligaciones con el mismo número de servicio</caption>
+        <thead className="bg-fondo-suave text-left text-xs uppercase tracking-wide text-suave">
+          <tr>
+            <th scope="col" className="px-3 py-2 font-semibold">Proveedor</th>
+            <th scope="col" className="px-3 py-2 font-semibold">Categoría</th>
+            <th scope="col" className="px-3 py-2 font-semibold">Día de pago</th>
+            <th scope="col" className="px-3 py-2 font-semibold">Estado este mes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grupo.map((g, i) => (
+            <tr key={i} className="border-t border-linea align-top">
+              <td className="px-3 py-2 font-semibold">{g.proveedor}</td>
+              <td className="px-3 py-2">{g.categoria}</td>
+              <td className="px-3 py-2">{g.diaPago === null ? "Sin día" : `Día ${g.diaPago}`}</td>
+              <td className="px-3 py-2">{g.estado && ESTADOS.includes(g.estado as EstadoVencimiento) ? <EstadoPago estado={g.estado as EstadoVencimiento} /> : "Sin vencimiento este mes"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Seccion({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <section className="mt-5 border-t border-linea pt-4">
       <h3 className="text-sm font-bold">{titulo}</h3>
-      <div className="mt-2 space-y-2 text-sm">{children}</div>
+      {children}
     </section>
   );
 }
 
-/** Por qué tiene este estado: lo que se buscó, hasta dónde hay estados de cuenta y los movimientos que lo explican. */
-function Motivo({ d }: { d: DetalleVencimiento }) {
-  const v = d.ventana;
-  const ventana = (
-    <p>
-      Se buscó un pago con este identificador entre el {nombreFecha(v.desde)} y el {nombreFecha(v.hasta)} ({plural(v.diasAntes, "día antes", "días antes")} y {plural(v.diasDespues, "día después", "días después")} de la fecha de pago).
-    </p>
-  );
-  const c = d.cobertura;
-  switch (d.estado) {
-    case "vencido":
-      return (
-        <Seccion titulo="Por qué está vencido">
-          {ventana}
-          <p>No se encontró ningún pago en esa ventana.</p>
-          {c && (
-            <p>
-              {c.estadosHasta ? `Los estados de cuenta llegan hasta el ${nombreFecha(c.estadosHasta)}` : "Todavía no hay estados de cuenta"}, en {plural(c.cuentas, "cuenta", "cuentas")} de la sociedad.
-            </p>
-          )}
-          {d.motivo?.includes("sin estado de cuenta") && <p className="font-semibold">Se muestra como vencido aunque ningún estado de cuenta lo confirma.</p>}
-        </Seccion>
-      );
-    case "sin_informacion":
-      return (
-        <Seccion titulo="Por qué no hay información">
-          <p>
-            {d.sinInfoHasta
-              ? `Venció el ${nombreFecha(d.fecha)}; no hay estado de cuenta cargado después del ${nombreFecha(d.sinInfoHasta)}.`
-              : `Venció el ${nombreFecha(d.fecha)}; no hay estado de cuenta cargado de esa fecha.`}
-          </p>
-          {ventana}
-          {c && (
-            <>
-              <p>{c.estadosHasta ? `Los estados de cuenta de la sociedad llegan hasta el ${nombreFecha(c.estadosHasta)}.` : "La sociedad no tiene estados de cuenta cargados."}</p>
-              {c.cuentas === 0 ? (
-                <p>No hay cuentas conocidas de esta sociedad.</p>
-              ) : c.cuentasSinCobertura.length > 0 ? (
-                <>
-                  <p className="font-semibold">Cuentas que faltan ({c.cuentasSinCobertura.length} de {c.cuentas}):</p>
-                  <ul className="list-disc pl-5">
-                    {c.cuentasSinCobertura.map((x, i) => (
-                      <li key={i}>
-                        {x.banco ?? "Banco sin dato"}, cuenta {x.cuenta}: {x.hasta ? `sin datos después del ${nombreFecha(x.hasta)}` : "sin datos de este período"}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-            </>
-          )}
-        </Seccion>
-      );
-    case "por_revisar":
-      return (
-        <Seccion titulo="Por qué hay que revisarlo">
-          <p>{d.motivo}</p>
-          {d.movimientos.length > 0 ? (
-            <>
-              <p className="font-semibold">Movimientos encontrados ({d.movimientos.length}):</p>
-              <TablaMovimientos movimientos={d.movimientos} conSociedad />
-            </>
-          ) : (
-            <p>No hay movimientos que mostrar.</p>
-          )}
-        </Seccion>
-      );
-    case "pagado":
-      return (
-        <Seccion titulo="Pago encontrado">
-          {d.diferenciaDias !== null && d.diferenciaDias !== 0 && (
-            <p>
-              Se pagó {plural(Math.abs(d.diferenciaDias), "día", "días")} {d.diferenciaDias > 0 ? "después" : "antes"} de la fecha de pago.
-            </p>
-          )}
-          <TablaMovimientos movimientos={d.movimientos} conSociedad={false} />
-        </Seccion>
-      );
-    case "pagado_con_inconsistencia":
-      return (
-        <Seccion titulo="Inconsistencia">
-          <p className="font-semibold">{d.motivo}</p>
-          <TablaMovimientos movimientos={d.movimientos} conSociedad />
-        </Seccion>
-      );
-    case "por_vencer":
-    case "proyectado":
-    default:
-      return <Seccion titulo="Estado">{<p>{ESTADO[d.estado]?.ayuda}</p>}</Seccion>;
-  }
-}
-
 /**
- * Detalle de solo lectura de un pago: se abre con «Gestionar» o tocando la fila. Sin acciones: solo muestra los datos
- * y el porqué del estado. Cierra con Escape, con el botón o al pulsar fuera.
+ * Detalle de solo lectura de un pago: se abre con «Gestionar» o tocando la fila. Sin acciones: cuenta qué pasó, por qué y
+ * qué hacer con los datos reales. Los textos los arma el servidor. Cierra con Escape, con el botón o al pulsar fuera.
  */
 export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void }) {
   const dialogo = useRef<HTMLDialogElement>(null);
@@ -177,14 +114,14 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
       onClose={alCerrar}
       onClick={(e) => e.target === dialogo.current && dialogo.current?.close()}
       aria-labelledby="titulo-detalle"
-      className="m-auto w-[min(640px,calc(100%-32px))] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl border-0 p-0 text-texto shadow-2xl backdrop:bg-black/45"
+      className="m-auto w-[min(680px,calc(100%-32px))] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl border-0 p-0 text-texto shadow-2xl backdrop:bg-black/45"
     >
       <div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-cabecera px-6 py-5 text-sobre-cabecera">
         <div>
           <span className="text-xs font-light uppercase tracking-[0.2em]">Detalle del pago</span>
           <h2 id="titulo-detalle" className="mt-1 text-xl font-extrabold">{d ? `${d.proveedor} · ${d.categoria}` : "Cargando…"}</h2>
         </div>
-        <button type="button" onClick={() => dialogo.current?.close()} aria-label="Cerrar" className="flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-suave">
+        <button type="button" onClick={() => dialogo.current?.close()} aria-label="Cerrar" className="flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-suave focus-visible:outline-acento">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M6 6l12 12M18 6 6 18" />
           </svg>
@@ -197,18 +134,36 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
           <>
             <p className="flex flex-wrap items-center gap-2">
               <EstadoPago estado={d.estado} />
-              <span className="text-xs text-suave">{ESTADO[d.estado]?.ayuda}</span>
             </p>
-            <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              {fila("Proveedor", d.proveedor)}
-              {fila("Identificador", <span className="font-mono">{d.identificador}</span>)}
-              {fila("Sociedad", d.sociedad)}
-              {fila("Período", nombrePeriodo(d.periodo))}
-              {fila("Fecha original", nombreFecha(d.fechaOriginal))}
-              {fila("Fecha vigente", d.movida ? `${nombreFecha(d.fecha)} (se movió solo este mes)` : nombreFecha(d.fecha))}
-              {fila("Responsable", d.responsableEfectivo ?? "Sin responsable")}
-            </dl>
-            <Motivo d={d} />
+            <p className="mt-3 font-semibold">{d.textos.resumen}</p>
+            {d.textos.parrafos.map((p, i) => (
+              <p key={i} className="mt-2 text-sm">{p}</p>
+            ))}
+            {d.textos.queHacer && <p className="mt-3 rounded border-l-4 border-acento bg-fondo-suave p-3 text-sm font-semibold">{d.textos.queHacer}</p>}
+
+            {d.grupo.length > 1 && (
+              <Seccion titulo="Obligaciones con el mismo número de servicio en esta sociedad">
+                <TablaGrupo grupo={d.grupo} />
+              </Seccion>
+            )}
+            {d.movimientos.length > 0 && (
+              <Seccion titulo={d.movimientos.length === 1 ? "Movimiento del banco" : `Movimientos del banco (${d.movimientos.length})`}>
+                <TablaMovimientos movimientos={d.movimientos} conSociedad={d.estado === "por_revisar" || d.estado === "pagado_con_inconsistencia"} />
+              </Seccion>
+            )}
+
+            <Seccion titulo="Datos">
+              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                {fila("Proveedor", d.proveedor)}
+                {fila("Número de servicio", <span className="font-mono">{d.identificador}</span>)}
+                {fila("Sociedad", d.sociedad)}
+                {fila("Período", nombrePeriodo(d.periodo))}
+                {fila("Fecha original", nombreFecha(d.fechaOriginal))}
+                {fila("Fecha vigente", d.movida ? `${nombreFecha(d.fecha)} (se movió solo este mes)` : nombreFecha(d.fecha))}
+                {fila("Responsable", d.responsableEfectivo ?? "Sin responsable")}
+                {fila("Estado", ESTADO[d.estado]?.texto ?? "Sin definir")}
+              </dl>
+            </Seccion>
           </>
         )}
         <div className="mt-6 flex justify-end">
