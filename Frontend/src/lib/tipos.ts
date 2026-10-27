@@ -131,7 +131,9 @@ export interface Obligacion {
   moneda: Moneda;
   monedaPorConfirmar: boolean;
   cuentaEsperada: { id: number; numero: string; banco: string | null } | null;
-  responsable: string | null;
+  responsable: string | null; // el propio de la obligación (lo que se edita)
+  responsableEfectivo: string | null; // el que se muestra: el propio o, si falta, el tesorero de la sociedad
+  responsableDe: "obligacion" | "tesorero" | null;
   activa: boolean;
   origen: "catalogo" | "manual";
   actualizado: string;
@@ -186,7 +188,10 @@ export interface ResumenCatalogo {
   monedaPorConfirmar: number;
   identificadoresRepetidos: { sociedad: string; identificador: string; proveedores: string[]; obligaciones: number[] }[];
   formatoIban: { id: number; sociedad: string; proveedor: string; identificador: string }[];
+  /** con estados de cuenta pero sin obligaciones: aviso individual */
   sociedadesSinObligaciones: string[];
+  /** sin estados de cuenta ni obligaciones: una sola línea resumen */
+  sociedadesSinEstadosNiObligaciones: string[];
   porSociedad: Record<string, number>;
   porCategoria: Record<string, number>;
 }

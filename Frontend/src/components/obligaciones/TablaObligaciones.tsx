@@ -3,7 +3,7 @@ import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "
 import { useMemo } from "react";
 import { MESES_CORTOS, monto } from "@/lib/formato";
 import type { EtiquetaObligacion, Obligacion } from "@/lib/tipos";
-import { Etiqueta, type Tono } from "../ui";
+import { Etiqueta, NombreSociedad, type Tono } from "../ui";
 
 const col = createColumnHelper<Obligacion>();
 
@@ -29,7 +29,7 @@ function Etiquetas({ o }: { o: Obligacion }) {
 export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; alEditar: (o: Obligacion) => void }) {
   const columnas = useMemo(
     () => [
-      col.accessor("sociedad", { header: "Sociedad", cell: (c) => <span className="font-semibold">{c.getValue()}</span> }),
+      col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="font-semibold min-w-40 max-w-64" /> }),
       col.accessor("proveedor", {
         header: "Proveedor",
         cell: (c) => (
@@ -57,7 +57,18 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
         header: "Monto esperado",
         cell: (c) => <span className="whitespace-nowrap">{monto(c.getValue(), c.row.original.moneda)}</span>,
       }),
-      col.accessor("responsable", { header: "Responsable", cell: (c) => c.getValue() ?? <span className="text-suave">—</span> }),
+      col.accessor("responsableEfectivo", {
+        header: "Responsable",
+        cell: ({ row: { original: o } }) =>
+          o.responsableEfectivo === null ? (
+            <span className="text-suave">—</span>
+          ) : (
+            <>
+              {o.responsableEfectivo}
+              {o.responsableDe === "tesorero" && <span className="block text-xs text-suave">Tesorero de la sociedad</span>}
+            </>
+          ),
+      }),
       col.display({ id: "avisos", header: "Estado y avisos", cell: ({ row }) => <Etiquetas o={row.original} /> }),
       col.display({
         id: "acciones",

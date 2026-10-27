@@ -2,7 +2,7 @@
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { monto, nombreFecha } from "@/lib/formato";
 import type { EstadoVencimiento, Vencimiento } from "@/lib/tipos";
-import { Etiqueta, type Tono } from "../ui";
+import { Etiqueta, NombreSociedad, type Tono } from "../ui";
 
 // Los estados distintos de "proyectado" llegan con el cruce (Hito 4); ya tienen texto para cuando aparezcan.
 const ESTADO: Record<EstadoVencimiento, { texto: string; tono: Tono }> = {
@@ -17,7 +17,7 @@ const ESTADO: Record<EstadoVencimiento, { texto: string; tono: Tono }> = {
 const col = createColumnHelper<Vencimiento>();
 const columnas = [
   col.accessor("fecha", { header: "Vence", cell: (c) => <span className="whitespace-nowrap font-medium">{nombreFecha(c.getValue())}</span> }),
-  col.accessor("sociedad", { header: "Sociedad", cell: (c) => <span className="font-semibold">{c.getValue()}</span> }),
+  col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="font-semibold min-w-40 max-w-64" /> }),
   col.accessor("proveedor", {
     header: "Proveedor",
     cell: (c) => (

@@ -1,6 +1,7 @@
 "use client";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { compararSociedades } from "@/lib/formato";
 import type { ArchivoImportado, CeldaCobertura, Cobertura, Importaciones } from "@/lib/tipos";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -145,8 +146,12 @@ export function PanelArchivos() {
     };
   }, [intento]);
 
-  const sociedades = useMemo(() => [...new Set((cob?.filas ?? []).map((f) => f.sociedad))], [cob]);
-  const filas = useMemo(() => (cob?.filas ?? []).filter((f) => !sociedad || f.sociedad === sociedad), [cob, sociedad]);
+  // alfabético por nombre largo (el orden es estable: las cuentas de una sociedad conservan su orden)
+  const sociedades = useMemo(() => [...new Set((cob?.filas ?? []).map((f) => f.sociedad))].sort(compararSociedades), [cob]);
+  const filas = useMemo(
+    () => (cob?.filas ?? []).filter((f) => !sociedad || f.sociedad === sociedad).sort((a, b) => compararSociedades(a.sociedad, b.sociedad)),
+    [cob, sociedad],
+  );
   const pendientesMoneda = (cob?.filas ?? []).filter((f) => f.monedaPorConfirmar).length;
 
   if (error)
@@ -193,11 +198,12 @@ export function PanelArchivos() {
           id="filtro-sociedad"
           value={sociedad}
           onChange={(e) => setSociedad(e.target.value)}
-          className="border-2 border-control bg-fondo rounded px-3 py-1.5"
+          title={sociedad || undefined}
+          className="border-2 border-control bg-fondo rounded px-3 py-1.5 max-w-full sm:max-w-xl"
         >
           <option value="">Todas</option>
           {sociedades.map((s) => (
-            <option key={s} value={s}>
+            <option key={s} value={s} title={s}>
               {s}
             </option>
           ))}
@@ -236,7 +242,7 @@ export function PanelArchivos() {
                 {(i === 0 || filas[i - 1]!.sociedad !== f.sociedad) && (
                   <tr className="bg-fondo-suave">
                     <th scope="colgroup" colSpan={3 + cob.meses.length} className="px-3 py-1.5 text-left font-bold border-t border-divisor">
-                      {f.sociedad}
+                      <span className="line-clamp-2" title={f.sociedad}>{f.sociedad}</span>
                     </th>
                   </tr>
                 )}

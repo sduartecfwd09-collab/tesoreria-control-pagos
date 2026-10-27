@@ -1,14 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { nombrePeriodo, periodoActual } from "@/lib/formato";
-import type { Categoria, FiltroVencimientos, Pagina, Sociedad, Vencimiento } from "@/lib/tipos";
-import { CajaError, claseControl, Paginador } from "../ui";
+import { nombrePeriodo, ordenarSociedades, periodoActual } from "@/lib/formato";
+import type { Categoria, FiltroVencimientos, Sociedad } from "@/lib/tipos";
+import { useListaInfinita } from "@/lib/useListaInfinita";
+import { CajaError, claseControl, FinDeLista } from "../ui";
 import { GenerarVencimientos } from "./GenerarVencimientos";
 import { TablaVencimientos } from "./TablaVencimientos";
 
-const POR_PAGINA = 50;
-type Filtro = Omit<FiltroVencimientos, "porPagina">;
+const POR_PAGINA = 100;
+type Filtro = Omit<FiltroVencimientos, "porPagina" | "pagina">;
 
 interface Base {
   sociedades: Sociedad[];
@@ -21,7 +22,6 @@ export function PanelVencimientos() {
   const [base, setBase] = useState<Base | null>(null);
   const [filtro, setFiltro] = useState<Filtro | null>(null); // null hasta saber qué periodos hay
   const [texto, setTexto] = useState("");
-  const [pagina, setPagina] = useState<Pagina<Vencimiento> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
 
@@ -30,13 +30,13 @@ export function PanelVencimientos() {
     Promise.all([api.listarSociedades(), api.listarCategorias(), api.resumenCatalogo(), api.periodosGenerados()])
       .then(([sociedades, categorias, r, periodos]) => {
         if (!vigente) return;
-        setBase({ sociedades, categorias, activas: r.activas, periodos });
+        setBase({ sociedades: ordenarSociedades(sociedades), categorias, activas: r.activas, periodos });
         // Por defecto se muestra el mes actual si ya está generado; si no, el último generado.
         setFiltro((f) => {
           if (f && (!f.periodo || periodos.some((p) => p.periodo === f.periodo))) return f;
           const actual = periodoActual();
           const periodo = periodos.some((p) => p.periodo === actual) ? actual : periodos.at(-1)?.periodo;
-          return { ...f, periodo, pagina: 1 };
+          return { ...f, periodo };
         });
         setError(null);
       })
@@ -47,25 +47,17 @@ export function PanelVencimientos() {
   }, [intento]);
 
   useEffect(() => {
-    const t = setTimeout(() => setFiltro((f) => (f && f.q !== (texto.trim() || undefined) ? { ...f, q: texto.trim() || undefined, pagina: 1 } : f)), 300);
+    const t = setTimeout(() => setFiltro((f) => (f && f.q !== (texto.trim() || undefined) ? { ...f, q: texto.trim() || undefined } : f)), 300);
     return () => clearTimeout(t);
   }, [texto]);
 
-  useEffect(() => {
-    if (!filtro) return;
-    let vigente = true;
-    api
-      .listarVencimientos({ ...filtro, porPagina: POR_PAGINA })
-      .then((p) => vigente && setPagina(p))
-      .catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
-    return () => {
-      vigente = false;
-    };
-  }, [filtro, intento]);
+  const cargar = useCallback((p: number) => api.listarVencimientos({ ...filtro, pagina: p, porPagina: POR_PAGINA }), [filtro]);
+  const lista = useListaInfinita(filtro ? cargar : null, intento);
 
-  const cambiar = (f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f, pagina: f.pagina ?? 1 }));
+  const cambiar = (f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f }));
 
-  if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
+  const mensajeError = error ?? lista.error;
+  if (mensajeError) return <CajaError mensaje={mensajeError} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
   if (!base || !filtro)
     return (
       <p className="mt-8 text-suave" role="status">
@@ -85,7 +77,7 @@ export function PanelVencimientos() {
       <GenerarVencimientos
         activas={base.activas}
         alGenerar={(r) => {
-          setFiltro((f) => ({ ...f, periodo: r.desde, pagina: 1 }));
+          setFiltro((f) => ({ ...f, periodo: r.desde }));
           setIntento((n) => n + 1);
         }}
       />
@@ -112,10 +104,10 @@ export function PanelVencimientos() {
               </label>
               <label className="text-sm font-medium">
                 Sociedad
-                <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedadId ?? ""} onChange={(e) => cambiar({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
+                <select className={`${claseControl} mt-1 w-full`} title={base.sociedades.find((x) => x.id === filtro.sociedadId)?.nombreLargo} value={filtro.sociedadId ?? ""} onChange={(e) => cambiar({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
                   <option value="">Todas</option>
                   {base.sociedades.map((s) => (
-                    <option key={s.id} value={s.id}>{s.codigo ?? s.nombreLargo}</option>
+                    <option key={s.id} value={s.id} title={s.nombreLargo}>{s.nombreLargo}</option>
                   ))}
                 </select>
               </label>
@@ -133,15 +125,15 @@ export function PanelVencimientos() {
                 <input type="search" className={`${claseControl} mt-1 w-full`} placeholder="Proveedor o identificador" value={texto} onChange={(e) => setTexto(e.target.value)} />
               </label>
             </div>
-            {pagina && (
+            {lista.datos && (
               <>
                 <p className="mt-3 text-sm" aria-live="polite">
-                  {pagina.total === 0 ? "Ningún vencimiento coincide con los filtros." : `${pagina.total.toLocaleString("es-CR")} vencimientos`}
+                  {lista.total === 0 ? "Ningún vencimiento coincide con los filtros." : `${lista.total.toLocaleString("es-CR")} vencimientos`}
                 </p>
-                {pagina.datos.length > 0 && (
+                {lista.datos.length > 0 && (
                   <>
-                    <TablaVencimientos datos={pagina.datos} />
-                    <Paginador pagina={pagina.pagina} paginas={pagina.paginas} total={pagina.total} unidad="vencimientos" alCambiar={(p) => cambiar({ pagina: p })} />
+                    <TablaVencimientos datos={lista.datos} />
+                    <FinDeLista cantidad={lista.datos.length} total={lista.total} unidad="vencimientos" hayMas={lista.hayMas} cargando={lista.cargandoMas} alLlegar={lista.cargarMas} />
                   </>
                 )}
               </>

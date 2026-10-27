@@ -61,3 +61,25 @@ export function mesesQueVence(frecuencia: Frecuencia, mesArranque: number | null
   if (mesArranque === null) return [];
   return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => (((m - mesArranque) % paso) + paso) % paso === 0);
 }
+
+// --- Sociedades: orden y nombre ----------------------------------------------------------------
+
+/** Clave de orden de un nombre: sin mayúsculas, tildes ni signos al inicio. */
+const claveOrden = (nombre: string) =>
+  nombre
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/^[^\p{L}\p{N}]+/u, "");
+
+/** Orden alfabético por nombre largo; los nombres que empiezan con número (por ejemplo «3-101-…») van al final. */
+export function compararSociedades(a: string, b: string): number {
+  const ka = claveOrden(a);
+  const kb = claveOrden(b);
+  const numA = /^\d/.test(ka);
+  const numB = /^\d/.test(kb);
+  if (numA !== numB) return numA ? 1 : -1;
+  return ka.localeCompare(kb, "es", { sensitivity: "base", numeric: true });
+}
+
+export const ordenarSociedades = <T extends { nombreLargo: string }>(xs: T[]): T[] => [...xs].sort((a, b) => compararSociedades(a.nombreLargo, b.nombreLargo));

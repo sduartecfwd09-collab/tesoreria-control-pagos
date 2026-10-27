@@ -19,7 +19,9 @@ export function ResumenCalidad({
     { falta: "responsable", titulo: "Sin responsable", n: r.sinResponsable, ayuda: "opcional" },
     ...(r.sinDia > 0 ? [{ falta: "dia" as const, titulo: "Falta día", n: r.sinDia, ayuda: "no generan vencimientos" }] : []),
   ];
-  const pendientes = r.identificadoresRepetidos.length + r.formatoIban.length + r.sociedadesSinObligaciones.length;
+  const fuera = r.sociedadesSinEstadosNiObligaciones;
+  // las sociedades sin estados de cuenta ni obligaciones cuentan como una sola línea resumen
+  const pendientes = r.identificadoresRepetidos.length + r.formatoIban.length + r.sociedadesSinObligaciones.length + (fuera.length > 0 ? 1 : 0);
 
   return (
     <section aria-labelledby="h-calidad" className="mt-6">
@@ -87,9 +89,25 @@ export function ResumenCalidad({
             ))}
             {r.sociedadesSinObligaciones.map((s) => (
               <li key={s} className="py-2">
-                <strong>Sociedad sin obligaciones:</strong> {s} no tiene obligaciones activas en la tabla de pagos. Si debería tenerlas, créelas con «Nueva obligación».
+                <strong>Sociedad sin obligaciones:</strong> {s} tiene estados de cuenta pero no tiene obligaciones activas en la tabla de pagos. Si debería tenerlas, créelas con «Nueva obligación».
               </li>
             ))}
+            {fuera.length > 0 && (
+              <li className="py-2">
+                <details>
+                  <summary className="cursor-pointer">
+                    <strong>{fuera.length.toLocaleString("es-CR")} sociedades sin estados de cuenta ni obligaciones.</strong> Ver la lista.
+                  </summary>
+                  <ul className="mt-2 list-disc pl-6 space-y-1">
+                    {fuera.map((s) => (
+                      <li key={s}>
+                        <span className="line-clamp-2" title={s}>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </li>
+            )}
           </ul>
         )}
         {(r.frecuenciaPorConfirmar > 0 || r.sinMesArranque > 0) && (

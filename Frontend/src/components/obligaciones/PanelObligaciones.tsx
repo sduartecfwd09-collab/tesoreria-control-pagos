@@ -1,18 +1,20 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { ordenarSociedades } from "@/lib/formato";
+import { useListaInfinita } from "@/lib/useListaInfinita";
 import type {
-  CambiosObligacion, Categoria, Cuenta, FiltroObligaciones, Frecuencia, Obligacion, Pagina, Regeneracion,
+  CambiosObligacion, Categoria, Cuenta, FiltroObligaciones, Frecuencia, Obligacion, Regeneracion,
   ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad,
 } from "@/lib/tipos";
-import { CajaError, claseBoton, claseBotonSecundario, claseControl, Paginador } from "../ui";
+import { CajaError, claseBoton, claseBotonSecundario, claseControl, FinDeLista } from "../ui";
 import { FormularioObligacion } from "./FormularioObligacion";
 import { ResumenCalidad } from "./ResumenCalidad";
 import { TablaObligaciones } from "./TablaObligaciones";
 
-const POR_PAGINA = 25;
-type Filtro = Omit<FiltroObligaciones, "porPagina">;
-const FILTRO_INICIAL: Filtro = { activa: true, pagina: 1 };
+const POR_PAGINA = 100;
+type Filtro = Omit<FiltroObligaciones, "porPagina" | "pagina">;
+const FILTRO_INICIAL: Filtro = { activa: true };
 
 interface Catalogos {
   sociedades: Sociedad[];
@@ -35,7 +37,6 @@ function textoRegeneracion(r: Regeneracion | null): string {
 export function PanelObligaciones() {
   const [catalogos, setCatalogos] = useState<Catalogos | null>(null);
   const [resumen, setResumen] = useState<ResumenCatalogo | null>(null);
-  const [pagina, setPagina] = useState<Pagina<Obligacion> | null>(null);
   const [filtro, setFiltro] = useState<Filtro>(FILTRO_INICIAL);
   const [texto, setTexto] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +46,11 @@ export function PanelObligaciones() {
   const [importando, setImportando] = useState(false);
   const [importacion, setImportacion] = useState<ResultadoImportacionCatalogo | null>(null);
 
-  const cambiarFiltro = useCallback((f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f, pagina: f.pagina ?? 1 })), []);
+  const cambiarFiltro = useCallback((f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f })), []);
 
   // Búsqueda: espera 300 ms después de la última tecla para no consultar en cada letra.
   useEffect(() => {
-    const t = setTimeout(() => setFiltro((x) => (x.q === (texto.trim() || undefined) ? x : { ...x, q: texto.trim() || undefined, pagina: 1 })), 300);
+    const t = setTimeout(() => setFiltro((x) => (x.q === (texto.trim() || undefined) ? x : { ...x, q: texto.trim() || undefined })), 300);
     return () => clearTimeout(t);
   }, [texto]);
 
@@ -59,7 +60,7 @@ export function PanelObligaciones() {
       .then(([sociedades, categorias, cuentas, parametros, r]) => {
         if (!vigente) return;
         const fd = parametros.find((p) => p.clave === "frecuencia_defecto")?.valor as Frecuencia | undefined;
-        setCatalogos({ sociedades, categorias, cuentas, frecuenciaDefecto: fd ?? "mensual" });
+        setCatalogos({ sociedades: ordenarSociedades(sociedades), categorias, cuentas, frecuenciaDefecto: fd ?? "mensual" });
         setResumen(r);
         setError(null);
       })
@@ -69,16 +70,8 @@ export function PanelObligaciones() {
     };
   }, [intento]);
 
-  useEffect(() => {
-    let vigente = true;
-    api
-      .listarObligaciones({ ...filtro, porPagina: POR_PAGINA })
-      .then((p) => vigente && setPagina(p))
-      .catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
-    return () => {
-      vigente = false;
-    };
-  }, [filtro, intento]);
+  const cargar = useCallback((p: number) => api.listarObligaciones({ ...filtro, pagina: p, porPagina: POR_PAGINA }), [filtro]);
+  const lista = useListaInfinita(cargar, intento);
 
   const recargar = () => setIntento((n) => n + 1);
 
@@ -106,8 +99,9 @@ export function PanelObligaciones() {
     }
   }
 
-  if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), recargar())} />;
-  if (!catalogos || !resumen || !pagina)
+  const mensajeError = error ?? lista.error;
+  if (mensajeError) return <CajaError mensaje={mensajeError} alReintentar={() => (setError(null), recargar())} />;
+  if (!catalogos || !resumen || !lista.datos)
     return (
       <p className="mt-8 text-suave" role="status">
         Cargando obligaciones…
@@ -147,7 +141,7 @@ export function PanelObligaciones() {
           alBuscar={(sociedad, q) => {
             setTexto(q);
             // El aviso de calidad trae la sociedad como texto (abreviatura o nombre largo): se busca su identificador.
-            const encontrada = catalogos?.sociedades.find((s) => (s.codigo ?? s.nombreLargo) === sociedad);
+            const encontrada = catalogos?.sociedades.find((s) => s.nombreLargo === sociedad);
             cambiarFiltro({ sociedadId: encontrada?.id, q, activa: true, falta: undefined, categoria: undefined });
           }}
         />
@@ -171,11 +165,11 @@ export function PanelObligaciones() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
           <label className="text-sm font-medium">
             Sociedad
-            <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedadId ?? ""} onChange={(e) => cambiarFiltro({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
+            <select className={`${claseControl} mt-1 w-full`} title={catalogos.sociedades.find((s) => s.id === filtro.sociedadId)?.nombreLargo} value={filtro.sociedadId ?? ""} onChange={(e) => cambiarFiltro({ sociedadId: e.target.value ? Number(e.target.value) : undefined })}>
               <option value="">Todas</option>
               {catalogos.sociedades.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.codigo ?? s.nombreLargo} ({s.obligaciones})
+                <option key={s.id} value={s.id} title={s.nombreLargo}>
+                  {s.nombreLargo} ({s.obligaciones})
                 </option>
               ))}
             </select>
@@ -217,7 +211,7 @@ export function PanelObligaciones() {
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span aria-live="polite">
-            {pagina.total === 0 ? "Ninguna obligación coincide con los filtros." : `${pagina.total.toLocaleString("es-CR")} obligaciones`}
+            {lista.total === 0 ? "Ninguna obligación coincide con los filtros." : `${lista.total.toLocaleString("es-CR")} obligaciones`}
             {filtro.falta && ` · filtrando: ${{ monto: "falta monto", cuenta: "falta cuenta", responsable: "sin responsable", dia: "falta día" }[filtro.falta]}`}
           </span>
           {hayFiltros && (
@@ -234,10 +228,10 @@ export function PanelObligaciones() {
           )}
         </div>
 
-        {pagina.datos.length > 0 && (
+        {lista.datos.length > 0 && (
           <>
-            <TablaObligaciones datos={pagina.datos} alEditar={setEditando} />
-            <Paginador pagina={pagina.pagina} paginas={pagina.paginas} total={pagina.total} unidad="obligaciones" alCambiar={(p) => cambiarFiltro({ pagina: p })} />
+            <TablaObligaciones datos={lista.datos} alEditar={setEditando} />
+            <FinDeLista cantidad={lista.datos.length} total={lista.total} unidad="obligaciones" hayMas={lista.hayMas} cargando={lista.cargandoMas} alLlegar={lista.cargarMas} />
           </>
         )}
         <p className="mt-4 text-sm text-suave">
