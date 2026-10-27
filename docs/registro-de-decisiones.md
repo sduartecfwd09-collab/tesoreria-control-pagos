@@ -29,10 +29,10 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-21 | «JASEC Internet» es el mismo proveedor que «JASEC». | Confirmado por Tesorería. |
 | 2026-10-21 | El aviso de n.º de servicio repetido debe ser visible y advertir al guardar. | Tesorería a veces repite un número sin notarlo. |
 | 2026-10-23 | CLAUDE.md unificado con las decisiones del 21 y 22 de octubre. | Un solo documento coherente, con lo pendiente de aprobar en una sección aparte. |
+| 2026-10-27 | Cruce por identificador dentro de la descripción, ventana con «días antes» y «días después» separados, y «Vencido» solo con cobertura confirmada. | Evita marcar como vencido un pago que simplemente no está cargado; el cruce no inventa. |
+| 2026-10-27 | El calendario de vencimientos llega hasta hoy + días de aviso (sin meses futuros). | Tesorería solo necesita ver lo que está por vencer o ya venció. |
 
 ## Pendientes con Tesorería
 
 - Cuál es el número correcto en el identificador repetido de GGDI y en el de JASEC (ZFL) con formato de IBAN.
 - Completar monto, cuenta de pago y responsable de las obligaciones.
-| 2026-10-27 | Cruce por identificador dentro de la descripción, ventana con «días antes» y «días después» separados, y «Vencido» solo con cobertura confirmada. | Evita marcar como vencido un pago que simplemente no está cargado; el cruce no inventa. |
-| 2026-10-27 | El calendario de vencimientos llega hasta hoy + días de aviso (sin meses futuros). | Tesorería solo necesita ver lo que está por vencer o ya venció. |
