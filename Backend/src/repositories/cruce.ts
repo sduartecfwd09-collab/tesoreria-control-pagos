@@ -10,6 +10,7 @@ export interface VencimientoGuardado extends VencimientoCruce {
   motivo: string | null;
   diferenciaDias: number | null;
   sinInfoHasta: Date | null;
+  cuentaEsperadaId: number | null;
 }
 
 export interface DatosCruce {
@@ -53,7 +54,7 @@ export async function cargarDatosCruce(): Promise<DatosCruce> {
     prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
     prisma.vencimiento.findMany({
       where: { obligacion: { activa: true } },
-      select: { id: true, obligacionId: true, sociedadId: true, fecha: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true },
+      select: { id: true, obligacionId: true, sociedadId: true, fecha: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true, cuentaEsperadaId: true },
     }),
     prisma.movimiento.findMany({
       where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
@@ -90,4 +91,25 @@ export async function guardarResultadosCruce(actuales: VencimientoGuardado[], re
     );
   }
   return cambios.length;
+}
+
+/** Para el diagnóstico: descripciones (en mayúsculas) de TODOS los movimientos vigentes de cada sociedad, débitos y créditos. Nunca salen del proceso. */
+export async function cargarDescripcionesPorSociedad(): Promise<Map<number, string[]>> {
+  const filas = await prisma.movimiento.findMany({
+    where: { archivo: { retiradoEn: null }, descripcion: { not: null } },
+    select: { descripcion: true, cuenta: { select: { sociedadId: true } } },
+  });
+  const m = new Map<number, string[]>();
+  for (const f of filas) {
+    const lista = m.get(f.cuenta.sociedadId);
+    if (lista) lista.push(f.descripcion!.toUpperCase());
+    else m.set(f.cuenta.sociedadId, [f.descripcion!.toUpperCase()]);
+  }
+  return m;
+}
+
+/** Para el diagnóstico: primera fecha con movimientos de cada cuenta (archivos no retirados). */
+export async function primerasFechasPorCuenta(): Promise<Map<number, Date>> {
+  const g = await prisma.movimiento.groupBy({ by: ["cuentaId"], where: { archivo: { retiradoEn: null } }, _min: { fecha: true } });
+  return new Map(g.flatMap((x) => (x._min.fecha ? [[x.cuentaId, x._min.fecha] as [number, Date]] : [])));
 }
