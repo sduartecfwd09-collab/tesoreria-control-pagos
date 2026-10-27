@@ -51,10 +51,6 @@ export async function guardarCuenta(d: DatosCuenta) {
   return prisma.cuenta.update({ where: { id: actual.id }, data });
 }
 
-export async function buscarCuenta(sociedadId: number, numero: string) {
-  return prisma.cuenta.findUnique({ where: { sociedadId_numero: { sociedadId, numero } } });
-}
-
 export async function buscarArchivoPorRuta(ruta: string) {
   return prisma.archivoImportado.findUnique({ where: { ruta } });
 }

@@ -52,10 +52,6 @@ export async function contarMovimientosPorArchivo(): Promise<Map<number, number>
   return new Map(g.map((x) => [x.archivoId, x._count._all]));
 }
 
-export async function totalMovimientos() {
-  return prisma.movimiento.count();
-}
-
 export async function listarCuentas() {
   return prisma.cuenta.findMany({ include: { sociedad: true }, orderBy: [{ sociedadId: "asc" }, { numero: "asc" }] });
 }

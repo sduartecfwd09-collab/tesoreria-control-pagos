@@ -103,15 +103,15 @@ Las pruebas de integración con datos reales (`tests/integracion-real.test.ts` y
 
 ## Contrato Backend ↔ Frontend
 
+Los errores responden `{ "error": "texto" }` en español; un fallo inesperado responde un texto fijo (nunca rutas ni el mensaje original). Se retiraron `GET /api/movimientos`, `POST /api/importaciones` y `PATCH /api/cuentas/:id`: volverán con el inicio de sesión y permisos cuando se necesiten.
+
 | Ruta | Descripción |
 |---|---|
 | `GET /api/salud` | Estado del servidor |
 | `GET /api/parametros` · `PUT /api/parametros/:id` | Parámetros (valor, ayuda, rango, `supuesto`). 422 si el valor no cumple la regla |
-| `POST /api/importaciones` | Importa `STATEMENTS_ROOT`. 422 si no está configurada o no existe; 409 si ya hay una importación en curso |
-| `GET /api/importaciones` | Archivos con estado (`leido`, `error` o `en_revision`), formato, error, motivo (si está en revisión), advertencias, discrepancias y continuidad del saldo |
-| `GET /api/cobertura` | Cobertura por sociedad, cuenta y mes (`leido` / `error` / `falta`) |
-| `GET /api/movimientos` | Filtros `sociedad`, `cuenta`, `periodo` (AAAA-MM), `pagina`, `porPagina` (máx. 500) |
-| `GET /api/cuentas` · `PATCH /api/cuentas/:id` | Tesorería edita a mano `banco` y/o `moneda` (la importación ya no los pisa) |
+| `GET /api/importaciones` | Archivos con estado (`leido`, `error` o `en_revision`), formato, error, motivo (si está en revisión), advertencias, discrepancias y continuidad del saldo. Solo el nombre del archivo (`archivo`, con los números de 8 o más dígitos enmascarados) y la cuenta con sus últimos 4. La importación se ejecuta desde el Backend (`npm run reimportar`), no por la API |
+| `GET /api/cobertura` | Cobertura por sociedad, cuenta (últimos 4) y mes (`leido` / `error` / `falta`), con el archivo solo por nombre |
+| `GET /api/cuentas` | Cuentas con el número enmascarado (últimos 4); el servidor usa el completo para el cruce |
 | `GET /api/sociedades` · `GET /api/categorias` | Con conteo de obligaciones (y de cuentas, en sociedades) |
 | `GET /api/obligaciones` | Filtros `sociedad` (abreviatura) o `sociedadId`, `categoria` (id), `activa` (true/false), `q` (proveedor, identificador o responsable), `falta` (monto/cuenta/responsable/dia), `pagina`, `porPagina`. Cada obligación trae `etiquetas` |
 | `GET /api/obligaciones/resumen` | Conteos y alertas de calidad del catálogo |

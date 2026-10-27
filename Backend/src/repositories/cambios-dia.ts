@@ -1,4 +1,4 @@
-// Historial de cambios del día de pago. Solo se inserta y se lee: este módulo no ofrece edición ni borrado.
+// Historial de cambios del día de pago. Solo se inserta: este módulo no ofrece edición ni borrado (la lectura llega con la pantalla del historial).
 import { prisma } from "../db.js";
 import { ESTADOS_PAGADOS, fechaVencimiento } from "../domain/vencimientos.js";
 
@@ -73,8 +73,4 @@ export async function registrarCambioDeUnaVez(c: CambioDeUnaVez): Promise<void> 
       },
     });
   });
-}
-
-export async function historialDeObligacion(obligacionId: number) {
-  return prisma.cambioDia.findMany({ where: { obligacionId }, orderBy: { id: "asc" } });
 }
