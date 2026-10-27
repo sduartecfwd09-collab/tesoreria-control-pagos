@@ -46,4 +46,6 @@ export interface ResultadoLectura {
   advertencias: string[];
   /** filas del pie (resúmenes, totales) posteriores al último movimiento: se ignoran, solo se cuentan */
   filasPieIgnoradas: number;
+  /** el archivo trae imágenes (que el lector ignora) */
+  conImagenes: boolean;
 }

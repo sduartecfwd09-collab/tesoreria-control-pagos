@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
+import { resumirImagenes } from "../domain/imagenes.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
@@ -15,6 +16,7 @@ type DetalleArchivo = {
   continuidad?: unknown;
   monedaOrigen?: string;
   filasPieIgnoradas?: number;
+  conImagenes?: boolean;
 };
 
 export async function rutasImportaciones(app: FastifyInstance) {
@@ -33,6 +35,8 @@ export async function rutasImportaciones(app: FastifyInstance) {
         advertencias: (d.advertencias ?? []).map((t) => textoSeguro(t)),
         discrepancias: (d.discrepancias ?? []).map((x) => ({ tipo: x.tipo, mensaje: textoSeguro(x.mensaje) })),
         continuidad: d.continuidad ?? null, monedaOrigen: d.monedaOrigen ?? null,
+        // el lector ignora las imágenes (sin OCR); null = archivo leído antes de registrar este dato
+        conImagenes: typeof d.conImagenes === "boolean" ? d.conImagenes : null,
         leidoEn: a.leidoEn?.toISOString() ?? null,
       };
     });
@@ -43,6 +47,7 @@ export async function rutasImportaciones(app: FastifyInstance) {
         ...resumirEstados(datos.map((a) => a.estado)),
         movimientos: datos.reduce((s, a) => s + a.movimientos, 0),
       },
+      imagenes: resumirImagenes(archivos),
       enCurso: hayImportacionEnCurso(),
     };
   });

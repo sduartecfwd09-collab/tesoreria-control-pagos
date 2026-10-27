@@ -29,6 +29,8 @@ export interface CeldaCobertura {
   duplicados: number;
   saldo?: "cuadra" | "no_cuadra" | "no_verificable";
   error?: string | null;
+  /** aviso para revisar a mano (no cambia cómo cuenta el archivo para la cobertura) */
+  nota?: string;
 }
 
 export interface FilaCobertura {
@@ -60,6 +62,7 @@ export interface ArchivoImportado {
   movimientos: number;
   duplicados: number;
   motivo: string | null; // visible en «con_error» y «sin_sociedad»
+  conImagenes: boolean | null; // null: leído antes de registrar este dato
   advertencias: string[];
   discrepancias: { tipo: string; mensaje: string }[];
   continuidad: { estado: string; verificados: number; fallos: number; filasConFallo: number[] } | null;
@@ -71,6 +74,13 @@ export interface Importaciones {
   datos: ArchivoImportado[];
   /** archivos = leídos + con error + sin sociedad; los retirados de la carpeta no cuentan */
   resumen: { archivos: number; leidos: number; conError: number; sinSociedad: number; retirados: number; movimientos: number };
+  /** archivos que traen imágenes (el lector las ignora), por sociedad y mes */
+  imagenes: {
+    filas: { sociedad: string; mes: string; archivos: number; conImagen: number; conImagenSinMovimientos: number }[];
+    conImagen: number;
+    conImagenSinMovimientos: number;
+    sinDato: number;
+  };
   enCurso: boolean;
 }
 

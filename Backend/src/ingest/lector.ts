@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import type { Worksheet } from "exceljs";
-import { quitarDibujos } from "./quitar-dibujos.js";
+import { quitarDibujos, tieneImagenes } from "./quitar-dibujos.js";
 import { detectarFormato } from "./detectar-formato.js";
 import { especDe } from "./formatos.js";
 import { verificarContinuidad } from "./calidad.js";
@@ -9,7 +9,7 @@ import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 5;
+export const LECTOR_VERSION = 6; // 6: registra si el archivo trae imágenes
 
 export class ErrorLectura extends Error {}
 
@@ -18,6 +18,8 @@ type Moneda = "CRC" | "USD";
 export interface LibroLeido {
   wb: ExcelJS.Workbook;
   dibujosOmitidos: boolean;
+  /** el archivo trae imágenes (no se leen ni se hace OCR: solo se registra que existen) */
+  conImagenes: boolean;
 }
 
 /**
@@ -39,7 +41,7 @@ export async function leerLibro(contenido: Buffer): Promise<LibroLeido> {
     }
   }
   if (wb.worksheets.length === 0) throw new ErrorLectura("El libro no tiene hojas");
-  return { wb, dibujosOmitidos };
+  return { wb, dibujosOmitidos, conImagenes: await tieneImagenes(contenido) };
 }
 
 export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | null): ResultadoLectura {
@@ -136,6 +138,7 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     discrepancias,
     advertencias,
     filasPieIgnoradas,
+    conImagenes: libro.conImagenes,
   };
 }
 

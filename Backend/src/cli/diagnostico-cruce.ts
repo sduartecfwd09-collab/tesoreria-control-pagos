@@ -4,6 +4,8 @@ import { nombreDeBase } from "../conexion.js";
 import { relojSistema } from "../domain/reloj.js";
 import { contarCuentasPorMoneda } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
+import { resumirImagenes } from "../domain/imagenes.js";
+import { listarArchivos } from "../repositories/consultas.js";
 import { listarSociedades } from "../repositories/obligaciones.js";
 import { cruzarVencimientos } from "../vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../vencimientos/diagnostico.js";
@@ -19,5 +21,6 @@ if (base.endsWith("_test")) {
 const r = await cruzarVencimientos(relojSistema);
 console.log(`Base: ${base}`);
 const avisoDias = Number(await valorGlobal("aviso_datos_dias"));
-console.log(informeDiagnosticoCruce(r, await listarSociedades(), await contarCuentasPorMoneda(), Number.isInteger(avisoDias) ? avisoDias : 5));
+const sociedades = (await listarSociedades()).map((s) => ({ id: s.id, codigo: s.codigo, nombreLargo: s.nombreLargo }));
+console.log(informeDiagnosticoCruce(r, sociedades, await contarCuentasPorMoneda(), Number.isInteger(avisoDias) ? avisoDias : 5, resumirImagenes((await listarArchivos()).filter((a) => a.retiradoEn === null))));
 await prisma.$disconnect();

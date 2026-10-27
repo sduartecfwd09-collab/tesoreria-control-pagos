@@ -34,6 +34,8 @@ export interface CeldaCobertura {
   /** "cuadra" | "no_cuadra" | "no_verificable" */
   saldo?: string;
   error?: string | null;
+  /** aviso para revisar a mano (no cambia cómo cuenta el archivo para la cobertura) */
+  nota?: string;
 }
 
 export interface FilaCobertura {
@@ -53,6 +55,14 @@ export interface Cobertura {
   /** archivos que no se pudieron ubicar en la tabla (nombre fuera de convención) */
   sinUbicar: { ruta: string; error: string | null }[];
 }
+
+/** El lector ignora las imágenes (no hay OCR): un archivo con imagen y sin movimientos puede tener los datos solo ahí. */
+export const NOTA_SIN_MOVIMIENTOS_CON_IMAGEN = "Sin movimientos (con imagen): revisar";
+
+export const conImagenesDe = (d: unknown): boolean | null => {
+  const v = (d as { conImagenes?: unknown } | null)?.conImagenes;
+  return typeof v === "boolean" ? v : null; // null: archivo leído antes de registrar este dato (se completa al reimportar)
+};
 
 const continuidadDe = (d: unknown): string | undefined => (d as { continuidad?: { estado?: string } } | null)?.continuidad?.estado;
 
@@ -94,6 +104,7 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
       error: motivoDeArchivo(a),
+      ...(estadoDeArchivo(a) === "leido" && a.numMovimientos === 0 && conImagenesDe(a.detalle) === true ? { nota: NOTA_SIN_MOVIMIENTOS_CON_IMAGEN } : {}),
     };
     filas.set(k, fila);
   }

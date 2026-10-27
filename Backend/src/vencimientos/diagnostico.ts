@@ -1,13 +1,14 @@
 // Informe de diagnóstico del cruce: SOLO conteos y fechas agregadas. Nunca descripciones, montos, identificadores,
 // proveedores ni números de cuenta. Las sociedades se nombran por su abreviatura interna.
 import { avisosDeDatos, corteDeMes } from "../domain/cobertura-corte.js";
+import type { ResumenImagenes } from "../domain/imagenes.js";
 import type { ResumenCruce } from "./cruce.js";
 
-export interface SociedadInforme { id: number; codigo: string | null }
+export interface SociedadInforme { id: number; codigo: string | null; nombreLargo?: string }
 
 const iso = (f: Date) => f.toISOString().slice(0, 10);
 
-export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInforme[], cuentasPorMoneda: Record<string, number> = {}, avisoDatosDias = 5): string {
+export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInforme[], cuentasPorMoneda: Record<string, number> = {}, avisoDatosDias = 5, imagenes?: ResumenImagenes): string {
   const nombre = (id: number) => sociedades.find((s) => s.id === id)?.codigo ?? `sociedad ${id}`;
   const L: string[] = [];
   const { hoy } = r.parametros;
@@ -78,6 +79,13 @@ export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInf
   L.push("", "Cuentas por moneda (tal como las guardó el lector):");
   for (const m of ["CRC", "USD", "sin dato"]) L.push(`  ${m}: ${cuentasPorMoneda[m] ?? 0}`);
   for (const [m, n] of Object.entries(cuentasPorMoneda)) if (!["CRC", "USD", "sin dato"].includes(m)) L.push(`  otra moneda: ${n}`);
+
+  if (imagenes) {
+    const abreviatura = (largo: string) => sociedades.find((x) => x.nombreLargo === largo)?.codigo ?? largo;
+    L.push("", "Archivos que traen imágenes (el lector las ignora; no se leen ni se hace OCR):");
+    L.push(`  total con imagen: ${imagenes.conImagen} · de ellos con cero movimientos: ${imagenes.conImagenSinMovimientos} · archivos sin dato de imágenes (reimportar): ${imagenes.sinDato}`);
+    for (const f of imagenes.filas) L.push(`  ${abreviatura(f.sociedad)} | ${f.mes}: ${f.conImagen} de ${f.archivos} archivos con imagen, ${f.conImagenSinMovimientos} con cero movimientos`);
+  }
 
   const mesActual = iso(hoy).slice(0, 7);
   L.push("", `Cuentas sin archivo leído de ${mesActual}, por sociedad:`);

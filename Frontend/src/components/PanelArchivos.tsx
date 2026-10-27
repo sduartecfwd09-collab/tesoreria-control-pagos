@@ -52,6 +52,11 @@ function Celda({ c }: { c: CeldaCobertura }) {
   return (
     <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}`} className="rounded border border-control px-2 py-1.5">
       <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
+      {c.nota && (
+        <span className="mt-1 block">
+          <Etiqueta tono="ambar">{c.nota}</Etiqueta>
+        </span>
+      )}
       {c.saldo === "no_cuadra" && (
         <span className="mt-1 block">
           <Etiqueta tono="ambar">Saldo no cuadra</Etiqueta>
@@ -81,6 +86,44 @@ function Resumen({ r }: { r: Importaciones["resumen"] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function Imagenes({ r }: { r: Importaciones["imagenes"] }) {
+  if (r.conImagen === 0 && r.sinDato === 0) return null;
+  return (
+    <section className="mt-8" aria-label="Archivos con imágenes">
+      <h3 className="font-bold">
+        Archivos con imágenes <span className="font-normal text-suave">({numero(r.conImagen)})</span>
+      </h3>
+      <p className="mt-1 text-sm text-suave max-w-2xl">
+        El sistema no lee el contenido de las imágenes de un archivo. De los que traen imágenes, {numero(r.conImagenSinMovimientos)} no tienen movimientos: conviene revisarlos.
+        {r.sinDato > 0 && ` Hay ${numero(r.sinDato)} archivos leídos antes de registrar este dato; se completa al volver a importar.`}
+      </p>
+      {r.filas.length > 0 && (
+        <table className="mt-3 text-sm border border-divisor rounded">
+          <caption className="sr-only">Archivos con imágenes por sociedad y mes</caption>
+          <thead className="bg-fondo-suave text-left">
+            <tr>
+              <th scope="col" className="px-3 py-2">Sociedad</th>
+              <th scope="col" className="px-3 py-2">Mes</th>
+              <th scope="col" className="px-3 py-2">Con imagen</th>
+              <th scope="col" className="px-3 py-2">De ellos, sin movimientos</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-divisor">
+            {r.filas.map((f) => (
+              <tr key={f.sociedad + f.mes}>
+                <td className="px-3 py-2">{f.sociedad}</td>
+                <td className="px-3 py-2">{f.mes}</td>
+                <td className="px-3 py-2">{numero(f.conImagen)} de {numero(f.archivos)}</td>
+                <td className="px-3 py-2">{numero(f.conImagenSinMovimientos)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 
@@ -212,6 +255,7 @@ export function PanelArchivos() {
   return (
     <>
       <Resumen r={imp.resumen} />
+      <Imagenes r={imp.imagenes} />
 
       <h2 className="mt-12 text-lg font-bold border-b-2 border-acento pb-1">Cobertura por cuenta y mes</h2>
       <p className="mt-2 text-sm text-suave max-w-2xl">
