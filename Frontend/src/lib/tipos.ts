@@ -43,12 +43,12 @@ export interface FilaCobertura {
 export interface Cobertura {
   meses: string[];
   filas: FilaCobertura[];
-  sinUbicar: { ruta: string; error: string | null }[];
+  sinUbicar: { archivo: string; error: string | null }[];
 }
 
 export interface ArchivoImportado {
   id: number;
-  ruta: string;
+  archivo: string; // solo el nombre del archivo, con los números largos enmascarados
   sociedad: string | null;
   cuenta: string | null;
   formato: string | null;

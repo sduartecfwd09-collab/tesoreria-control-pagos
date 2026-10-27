@@ -55,13 +55,6 @@ export async function buscarCuenta(sociedadId: number, numero: string) {
   return prisma.cuenta.findUnique({ where: { sociedadId_numero: { sociedadId, numero } } });
 }
 
-export async function actualizarCuentaManual(id: number, datos: { banco?: string; moneda?: "CRC" | "USD" }) {
-  const data: Record<string, unknown> = {};
-  if (datos.banco !== undefined) { data.banco = datos.banco; data.bancoPorConfirmar = false; }
-  if (datos.moneda !== undefined) { data.moneda = datos.moneda; data.monedaPorConfirmar = false; }
-  return prisma.cuenta.update({ where: { id }, data });
-}
-
 export async function buscarArchivoPorRuta(ruta: string) {
   return prisma.archivoImportado.findUnique({ where: { ruta } });
 }

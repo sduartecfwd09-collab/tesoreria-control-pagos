@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { advertenciaDiaYaPaso, mesDeAlta, periodoDeControl, primerDiaDelPeriodo } from "../domain/control-desde.js";
+import { enmascararCuenta } from "../domain/enmascarar.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -48,7 +49,7 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     diaEsperadoPago: o.diaEsperadoPago, diaEditado: o.diaEditado,
     frecuencia: o.frecuencia, frecuenciaPorConfirmar: o.frecuenciaPorConfirmar, mesArranque: o.mesArranque,
     montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
-    cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: o.cuentaEsperada.numero, banco: o.cuentaEsperada.banco } : null,
+    cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: enmascararCuenta(o.cuentaEsperada.numero), banco: o.cuentaEsperada.banco } : null,
     responsable: o.responsable, activa: o.activa, origen: o.origen,
     controlDesde: periodoDeControl(o.controlDesde),
     actualizado: o.actualizado.toISOString(),

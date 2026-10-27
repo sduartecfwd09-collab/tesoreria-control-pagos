@@ -102,14 +102,14 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         titulo="Archivos con error"
         ayuda="No se pudieron leer. El resto de la importación continuó con normalidad."
         vacio="Todos los archivos se leyeron."
-        filas={errores.map((a) => ({ ruta: a.ruta, texto: a.error ?? "Error desconocido" }))}
+        filas={errores.map((a) => ({ ruta: a.archivo, texto: a.error ?? "Error desconocido" }))}
       />
       <ListaAtencion
         titulo="Archivos donde el saldo no cuadra"
         ayuda="El saldo anterior más créditos y menos débitos no coincide con el saldo siguiente. Los movimientos sí se importaron; conviene revisar el archivo."
         vacio="El saldo cuadra en todos los archivos que se pueden verificar."
         filas={saldo.map((a) => ({
-          ruta: a.ruta,
+          ruta: a.archivo,
           texto: `${a.continuidad!.fallos} de ${a.continuidad!.verificados} comparaciones fallan (filas ${a.continuidad!.filasConFallo.join(", ")})`,
         }))}
       />
@@ -117,7 +117,7 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         titulo="Nombre del archivo distinto del contenido"
         ayuda="La cuenta, el mes o la sociedad del nombre no coinciden con lo que trae el archivo."
         vacio="Los nombres coinciden con el contenido."
-        filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ ruta: a.ruta, texto: d.mensaje })))}
+        filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ ruta: a.archivo, texto: d.mensaje })))}
       />
     </>
   );
@@ -170,7 +170,7 @@ export function PanelArchivos() {
         <p className="font-semibold">Todavía no se ha importado ninguna carpeta.</p>
         <p className="mt-2 text-sm text-suave">
           La importación lee la carpeta de estados de cuenta configurada en el servidor (STATEMENTS_ROOT). Se ejecuta desde el Backend con{" "}
-          <span className="font-mono">npm run reimportar</span> o llamando a <span className="font-mono">POST /api/importaciones</span>. Luego recargue
+          <span className="font-mono">npm run reimportar</span>. Luego recargue
           esta página.
         </p>
       </div>
@@ -232,7 +232,7 @@ export function PanelArchivos() {
           </thead>
           <tbody>
             {filas.map((f, i) => (
-              <Fragment key={`${f.sociedad}|${f.cuenta}`}>
+              <Fragment key={`${f.sociedad}|${f.cuentaId ?? f.cuenta}|${i}`}>
                 {(i === 0 || filas[i - 1]!.sociedad !== f.sociedad) && (
                   <tr className="bg-fondo-suave">
                     <th scope="colgroup" colSpan={3 + cob.meses.length} className="px-3 py-1.5 text-left font-bold border-t border-divisor">

@@ -16,6 +16,16 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj } = {}) {
   // JSON no admite BigInt: las rutas convierten los montos, y esta red de seguridad evita que un BigInt olvidado rompa la respuesta.
   app.setReplySerializer((payload) => JSON.stringify(payload, (_clave, v) => (typeof v === "bigint" ? aNumero(v) : v)));
 
+  // Los errores nunca exponen detalles internos (rutas de archivos, consultas): solo un texto claro. Se registra el estado, no el mensaje.
+  app.setErrorHandler((error, req, reply) => {
+    const codigo = (error as { statusCode?: unknown }).statusCode;
+    const estado = typeof codigo === "number" && codigo >= 400 ? codigo : 500;
+    req.log.error({ estado }, "error en la solicitud");
+    if (estado >= 500) return reply.code(500).send({ error: "Ocurrió un error en el servidor" });
+    return reply.code(estado).send({ error: estado === 404 ? "No encontrado" : "La solicitud no es válida" });
+  });
+  app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: "No encontrado" }));
+
   // CORS: solo los orígenes del Frontend configurados en CORS_ORIGINS.
   await app.register(cors, { origin: env.CORS_ORIGINS, methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] });
 

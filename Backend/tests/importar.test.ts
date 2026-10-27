@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { importarCarpeta } from "../src/ingest/importar-carpeta.js";
-import { actualizarCuentaManual, sembrarSociedad } from "../src/repositories/importaciones.js";
+import { sembrarSociedad } from "../src/repositories/importaciones.js";
 import { copiaDeObligacion, vaciarImportaciones } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
@@ -100,7 +100,7 @@ describe("importarCarpeta", () => {
   it("reimporta de forma controlada cuando cambia el hash y no pisa el banco editado a mano", async () => {
     const cuenta = (await prisma.cuenta.findFirst({ where: { numero: IBAN_BCT } }))!;
     expect(cuenta).toMatchObject({ banco: "BCT", bancoPorConfirmar: true });
-    await actualizarCuentaManual(cuenta.id, { banco: "Banco confirmado por Tesorería" });
+    await prisma.cuenta.update({ where: { id: cuenta.id }, data: { banco: "Banco confirmado por Tesorería", bancoPorConfirmar: false } }); // edición manual
     poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1({ movs: M.MOVS_BASE.slice(0, 3) }));
     const r = await importarCarpeta(raiz);
     expect(r.leidos).toBe(1);

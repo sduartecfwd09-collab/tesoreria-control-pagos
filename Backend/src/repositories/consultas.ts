@@ -47,54 +47,6 @@ function safeJson(s: string): unknown {
   }
 }
 
-export interface FiltroMovimientos {
-  sociedad?: string;
-  cuenta?: string;
-  periodo?: string;
-  pagina: number;
-  porPagina: number;
-}
-
-export async function listarMovimientos(f: FiltroMovimientos) {
-  const where = {
-    ...(f.periodo ? { periodo: f.periodo } : {}),
-    cuenta: {
-      ...(f.cuenta ? { numero: f.cuenta } : {}),
-      ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
-    },
-  };
-  const [total, filas] = await Promise.all([
-    prisma.movimiento.count({ where }),
-    prisma.movimiento.findMany({
-      where,
-      include: { cuenta: { include: { sociedad: true } }, archivo: { select: { ruta: true } } },
-      orderBy: [{ fecha: "asc" }, { id: "asc" }],
-      skip: (f.pagina - 1) * f.porPagina,
-      take: f.porPagina,
-    }),
-  ]);
-  return {
-    total,
-    datos: filas.map((m) => ({
-      id: m.id,
-      sociedad: etiquetaSociedad(m.cuenta.sociedad),
-      cuenta: m.cuenta.numero,
-      moneda: m.moneda,
-      periodo: m.periodo,
-      fecha: m.fecha.toISOString().slice(0, 10),
-      referencia: m.referencia,
-      codigo: m.codigo,
-      descripcion: m.descripcion,
-      debito: aNumero(m.debito),
-      credito: aNumero(m.credito),
-      saldo: aNumero(m.saldo),
-      archivo: m.archivo.ruta,
-      hoja: m.hoja,
-      fila: m.fila,
-    })),
-  };
-}
-
 export async function contarMovimientosPorArchivo(): Promise<Map<number, number>> {
   const g = await prisma.movimiento.groupBy({ by: ["archivoId"], _count: { _all: true } });
   return new Map(g.map((x) => [x.archivoId, x._count._all]));
