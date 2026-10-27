@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
-import { resumirImagenes } from "../domain/imagenes.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
@@ -47,7 +46,6 @@ export async function rutasImportaciones(app: FastifyInstance) {
         ...resumirEstados(datos.map((a) => a.estado)),
         movimientos: datos.reduce((s, a) => s + a.movimientos, 0),
       },
-      imagenes: resumirImagenes(archivos),
       enCurso: hayImportacionEnCurso(),
     };
   });

@@ -95,7 +95,7 @@ export async function listarVencimientos(f: FiltroVencimientos) {
     prisma.vencimiento.findMany({
       where,
       include: {
-        obligacion: true, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } },
+        obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } }, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } },
         // el pago que respalda el estado: solo fecha, monto y la cuenta (para su moneda, banco y últimos 4)
         movimiento: { select: { fecha: true, debito: true, cuenta: { select: { numero: true, banco: true, moneda: true } } } },
       },
@@ -112,4 +112,32 @@ export async function listarVencimientos(f: FiltroVencimientos) {
 export async function periodosGenerados() {
   const g = await prisma.vencimiento.groupBy({ by: ["periodo"], _count: { _all: true }, orderBy: { periodo: "asc" } });
   return g.map((x) => ({ periodo: x.periodo, total: x._count._all }));
+}
+
+const incluirMovimiento = { select: { id: true, fecha: true, debito: true, descripcion: true, cuenta: { select: { numero: true, banco: true, moneda: true, sociedad: { select: { nombreLargo: true } } } } } } as const;
+
+/** Un vencimiento con todo lo que muestra su detalle (solo lectura). */
+export async function obtenerVencimientoDetalle(id: number) {
+  return prisma.vencimiento.findUnique({
+    where: { id },
+    include: {
+      sociedad: true, categoria: true,
+      obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } },
+      movimiento: incluirMovimiento,
+    },
+  });
+}
+
+/** Débitos de archivos vigentes con fecha entre desde y hasta (ambas incluidas): el servicio filtra por identificador. */
+export async function debitosEnVentana(desde: Date, hasta: Date) {
+  return prisma.movimiento.findMany({
+    where: { debito: { gt: 0n }, archivo: { retiradoEn: null }, fecha: { gte: desde, lt: new Date(hasta.getTime() + 86_400_000) } },
+    select: incluirMovimiento.select,
+    orderBy: [{ fecha: "asc" }, { id: "asc" }],
+  });
+}
+
+/** Banco y número de cuentas (para mostrar solo los últimos 4). */
+export async function datosDeCuentas(ids: number[]) {
+  return prisma.cuenta.findMany({ where: { id: { in: ids } }, select: { id: true, numero: true, banco: true, sociedadId: true } });
 }

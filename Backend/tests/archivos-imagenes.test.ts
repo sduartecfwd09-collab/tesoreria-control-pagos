@@ -76,15 +76,10 @@ describe("importación y pantalla de archivos importados", () => {
     await vaciarImportaciones();
   });
 
-  it("registra si el archivo trae imágenes y la lista lo informa (sin rutas ni contenido)", async () => {
+  it("registra si el archivo trae imágenes y la lista lo informa (sin rutas ni contenido; el resumen solo sirve al diagnóstico)", async () => {
     const r = (await app.inject("/api/importaciones")).json();
     const por = Object.fromEntries(r.datos.map((a: { mes: string; conImagenes: boolean | null }) => [a.mes, a.conImagenes]));
     expect(por).toEqual({ "2026-08": true, "2026-09": true, "2026-10": false });
-    expect(r.imagenes).toMatchObject({ conImagen: 2, conImagenSinMovimientos: 1, sinDato: 0 });
-    expect(r.imagenes.filas).toEqual([
-      expect.objectContaining({ mes: "2026-08", conImagen: 1, conImagenSinMovimientos: 1 }),
-      expect.objectContaining({ mes: "2026-09", conImagen: 1, conImagenSinMovimientos: 0 }),
-    ]);
   });
 
   it("la celda de cobertura marca «Sin movimientos (con imagen): revisar» solo con imagen y cero movimientos, sin cambiar el estado leído", async () => {

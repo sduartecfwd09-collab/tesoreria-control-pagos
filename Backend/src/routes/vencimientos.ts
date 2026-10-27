@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { responsableEfectivo } from "../domain/obligaciones.js";
+import { detalleDeVencimiento } from "../vencimientos/detalle.js";
 import { avisosDeDatos } from "../domain/cobertura-corte.js";
 import { textoSinInformacion } from "../domain/cruce.js";
 import { enmascararCuenta } from "../domain/enmascarar.js";
@@ -9,6 +11,7 @@ import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { esPeriodo } from "../domain/vencimientos.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { listarSociedades, sociedadesConObligacionesActivas } from "../repositories/obligaciones.js";
+import { diasDeAviso } from "../vencimientos/generar.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { listarVencimientos, periodosGenerados } from "../repositories/vencimientos.js";
 
@@ -31,7 +34,16 @@ const consulta = z.object({
 });
 
 export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Reloj }) {
-  app.get("/api/vencimientos/periodos", async () => ({ datos: await periodosGenerados() }));
+  // `hoy` sale del reloj del servidor (inyectable): la pantalla abre en el mes de hoy y calcula «Hace N días» con él
+  app.get("/api/vencimientos/periodos", async () => ({ datos: await periodosGenerados(), hoy: hoyDe(opts.reloj).toISOString().slice(0, 10) }));
+
+  app.get("/api/vencimientos/:id", async (req, reply) => {
+    const id = z.coerce.number().int().positive().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
+    const d = await detalleDeVencimiento(id.data, opts.reloj);
+    if (!d) return reply.code(404).send({ error: "Vencimiento no encontrado" });
+    return { datos: d };
+  });
 
   // Aviso de datos: sociedades cuyos estados de cuenta llegan hasta una fecha anterior a hoy menos N días.
   app.get("/api/vencimientos/avisos-datos", async () => {
@@ -53,6 +65,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     const q = consulta.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
     const hoy = hoyDe(opts.reloj);
+    const diasAviso = await diasDeAviso();
     const { estado, ...resto } = q.data;
     const { total, datos, resumen } = await listarVencimientos({ ...resto, estados: estado });
     return {
@@ -64,6 +77,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         proveedor: v.proveedor,
         identificador: v.obligacion.identificador,
         frecuencia: v.obligacion.frecuencia,
+        responsableEfectivo: responsableEfectivo(v.obligacion).nombre, // el de la obligación o, si falta, el tesorero de la sociedad
         periodo: v.periodo,
         // pendiente de un periodo anterior al que se está viendo (se etiqueta «Mes anterior»)
         mesAnterior: Boolean(q.data.pendientesAnteriores && q.data.periodo && v.periodo < q.data.periodo),
@@ -81,8 +95,10 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         sinInfoHasta: v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null,
         conciliado: v._count.conciliaciones > 0,
         futuro: v.fecha >= hoy,
+        // días de hoy a la fecha vigente (negativo = ya pasó): «Hace N días» / «En N días»
+        dias: Math.round((v.fecha.getTime() - hoy.getTime()) / 86_400_000),
       })),
-      resumen, total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
+      resumen, diasAviso, total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
       hoy: hoy.toISOString().slice(0, 10),
     };
   });

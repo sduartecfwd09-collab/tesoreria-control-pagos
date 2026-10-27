@@ -32,6 +32,7 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | Cruce por identificador dentro de la descripción, ventana con «días antes» y «días después» separados, y «Vencido» solo con cobertura confirmada. | Evita marcar como vencido un pago que simplemente no está cargado; el cruce no inventa. |
 | 2026-10-27 | El calendario de vencimientos llega hasta hoy + días de aviso (sin meses futuros). | Tesorería solo necesita ver lo que está por vencer o ya venció. |
 | 2026-10-27 | «Sin información» requiere atención (junto con Vencido) y nunca se muestra como Vencido, salvo el parámetro «Marcar Vencido aunque falte el estado de cuenta». Aviso de datos por sociedad. | Un estado de cuenta sin cargar no prueba que no se pagó (decide Saraí). |
+| 2026-10-27 | «Vencimientos» pasa a «Pagos del mes» (solo el mes elegido, cuatro tarjetas, pestañas y detalle de solo lectura) y se agrega «Vencidos» (todos los meses). Toda cifra se calcula con la base y el reloj; la maqueta manda en el diseño. | La maqueta es lo que vio Tesorería; sus textos y números de ejemplo no se copian. |
 
 ## Pendientes con Tesorería
 
