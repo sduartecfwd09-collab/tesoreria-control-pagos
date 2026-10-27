@@ -3,7 +3,8 @@
 // rutas de archivo ni cuentas completas (solo los últimos 4); en las descripciones solo se ve completo el número que es el
 // identificador de la obligación y los demás números de 8 o más dígitos salen enmascarados.
 import { nombresEnDescripcion } from "../config/alias-proveedores.js";
-import { coberturaDeSociedad, corteMasReciente } from "../domain/cobertura-corte.js";
+import { MOTIVOS } from "../domain/cruce.js";
+import { coberturaDeSociedad, corteMasReciente, inicioDeDatos } from "../domain/cobertura-corte.js";
 import { enmascararCuenta, enmascararSalvo } from "../domain/enmascarar.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { aNumero } from "../domain/montos.js";
@@ -11,10 +12,10 @@ import { responsableEfectivo } from "../domain/obligaciones.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { normalizar } from "../ingest/utiles.js";
-import { textoFaltanEstados, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
+import { textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import { datosDeCuentas, debitosEnVentana, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
+import { datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
 import { diasDeAviso } from "./generar.js";
 
 const MS_DIA = 86_400_000;
@@ -80,12 +81,30 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
       estadosHasta: estadosHasta ? iso(estadosHasta) : null,
       cuentas: cuentas.length,
       cuentasSinCobertura: cuentas.flatMap((c) => {
-        const r = coberturaDeSociedad([c], v.fecha, hasta, hoy);
+        const r = coberturaDeSociedad([c], desde, hasta, hoy);
         const d = info.get(c.cuentaId);
         return r.cubre || !d ? [] : [{ cuenta: enmascararCuenta(d.numero), banco: d.banco, hasta: r.hasta ? iso(r.hasta) : null }];
       }),
     };
   }
+
+  // Con «Vencido»: el pago más cercano con este mismo número fuera del rango, si lo hay y no es de otro vencimiento (hasta 60 días).
+  let pagoCercano: { fecha: string; dias: number; margen: number } | null = null;
+  if (v.estado === "vencido") {
+    const patron = patronIdentificador(v.obligacion.identificador);
+    if (patron) {
+      const cercanos = (await debitosEnVentana(new Date(v.fecha.getTime() - 60 * MS_DIA), new Date(v.fecha.getTime() + 60 * MS_DIA)))
+        .filter((m) => etiquetaSociedad(m.cuenta.sociedad) === etiquetaSociedad(v.sociedad) && patron.test((m.descripcion ?? "").toUpperCase()));
+      const asignados = await movimientosAsignados(cercanos.map((m) => m.id));
+      const libres = cercanos.filter((m) => !asignados.has(m.id) && (dia(m.fecha) < dia(desde) || dia(m.fecha) > dia(hasta)));
+      const mejor = libres.sort((a, b) => Math.abs(dia(a.fecha) - dia(v.fecha)) - Math.abs(dia(b.fecha) - dia(v.fecha)) || dia(a.fecha) - dia(b.fecha))[0];
+      if (mejor) {
+        const diferencia = dia(mejor.fecha) - dia(v.fecha);
+        pagoCercano = { fecha: iso(mejor.fecha), dias: diferencia, margen: diferencia > 0 ? diasDespues : diasAntes };
+      }
+    }
+  }
+  const datosDesde = v.estado === "sin_informacion" ? inicioDeDatos((await cargarCoberturaCuentas()).get(v.sociedadId) ?? []) : null;
 
   const dias = Math.round((v.fecha.getTime() - hoy.getTime()) / MS_DIA);
   const diasAviso = await diasDeAviso();
@@ -93,7 +112,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     estado: v.estado, motivo: v.motivo, fecha: iso(v.fecha), dias, diasAviso, diferenciaDias: v.diferenciaDias,
     ventana: { desde: iso(desde), hasta: iso(hasta) },
     cobertura: cobertura && { estadosHasta: cobertura.estadosHasta, cuentas: cobertura.cuentas, sinCobertura: cobertura.cuentasSinCobertura },
-    movimientos, grupo,
+    movimientos, grupo, pagoCercano, datosDesde: datosDesde ? iso(datosDesde) : null,
   });
 
   return {
@@ -108,7 +127,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     movida: v.fechaOriginal !== null,
     estado: v.estado,
     motivo: v.motivo,
-    textoEstado: v.estado === "sin_informacion" ? textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null) : v.motivo,
+    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : v.motivo,
     textos,
     diferenciaDias: v.diferenciaDias,
     sinInfoHasta: v.sinInfoHasta ? iso(v.sinInfoHasta) : null,

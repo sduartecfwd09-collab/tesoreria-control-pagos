@@ -3,6 +3,7 @@
 import { conImagenesDe } from "../domain/cobertura.js";
 import { estadoDeArchivo } from "../domain/estado-archivo.js";
 import { patronIdentificador } from "../domain/identificadores.js";
+import { MOTIVOS } from "../domain/cruce.js";
 import type { ResumenCruce } from "./cruce.js";
 import type { SociedadInforme } from "./diagnostico.js";
 
@@ -126,5 +127,42 @@ export function informeAdicionalCruce(r: ResumenCruce, sociedades: SociedadInfor
   L.push("", `4. Archivos con imagen y cero movimientos: ${imagenSinMov.length}`);
   L.push(`  con un pago esperado ese mes en esa cuenta (cuenta de pago esperada de algún vencimiento del mes): ${porCuenta}`);
   L.push(`  con algún vencimiento ese mes en la sociedad de la cuenta (cualquier cuenta): ${porSociedad}`);
+
+  // 5. Distancia al pago más cercano con el mismo número, fuera del rango, de -30 a +30 días, por sociedad
+  L.push("", `5. Vencidos y sin información: días hasta el pago más cercano con el mismo número fuera del rango (de -30 a +30), por sociedad. Solo se cuentan los pagos que no respaldan otro vencimiento:`);
+  const respaldados = new Set(r.resultados.flatMap((q) => (q.movimientoId === null ? [] : [q.movimientoId])));
+  const distancias = new Map<number, { total: number; sin: number; hist: Map<number, number> }>();
+  for (const q of r.resultados.filter((q) => q.estado === "vencido" || q.estado === "sin_informacion")) {
+    const v = venc.get(q.vencimientoId)!;
+    const p = patron.get(v.obligacionId);
+    const f = distancias.get(v.sociedadId) ?? { total: 0, sin: 0, hist: new Map() };
+    f.total++;
+    let mejor: number | null = null;
+    for (const m of p ? (debitos.get(v.sociedadId) ?? []) : []) {
+      if (respaldados.has(m.id)) continue;
+      const d = dia(m.fecha) - dia(v.fecha);
+      if (Math.abs(d) > 30 || (d >= -diasAntes && d <= diasDespues)) continue;
+      if (!p!.test((m.descripcion ?? "").toUpperCase())) continue;
+      if (mejor === null || Math.abs(d) < Math.abs(mejor) || (Math.abs(d) === Math.abs(mejor) && d < mejor)) mejor = d;
+    }
+    if (mejor === null) f.sin++;
+    else f.hist.set(mejor, (f.hist.get(mejor) ?? 0) + 1);
+    distancias.set(v.sociedadId, f);
+  }
+  for (const [sociedadId, f] of [...distancias].sort((a, b) => nombre(a[0]).localeCompare(nombre(b[0])))) {
+    L.push(`  ${nombre(sociedadId)}: ${f.total} evaluados · sin pago cercano en ±30 días: ${f.sin}`);
+    for (const [d, n] of [...f.hist].sort((a, b) => a[0] - b[0])) L.push(`    ${d > 0 ? "+" : ""}${d} días: ${n}`);
+  }
+
+  // 6. Sin información porque el rango empieza antes de la primera fecha cargada (antes habrían sido Vencido)
+  L.push("", "6. Sin información porque el rango de búsqueda empieza antes de la primera fecha con movimientos cargados (antes se mostraban Vencido), por sociedad y mes:");
+  const cambian = new Map<string, number>();
+  for (const q of r.resultados.filter((q) => q.estado === "sin_informacion" && q.motivo === MOTIVOS.sinInformacionDesde)) {
+    const v = venc.get(q.vencimientoId)!;
+    const k = `${nombre(v.sociedadId)} | ${iso(v.fecha).slice(0, 7)}`;
+    cambian.set(k, (cambian.get(k) ?? 0) + 1);
+  }
+  L.push(`  total: ${[...cambian.values()].reduce((a, b) => a + b, 0)}`);
+  for (const [k, n] of [...cambian].sort(([a], [b]) => a.localeCompare(b))) L.push(`  ${k}: ${n}`);
   return L.join("\n");
 }

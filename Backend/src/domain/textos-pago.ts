@@ -37,6 +37,10 @@ export interface DatosTexto {
   movimientos: MovimientoTexto[];
   /** obligaciones de la misma sociedad que comparten el número de servicio (incluida esta) */
   grupo: ObligacionGrupoTexto[];
+  /** el pago con este número más cercano fuera del rango de búsqueda y que no es de otro vencimiento; dias = pago menos fecha de pago */
+  pagoCercano?: { fecha: string; dias: number; margen: number } | null;
+  /** primera fecha con estados de cuenta cargados de la sociedad (para «Sin información» por inicio de datos) */
+  datosDesde?: string | null;
 }
 
 export interface TextosPago {
@@ -106,12 +110,28 @@ export function textosDePago(d: DatosTexto): TextosPago {
     case "vencido": {
       const c = d.cobertura;
       const donde = c && c.cuentas > 0 ? ` en ${c.cuentas === 1 ? "la cuenta" : `las ${c.cuentas} cuentas`} de la sociedad` : "";
-      const parrafos = [`Se buscó del ${fechaTexto(d.ventana.desde)} al ${fechaTexto(d.ventana.hasta)}${donde} y no hay un pago con este número de servicio.`];
+      const parrafos = [`No se encontró un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}${donde}.`];
+      const p = d.pagoCercano;
+      parrafos.push(
+        p
+          ? `Sí hay un pago con este número el ${fechaTexto(p.fecha)}, ${plural(Math.abs(p.dias), "día", "días")} ${p.dias > 0 ? "después" : "antes"} del día de pago; está fuera del margen de ${plural(p.margen, "día", "días")}.`
+          : "Tampoco hay un pago con este número en las fechas cercanas dentro de los estados de cuenta cargados.",
+      );
       if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
       if (d.motivo === MOTIVOS.vencidoSinEstado) parrafos.push("Se muestra como vencido aunque ningún estado de cuenta lo confirma.");
-      return { resumen: "No se encontró el pago.", parrafos, queHacer: "Qué hacer: confirmar con quien paga si el pago se hizo." };
+      return { resumen: "No se encontró el pago.", parrafos, queHacer: p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo." };
     }
     case "sin_informacion": {
+      if (d.motivo === MOTIVOS.sinInformacionDesde) {
+        return {
+          resumen: "Todavía no se puede saber si se pagó.",
+          parrafos: [
+            textoSinEstadosAnteriores(d.datosDesde ?? null) + ".",
+            `Se buscaba un pago desde el ${fechaTexto(d.ventana.desde)}; la fecha de pago era el ${fechaTexto(d.fecha)}.`,
+          ],
+          queHacer: "Qué hacer: cargar los estados de cuenta anteriores a esa fecha.",
+        };
+      }
       const c = d.cobertura;
       const cuentas = (c?.sinCobertura ?? []).map((x) => `${x.banco ? `${x.banco} ` : ""}${x.cuenta}${x.hasta ? ` desde el ${fechaTexto(sumarDia(x.hasta))}` : ""}`);
       const faltan = cuentas.length > 0 ? `Faltan los estados de cuenta de ${listaTexto(cuentas)}.` : c && c.cuentas === 0 ? "No hay estados de cuenta cargados de esta sociedad." : "Faltan los estados de cuenta posteriores.";
@@ -158,6 +178,11 @@ function sumarDia(f: string): string {
 /** Texto corto de «Sin información» para la lista y las tarjetas: la misma idea que el detalle. */
 export function textoFaltanEstados(sinInfoHasta: string | null): string {
   return sinInfoHasta ? `Faltan estados de cuenta desde el ${fechaTexto(sumarDia(sinInfoHasta))}` : "Faltan estados de cuenta de este período";
+}
+
+/** «Sin información» porque el rango de búsqueda empieza antes de los primeros estados de cuenta cargados. */
+export function textoSinEstadosAnteriores(primeraFecha: string | null): string {
+  return primeraFecha ? `No hay estados de cuenta anteriores al ${fechaTexto(primeraFecha)}; el pago pudo hacerse antes` : "No hay estados de cuenta de esas fechas; el pago pudo hacerse antes";
 }
 
 /** Recuadro «Datos desactualizados»: una línea por sociedad. */

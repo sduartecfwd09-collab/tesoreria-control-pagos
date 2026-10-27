@@ -42,7 +42,11 @@ describe("textos del detalle", () => {
   it("vencido: dónde y hasta cuándo se buscó, en cuántas cuentas y hasta qué fecha hay estados", () => {
     const t = textosDePago({ ...base, estado: "vencido", motivo: MOTIVOS.vencido, movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 3, sinCobertura: [] } });
     expect(t.resumen).toBe("No se encontró el pago.");
-    expect(t.parrafos).toEqual(["Se buscó del 12 oct 2026 al 18 oct 2026 en las 3 cuentas de la sociedad y no hay un pago con este número de servicio.", "Hay estados de cuenta cargados hasta el 26 oct 2026."]);
+    expect(t.parrafos).toEqual([
+      "No se encontró un pago entre el 12 oct 2026 y el 18 oct 2026 en las 3 cuentas de la sociedad.",
+      "Tampoco hay un pago con este número en las fechas cercanas dentro de los estados de cuenta cargados.",
+      "Hay estados de cuenta cargados hasta el 26 oct 2026.",
+    ]);
     expect(textosDePago({ ...base, estado: "vencido", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 1, sinCobertura: [] } }).parrafos[0]).toContain("en la cuenta de la sociedad");
   });
 
@@ -121,6 +125,7 @@ describe("grupo de obligaciones con el mismo número de servicio: detalle de Por
     await obl("Cabletica", 15);
     await obl("Movistar", 20, cats[1]!.id);
     await mov2(dia(2026, 10, 13), "PAGO MOVIS 66600012 REF 12345678"); // el nombre dice Movistar; la fecha solo encaja con Cabletica
+    await mov2(dia(2026, 9, 3), "COMISION INICIAL"); // los datos empiezan antes de cualquier rango
     await mov2(dia(2026, 10, 26), "COMISION");
     await actualizarVencimientos(reloj);
     app = await crearApp({ reloj });

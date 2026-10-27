@@ -150,3 +150,10 @@ export async function vencimientosDeSociedadEnPeriodo(sociedadId: number, period
     orderBy: { id: "asc" },
   });
 }
+
+/** De los movimientos dados, cuáles ya respaldan algún vencimiento (están asignados a un pago). */
+export async function movimientosAsignados(ids: number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const filas = await prisma.vencimiento.findMany({ where: { movimientoId: { in: ids } }, select: { movimientoId: true } });
+  return new Set(filas.flatMap((f) => (f.movimientoId === null ? [] : [f.movimientoId])));
+}

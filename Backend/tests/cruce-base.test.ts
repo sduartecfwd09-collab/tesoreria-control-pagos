@@ -35,6 +35,7 @@ beforeEach(async () => {
     if (mes === "2026-10") archivoId = a.id;
   }
   // un movimiento que no es de la obligación, en el último día cubierto
+  await mov(dia(2026, 9, 3), "COMISION INICIAL"); // los datos empiezan antes de cualquier rango de búsqueda
   await mov(dia(2026, 10, 26), "COMISION SIN RELACION");
 });
 afterAll(vaciarImportaciones);
@@ -65,7 +66,7 @@ describe("cruce sobre la base", () => {
   it("sin pago y con cobertura: vencido; con el corte antes de la ventana: sin información hasta esa fecha", async () => {
     await actualizarVencimientos(reloj);
     expect((await venc()).estado).toBe("vencido");
-    await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 16) } }); // el último movimiento cargado es el 16
+    await prisma.movimiento.updateMany({ where: { descripcion: "COMISION SIN RELACION" }, data: { fecha: dia(2026, 10, 16) } }); // el último movimiento cargado es el 16
     await actualizarVencimientos(reloj);
     const v = await venc();
     expect(v.estado).toBe("sin_informacion");
@@ -123,7 +124,7 @@ describe("API de vencimientos: pago con moneda, textos y aviso de datos", () => 
   });
 
   it("Sin información trae su texto con fechas; con el parámetro encendido se ve Vencido con la nota", async () => {
-    await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 16) } });
+    await prisma.movimiento.updateMany({ where: { descripcion: "COMISION SIN RELACION" }, data: { fecha: dia(2026, 10, 16) } });
     await actualizarVencimientos(reloj);
     const app = await crearApp({ reloj });
     try {
@@ -139,7 +140,7 @@ describe("API de vencimientos: pago con moneda, textos y aviso de datos", () => 
   });
 
   it("el aviso de datos lista las sociedades con estados atrasados", async () => {
-    await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 16) } }); // corte 11 días atrás
+    await prisma.movimiento.updateMany({ where: { descripcion: "COMISION SIN RELACION" }, data: { fecha: dia(2026, 10, 16) } }); // corte 11 días atrás
     const app = await crearApp({ reloj });
     try {
       const r = (await app.inject("/api/vencimientos/avisos-datos")).json().datos;

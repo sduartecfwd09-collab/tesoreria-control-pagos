@@ -66,13 +66,13 @@ describe("diagnóstico adicional del cruce", () => {
     expect(t).toContain("AAA | 2026-10: 3 vencidos · A 0 · B 0");
   });
 
-  it("3: un vencido cuya ventana empieza antes de la primera fecha con datos se cuenta", async () => {
-    await obligacion("Luz Uno", "7771234", { diaEsperadoPago: 2, controlDesde: dia(2026, 10, 1) }); // ventana desde el 29 de septiembre
+  it("3 y 6: el vencimiento cuyo rango empieza antes de la primera fecha cargada ya no es Vencido: queda Sin información y se cuenta aparte", async () => {
+    await obligacion("Luz Uno", "7771234", { diaEsperadoPago: 2, controlDesde: dia(2026, 10, 1) }); // rango desde el 29 de septiembre
     await prisma.movimiento.updateMany({ data: { fecha: dia(2026, 10, 10) } }); // los datos empiezan el 10 de octubre
     await prisma.archivoImportado.updateMany({ where: { mes: "2026-09" }, data: { retiradoEn: new Date() } });
     const t = await informe();
-    expect(t).toContain("AAA | 2026-10:");
-    expect(t).toMatch(/AAA \| 2026-10: 1 vencidos · A 1 · B 1/);
+    expect(t).toContain("6. Sin información porque el rango de búsqueda empieza antes de la primera fecha con movimientos cargados");
+    expect(t).toMatch(/total: 1\n\s+AAA \| 2026-10: 1/);
   });
 
   it("4: archivos con imagen y cero movimientos con un pago esperado ese mes (por cuenta y por sociedad)", async () => {

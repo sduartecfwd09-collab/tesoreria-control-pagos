@@ -22,18 +22,19 @@ export interface DatosCruce {
 
 /** Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos. */
 export async function cargarCoberturaCuentas(): Promise<Map<number, CuentaCorte[]>> {
-  const [archivos, ultimas] = await Promise.all([
+  const [archivos, ultimas, primeras] = await Promise.all([
     prisma.archivoImportado.findMany({
       where: { estado: "leido", retiradoEn: null, cuentaId: { not: null }, mes: { not: null } },
       select: { cuentaId: true, mes: true, cuenta: { select: { sociedadId: true } } },
     }),
     prisma.movimiento.groupBy({ by: ["cuentaId", "periodo"], where: { archivo: { retiradoEn: null } }, _max: { fecha: true } }),
+    primerasFechasPorCuenta(),
   ]);
   const ultima = new Map(ultimas.map((u) => [`${u.cuentaId}|${u.periodo}`, u._max.fecha]));
   const porCuenta = new Map<number, { sociedadId: number; corte: CuentaCorte }>();
   for (const a of archivos) {
     const cuentaId = a.cuentaId!;
-    const c = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map() } };
+    const c = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map(), primeraFecha: primeras.get(cuentaId) ?? null } };
     c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
     porCuenta.set(cuentaId, c);
   }

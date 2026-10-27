@@ -22,9 +22,9 @@ beforeAll(async () => {
   const cuentaB = (await prisma.cuenta.create({ data: { sociedadId: bbb.id, numero: "CR0000000000000000002222", banco: "Banco Dos" } })).id;
   const archivo = async (sociedadId: number, cuentaId: number, mes: string) =>
     (await prisma.archivoImportado.create({ data: { ruta: `${sociedadId}/${mes}.xlsx`, hash: `${sociedadId}${mes}`, sociedadId, cuentaId, mes, estado: "leido" } })).id;
-  await archivo(aaa.id, cuentaA, "2026-09");
+  const aSep = await archivo(aaa.id, cuentaA, "2026-09");
   const aOct = await archivo(aaa.id, cuentaA, "2026-10");
-  await archivo(bbb.id, cuentaB, "2026-09");
+  const bSep = await archivo(bbb.id, cuentaB, "2026-09");
   const bOct = await archivo(bbb.id, cuentaB, "2026-10");
   const mov = (cuentaId: number, archivoId: number, fecha: Date, descripcion: string, debito = 250000n) =>
     prisma.movimiento.create({ data: { cuentaId, archivoId, hoja: "H", fila: ++n, periodo: "2026-10", fecha, descripcion, debito, credito: 0n, claveDedup: `p${n}`.padEnd(40, "0") } });
@@ -37,6 +37,8 @@ beforeAll(async () => {
   await obl(aaa.id, "Movistar", "6664444", 15);
   await obl(aaa.id, "Gas Cinco", "4445555", 15); // lo paga una cuenta de BBB
   await obl(bbb.id, "Net Seis", "3336666", 14); // BBB solo tiene datos hasta el 15
+  await mov(cuentaA, aSep, dia(2026, 9, 3), "COMISION INICIAL", 100n); // los datos empiezan antes de cualquier rango
+  await mov(cuentaB, bSep, dia(2026, 9, 3), "COMISION INICIAL", 100n);
   await mov(cuentaA, aOct, dia(2026, 10, 14), "PAGO LUZ 7771111");
   await mov(cuentaA, aOct, dia(2026, 10, 15), "PAGO SERVICIO 6664444");
   await mov(cuentaA, aOct, dia(2026, 10, 26), "COMISION");

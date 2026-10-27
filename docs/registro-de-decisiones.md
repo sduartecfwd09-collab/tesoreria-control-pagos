@@ -37,6 +37,8 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | Las obligaciones de una sociedad con el mismo número de servicio se evalúan como grupo: sin certeza por nombre y fecha, todo el grupo del mes queda Por revisar. «MOVIS» se reconoce como Movistar. | Evita leer distinto el mismo pago en cada fila. |
 | 2026-10-27 | El calendario genera todo el mes en curso; Programado = fuera de los días de aviso, Por vencer = dentro. | Así «Programados» tiene contenido y la maqueta se cumple. |
 | 2026-10-27 | Menú lateral negro de la maqueta, solo con pantallas que existen; el inicio es «Pagos del mes»; «Archivos importados» pasa a «Estados de cuenta». | La maqueta es lo que vio Tesorería. |
+| 2026-10-27 | Si el rango de búsqueda de un vencimiento empieza antes de la primera fecha con movimientos cargados y no hay pago, el estado es Sin información, no Vencido. | El pago pudo hacerse antes de que empezaran los estados de cuenta. |
+| 2026-10-27 | El detalle de Vencido dice si hay un pago con el mismo número fuera del margen (el más cercano que no respalda otro vencimiento). | Un «no se encontró» sin más sugería que el pago no existía en ningún estado. |
 
 ## Pendientes con Tesorería
 
