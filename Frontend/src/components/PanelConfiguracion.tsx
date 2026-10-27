@@ -51,7 +51,7 @@ function FilaParametro({ p, alGuardar }: { p: Parametro; alGuardar: (p: Parametr
           >
             {p.opciones.map((o) => (
               <option key={o} value={o}>
-                {o}
+                {o === "si" ? "Sí" : o === "no" ? "No" : o}
               </option>
             ))}
           </select>

@@ -1,7 +1,7 @@
 "use client";
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { useMemo } from "react";
-import { MESES_CORTOS } from "@/lib/formato";
+import { MESES_CORTOS, nombreFecha } from "@/lib/formato";
 import type { EstadoObligacion, EtiquetaObligacion, Obligacion } from "@/lib/tipos";
 import { Etiqueta, NombreSociedad, type Tono } from "../ui";
 
@@ -55,6 +55,10 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
             </span>
           </>
         ),
+      }),
+      col.accessor("proximoPago", {
+        header: "Próximo pago",
+        cell: (c) => (c.getValue() ? <span className="whitespace-nowrap">{nombreFecha(c.getValue()!)}</span> : <span className="text-suave">—</span>),
       }),
       col.accessor("responsableEfectivo", {
         header: "Responsable",

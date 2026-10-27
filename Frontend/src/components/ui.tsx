@@ -11,9 +11,10 @@ const TONOS: Record<Tono, string> = {
   verde: "bg-acento text-sobre-acento",
 };
 
-export function Etiqueta({ children, tono, titulo }: { children: ReactNode; tono: Tono; titulo?: string }) {
+export function Etiqueta({ children, tono, titulo, icono, extra = "" }: { children: ReactNode; tono: Tono; titulo?: string; icono?: ReactNode; extra?: string }) {
   return (
-    <span title={titulo} className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${TONOS[tono]}`}>
+    <span title={titulo} className={`${icono ? "inline-flex items-center gap-1" : "inline-block"} whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${TONOS[tono]} ${extra}`}>
+      {icono}
       {children}
     </span>
   );

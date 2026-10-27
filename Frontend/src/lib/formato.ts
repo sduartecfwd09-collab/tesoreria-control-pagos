@@ -21,6 +21,12 @@ export function monto(centavos: number | null, moneda: Moneda): string {
   return new Intl.NumberFormat("es-CR", { style: "currency", currency: moneda, minimumFractionDigits: 2 }).format(centavos / 100);
 }
 
+/** Monto pagado con la moneda de la cuenta que pagó: CRC o USD con su símbolo; sin dato, solo el número (sin símbolo ni código). */
+export function montoPagado(centavos: number, moneda: string | null): string {
+  if (moneda === "CRC" || moneda === "USD") return monto(centavos, moneda);
+  return new Intl.NumberFormat("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(centavos / 100);
+}
+
 /** Texto del formulario ("1500,50" o "1500.50") a centavos; "" -> null; inválido -> undefined. */
 export function aCentavos(texto: string): number | null | undefined {
   const t = texto.trim().replace(/\s/g, "");

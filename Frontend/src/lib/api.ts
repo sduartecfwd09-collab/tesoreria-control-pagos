@@ -1,5 +1,5 @@
 import type {
-  CambiosObligacion, Categoria, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
+  AvisoDatos, CambiosObligacion, Categoria, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 
@@ -62,6 +62,7 @@ export const api = {
   editarObligacion: (id: number, c: CambiosObligacion) =>
     pedir<{ datos: Obligacion; regeneracion: Regeneracion | null }>(`/api/obligaciones/${id}`, { method: "PATCH", body: JSON.stringify(c) }),
 
-  listarVencimientos: (f: FiltroVencimientos) => pedir<Pagina<Vencimiento> & { hoy: string }>(`/api/vencimientos${consulta(f)}`),
+  listarVencimientos: (f: FiltroVencimientos) => pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number> }>(`/api/vencimientos${consulta(f)}`),
+  avisosDatos: async () => (await pedir<{ datos: AvisoDatos[] }>("/api/vencimientos/avisos-datos")).datos,
   periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[] }>("/api/vencimientos/periodos")).datos,
 };

@@ -140,6 +140,8 @@ export interface Obligacion {
   responsable: string | null; // el propio de la obligación (lo que se edita)
   responsableEfectivo: string | null; // el que se muestra: el propio o, si falta, el tesorero de la sociedad
   responsableDe: "obligacion" | "tesorero" | null;
+  /** fecha calculada del próximo pago (AAAA-MM-DD); null si falta el día o el mes de arranque */
+  proximoPago: string | null;
   activa: boolean;
   origen: "catalogo" | "manual";
   actualizado: string;
@@ -212,7 +214,16 @@ export interface ResultadoImportacionCatalogo {
   problemas: { fila: number; motivo: string; importada: boolean }[];
 }
 
-export type EstadoVencimiento = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion";
+export type EstadoVencimiento = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar";
+
+/** El pago que respalda el estado de un vencimiento. `moneda` es la de la cuenta que pagó; null = sin dato (sin símbolo ni código). */
+export interface PagoVencimiento {
+  fecha: string;
+  monto: number; // centavos
+  moneda: string | null;
+  banco: string | null;
+  cuenta: string; // últimos 4
+}
 
 export interface Vencimiento {
   id: number;
@@ -223,12 +234,30 @@ export interface Vencimiento {
   identificador: string;
   frecuencia: Frecuencia;
   periodo: string;
+  /** pendiente de un periodo anterior al que se está viendo */
+  mesAnterior: boolean;
   fecha: string;
+  /** solo si la fecha se movió «de una sola vez» */
+  fechaOriginal: string | null;
   montoEsperado: number | null;
   moneda: Moneda;
   estado: EstadoVencimiento;
+  motivo: string | null;
+  /** pago menos fecha vigente, en días (positivo = pagó después) */
+  diferenciaDias: number | null;
+  /** con «Sin información»: hasta qué fecha hay estados de cuenta de la sociedad */
+  sinInfoHasta: string | null;
+  textoEstado: string | null;
+  pago: PagoVencimiento | null;
   conciliado: boolean;
   futuro: boolean;
+}
+
+export interface AvisoDatos {
+  sociedadId: number;
+  sociedad: string;
+  sinEstadosDesde: string | null;
+  texto: string;
 }
 
 export interface FiltroVencimientos {
@@ -236,6 +265,10 @@ export interface FiltroVencimientos {
   categoria?: number;
   periodo?: string;
   q?: string;
+  /** estados separados por coma */
+  estado?: string;
+  /** con `periodo`: incluye los pendientes de periodos anteriores */
+  pendientesAnteriores?: boolean;
   pagina: number;
   porPagina: number;
 }
