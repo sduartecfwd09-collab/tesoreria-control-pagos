@@ -117,11 +117,10 @@ Los errores responden `{ "error": "texto" }` en español; un fallo inesperado re
 | `GET /api/obligaciones/resumen` | Conteos y alertas de calidad del catálogo |
 | `GET /api/obligaciones/:id` · `POST /api/obligaciones` · `PATCH /api/obligaciones/:id` | Alta manual y edición. El alta envía `sociedadId` (la sociedad se elige por nombre oficial). 409 si coinciden sociedad, proveedor, identificador (sin ceros a la izquierda) y categoría; 409 con `advertencia` (`identificador_duplicado`, con sociedad, categoría y proveedor de la otra) si el identificador ya existe en otra obligación, y se confirma con `esIntencional: true`; la respuesta del alta trae `advertencias` (`dia_ya_paso`). `controlDesde` (AAAA-MM) por defecto es el mes de alta. 422 si un valor no cumple la regla. El día de pago ya definido no se cambia por esta ruta |
 | `POST /api/catalogo/importar` | Importa `CATALOGO_FILE`. 422 si no está configurada, no existe o no tiene la cabecera; 409 si ya hay una en curso |
-| `POST /api/vencimientos/generar` | Cuerpo `{ desde, hasta }` (AAAA-MM, máx. 24 meses). Devuelve creados, ya existentes, detalle por mes y obligaciones omitidas con su motivo |
-| `GET /api/vencimientos` | Filtros `sociedad` (abreviatura) o `sociedadId`, `categoria`, `periodo` o `desde`/`hasta`, `q`, `pagina`, `porPagina`. Cada vencimiento trae `estado`, `conciliado` y `futuro` |
-| `GET /api/vencimientos/periodos` | Meses ya generados con su total |
+| `GET /api/vencimientos` | Filtros `sociedad` (abreviatura) o `sociedadId`, `categoria`, `periodo` o `desde`/`hasta`, `q`, `pagina`, `porPagina`. Cada vencimiento trae `estado` (proyectado, por_vencer, vencido, pagado, pagado_con_inconsistencia, sin_informacion, por_revisar), `motivo`, `diferenciaDias` (pago menos fecha vigente), `sinInfoHasta`, `conciliado` y `futuro` |
+| `GET /api/vencimientos/periodos` | Meses con vencimientos y su total |
 
-Al crear o editar una obligación (frecuencia, mes de arranque, día, monto o activa), la respuesta incluye `regeneracion` con lo que cambió en sus vencimientos futuros.
+Al crear o editar una obligación (frecuencia, mes de arranque, día, monto o activa), la respuesta incluye `regeneracion` con lo que cambió en sus vencimientos futuros. Cada obligación trae `proximoPago` (fecha calculada según la frecuencia a partir del último vencimiento).
 
 Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones también `campo`, para marcarlo en el formulario); fechas ISO 8601; montos en centavos (enteros).
 **CORS:** el Backend solo acepta los orígenes de `CORS_ORIGINS` (por defecto `http://localhost:3000`). El Frontend lee la URL del API desde `NEXT_PUBLIC_API_URL`.
@@ -150,7 +149,8 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 
 ## Vencimientos (Hito 3)
 
-- Un vencimiento por obligación activa y periodo (`@@unique`): generar el mismo rango otra vez no duplica ni modifica nada.
+- Un vencimiento por obligación activa y periodo (`@@unique`). El calendario es automático y sin meses futuros: se crean los vencimientos desde «Control desde» hasta hoy + `aviso_dias` (una ventana en días). Corre solo al crear, editar o activar una obligación, tras cada importación, al arrancar el servidor y una vez al día; es idempotente. No hay ruta ni botón para generarlos a mano.
+- **Cruce (Hito 4):** `npm run cruzar` recalcula el estado de todos los vencimientos (reglas en `src/domain/cruce.ts`); `npm run cruzar:diagnostico` imprime solo conteos por estado, sociedad y mes. El cruce usa solo débitos de archivos no retirados, la ventana `ventana_dias_antes` y `ventana_dias_despues` (3 y 3) y la cobertura de las cuentas (`src/domain/cobertura-corte.ts`): nunca marca «Vencido» si hay duda de cobertura.
 - Frecuencia como paso en meses (mensual 1, bimestral 2, trimestral 3, semestral 6, anual 12) contado desde el **mes de arranque**. Una frecuencia no mensual sin mes de arranque, o una obligación sin día, se omite y se reporta con su motivo.
 - Si el día no existe en el mes se usa el último día (31 → 30, o 28/29 en febrero). Sin ajuste por fines de semana ni feriados.
 - Todos nacen **proyectado**; los demás estados se calculan con el cruce (Hito 4).
@@ -185,6 +185,6 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 - **Autenticación y roles:** pendientes de definir con TI.
 - **Proveedor duplicado en el catálogo:** «JASEC Internet» es el mismo proveedor que «JASEC». Falta unificarlo en la importación (alias de proveedor).
 - **Aviso de n.º de servicio repetido al guardar:** hoy se detecta y se muestra en el resumen; falta advertirlo al crear o editar una obligación antes de guardar.
-- **Diseño nuevo pendiente de aplicar:** las pantallas actuales todavía muestran textos internos («pronto», «Por confirmar con Tesorería») y el botón «Generar vencimientos»; se reemplazan con el diseño aprobado en la maqueta (ver `CLAUDE.md`).
+- **Diseño nuevo pendiente de aplicar:** las pantallas actuales todavía muestran textos internos («pronto», «Por confirmar con Tesorería») ; se reemplazan con el diseño aprobado en la maqueta (ver `CLAUDE.md`).
 - **TanStack Table 8.21.3:** se eligió la línea 8 (madura) en vez de la 9, publicada en agosto de 2026 y aún con correcciones frecuentes. `npm run lint` muestra 2 advertencias del React Compiler («incompatible library») en las tablas: el compilador no optimiza esos componentes, pero funcionan bien.
 - **Alertas al vuelo:** `GET /api/obligaciones` recalcula los identificadores repetidos sobre todo el catálogo en cada consulta; es trivial con ~65 obligaciones, revisar si el catálogo crece mucho.

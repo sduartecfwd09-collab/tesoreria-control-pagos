@@ -34,3 +34,5 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 
 - Cuál es el número correcto en el identificador repetido de GGDI y en el de JASEC (ZFL) con formato de IBAN.
 - Completar monto, cuenta de pago y responsable de las obligaciones.
+| 2026-10-27 | Cruce por identificador dentro de la descripción, ventana con «días antes» y «días después» separados, y «Vencido» solo con cobertura confirmada. | Evita marcar como vencido un pago que simplemente no está cargado; el cruce no inventa. |
+| 2026-10-27 | El calendario de vencimientos llega hasta hoy + días de aviso (sin meses futuros). | Tesorería solo necesita ver lo que está por vencer o ya venció. |
