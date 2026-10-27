@@ -7,3 +7,18 @@ export function identificadorClave(id: string): string {
 }
 
 export const MOTIVO_IDENTIFICADOR_DUPLICADO = "El identificador ya existe en otra obligación: confirme que es intencional";
+
+const escaparRegex = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Patrón que busca el identificador de una obligación dentro de la descripción de un movimiento (texto en mayúsculas).
+ * Va con delimitación: no puede estar pegado a otros dígitos («123» no está en «1234»), y los ceros a la izquierda de la
+ * descripción se aceptan («00012345» contiene «12345»). null si el identificador queda vacío.
+ */
+export function patronIdentificador(id: string): RegExp | null {
+  const clave = identificadorClave(id);
+  if (clave === "") return null;
+  return /^\d+$/.test(clave)
+    ? new RegExp(`(?<![0-9])0*${clave}(?![0-9])`)
+    : new RegExp(`(?<![A-Z0-9])${escaparRegex(clave)}(?![A-Z0-9])`);
+}
