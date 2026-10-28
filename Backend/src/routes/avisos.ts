@@ -1,0 +1,79 @@
+import type { FastifyInstance } from "fastify";
+import { ESTADOS_DE_AVISOS, GRUPOS_AVISO, esDelUsuario, grupoDeAviso, identificadorEnmascarado, type ClaveGrupoAviso } from "../domain/avisos.js";
+import { inicioDeDatos } from "../domain/cobertura-corte.js";
+import { MOTIVOS } from "../domain/cruce.js";
+import { responsableEfectivo } from "../domain/obligaciones.js";
+import { hoyDe, type Reloj } from "../domain/reloj.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
+import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
+import { usuarioActualConRol } from "../identidad/usuario-actual.js";
+import { cargarCoberturaCuentas, preferenciasPorObligacion } from "../repositories/cruce.js";
+import { valorGlobal } from "../repositories/parametros.js";
+import { obtenerTesorero } from "../repositories/usuarios.js";
+import { vencimientosParaAvisos } from "../repositories/vencimientos.js";
+import { diasDeAviso } from "../vencimientos/generar.js";
+
+// Solo lectura: lista los vencimientos que requieren atención tal como los dejó el motor de cruce (no recalcula estados).
+// Un tesorero ve lo de sus obligaciones (el responsable propio o, si no tiene, el tesorero de la sociedad); Jefatura ve todo.
+// Sin persona elegida (todavía no hay inicio de sesión) se muestra todo, igual que el resto de las pantallas.
+const MS_DIA = 86_400_000;
+const iso = (f: Date) => f.toISOString().slice(0, 10);
+
+export async function rutasAvisos(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
+  app.get("/api/avisos", async (req) => {
+    const hoy = hoyDe(opts.reloj);
+    const persona = await usuarioActualConRol(req, opts.modoPruebas);
+    const soloLoSuyo = persona !== null && persona.rol !== "Jefatura";
+    const general = await diasDeAviso();
+    const nDespues = Number(await valorGlobal("ventana_dias_despues"));
+    const diasDespues = Number.isInteger(nDespues) && nDespues >= 0 ? nDespues : 12;
+    const [todos, preferencias] = await Promise.all([vencimientosParaAvisos(ESTADOS_DE_AVISOS), preferenciasPorObligacion()]);
+    const vencimientos = soloLoSuyo
+      ? todos.filter((v) => esDelUsuario(persona, { responsable: v.obligacion.responsable, sociedad: { tesoreroId: v.sociedad.tesoreroId } }))
+      : todos;
+    const datosDesde = new Map<number, string | null>();
+    if (vencimientos.some((v) => v.estado === "sin_informacion" && v.motivo === MOTIVOS.sinInformacionDesde)) {
+      for (const [id, cuentas] of await cargarCoberturaCuentas()) datosDesde.set(id, inicioDeDatos(cuentas)?.toISOString().slice(0, 10) ?? null);
+    }
+    const filas = new Map<ClaveGrupoAviso, unknown[]>(GRUPOS_AVISO.map((g) => [g.clave, []]));
+    for (const v of vencimientos) {
+      const clave = grupoDeAviso(v.estado);
+      if (!clave) continue;
+      const fecha = iso(v.fecha);
+      const dias = Math.round((v.fecha.getTime() - hoy.getTime()) / MS_DIA);
+      const aviso = preferencias.aviso.get(v.obligacionId) ?? general;
+      const textoEstado =
+        v.estado === "sin_informacion"
+          ? v.motivo === MOTIVOS.sinInformacionSaldo
+            ? TEXTO_SALDO_NO_CUADRA
+            : v.motivo === MOTIVOS.sinInformacionDesde
+              ? textoSinEstadosAnteriores(datosDesde.get(v.sociedadId) ?? null)
+              : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)
+          : textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias, fecha, fechaHasta: iso(new Date(v.fecha.getTime() + diasDespues * MS_DIA)) });
+      filas.get(clave)!.push({
+        id: v.id,
+        sociedad: etiquetaSociedad(v.sociedad),
+        proveedor: v.proveedor,
+        identificador: identificadorEnmascarado(v.obligacion.identificador),
+        periodo: v.periodo,
+        fecha,
+        estado: v.estado,
+        textoEstado,
+        dias,
+        responsableEfectivo: responsableEfectivo({ responsable: v.obligacion.responsable, sociedad: { tesorero: v.sociedad.tesorero } }).nombre,
+        // en «Programados»: el día en que pasará a «Por vencer» según el aviso del responsable
+        pasaAPorVencerEl: v.estado === "proyectado" ? iso(new Date(v.fecha.getTime() - aviso * MS_DIA)) : null,
+      });
+    }
+    const grupos = GRUPOS_AVISO.map((g) => ({ clave: g.clave, titulo: g.titulo, total: filas.get(g.clave)!.length, filas: filas.get(g.clave)! }));
+    const propio = persona && soloLoSuyo ? (await obtenerTesorero(persona.id))?.diasAviso ?? null : null;
+    return {
+      alcance: soloLoSuyo ? "mio" : "todo",
+      usuario: persona ? { nombre: persona.nombre, rol: persona.rol } : null,
+      diasAviso: propio ?? general,
+      hoy: iso(hoy),
+      total: grupos.reduce((s, g) => s + g.total, 0),
+      grupos,
+    };
+  });
+}

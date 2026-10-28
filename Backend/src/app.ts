@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import { env } from "./config/env.js";
 import { aNumero } from "./domain/montos.js";
 import { relojSistema, type Reloj } from "./domain/reloj.js";
+import { rutasAvisos } from "./routes/avisos.js";
+import { rutasMovimientosSinObligacion } from "./routes/movimientos-sin-obligacion.js";
 import { rutasIdentidad } from "./routes/identidad.js";
 import { rutasImportaciones } from "./routes/importaciones.js";
 import { rutasObligaciones } from "./routes/obligaciones.js";
@@ -32,6 +34,8 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
 
   app.get("/api/salud", async () => ({ estado: "ok", hora: reloj().toISOString() }));
   await app.register(rutasParametros);
+  await app.register(rutasAvisos, { reloj, modoPruebas: opts.modoPruebas ?? env.MODO_PRUEBAS });
+  await app.register(rutasMovimientosSinObligacion);
   await app.register(rutasIdentidad, { modoPruebas: opts.modoPruebas ?? env.MODO_PRUEBAS });
   await app.register(rutasImportaciones);
   await app.register(rutasObligaciones, { reloj });

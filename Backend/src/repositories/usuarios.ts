@@ -51,3 +51,9 @@ export async function mayorAvisoDeUsuarios(): Promise<number | null> {
   const r = await prisma.usuario.aggregate({ where: { activo: true, diasAviso: { not: null } }, _max: { diasAviso: true } });
   return r._max.diasAviso;
 }
+
+/** Una persona activa con su rol (Tesorero o Jefatura). */
+export async function obtenerUsuarioActivo(id: number) {
+  const u = await prisma.usuario.findFirst({ where: { id, activo: true }, select: { id: true, nombre: true, nombreNormalizado: true, rol: { select: { nombre: true } } } });
+  return u ? { id: u.id, nombre: u.nombre, nombreNormalizado: u.nombreNormalizado, rol: u.rol.nombre } : null;
+}

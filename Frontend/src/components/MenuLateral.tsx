@@ -20,11 +20,13 @@ const GRUPOS: Pantalla[][] = [
   [
     { href: "/", texto: "Pagos del mes", icono: <Icono><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Icono> },
     { href: "/vencidos", texto: "Vencidos", icono: <Icono><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></Icono> },
+    { href: "/avisos", texto: "Avisos", icono: <Icono><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></Icono> },
   ],
   [{ href: "/obligaciones", texto: "Obligaciones", icono: <Icono><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></Icono> }],
   [
     { href: "/archivos", texto: "Estados de cuenta", icono: <Icono><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></Icono> },
-    { href: "/configuracion", texto: "Configuración", icono: <Icono><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></Icono> },
+    { href: "/movimientos-sin-obligacion", texto: "Movimientos sin obligación", icono: <Icono><path d="M8 6h13M8 12h5M8 18h5M3 6h.01M3 12h.01M3 18h.01" /><circle cx="18" cy="16" r="4" /><path d="M17 15a1 1 0 1 1 1 1v.5M18 19h.01" /></Icono> },
+    { href: "/configuracion", texto: "Mi configuración", icono: <Icono><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></Icono> },
   ],
 ];
 

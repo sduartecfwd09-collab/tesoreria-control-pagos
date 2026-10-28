@@ -2,7 +2,7 @@
 // X-Usuario-Actual) y SOLO si MODO_PRUEBAS=true; en el Hito 4A lo reemplaza la sesión de Microsoft sin tocar las pantallas
 // ni las rutas que lo usan. Sin modo de pruebas, el encabezado se ignora por completo.
 import type { FastifyRequest } from "fastify";
-import { obtenerTesorero } from "../repositories/usuarios.js";
+import { obtenerTesorero, obtenerUsuarioActivo } from "../repositories/usuarios.js";
 
 export const ENCABEZADO_USUARIO = "x-usuario-actual";
 
@@ -14,4 +14,15 @@ export async function usuarioActual(req: FastifyRequest, modoPruebas: boolean): 
   const id = Number(Array.isArray(crudo) ? crudo[0] : crudo);
   if (!Number.isInteger(id) || id <= 0) return null;
   return obtenerTesorero(id);
+}
+
+export interface UsuarioConRol { id: number; nombre: string; nombreNormalizado: string; rol: string }
+
+/** Como `usuarioActual`, pero para cualquier persona activa (Tesorero o Jefatura) y con su rol: lo que necesita «Avisos». */
+export async function usuarioActualConRol(req: FastifyRequest, modoPruebas: boolean): Promise<UsuarioConRol | null> {
+  if (!modoPruebas) return null;
+  const crudo = req.headers[ENCABEZADO_USUARIO];
+  const id = Number(Array.isArray(crudo) ? crudo[0] : crudo);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  return obtenerUsuarioActivo(id);
 }

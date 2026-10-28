@@ -1,5 +1,5 @@
 import type {
-  AvisoDatos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Frecuencia, Identidad, Importaciones, MiConfiguracion, Obligacion, Pagina,
+  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Frecuencia, Identidad, Importaciones, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoFrecuencia, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
@@ -45,6 +45,9 @@ export const api = {
   listarImportaciones: () => pedir<Importaciones>("/api/importaciones"),
   obtenerCobertura: async () => (await pedir<{ datos: Cobertura }>("/api/cobertura")).datos,
   listarParametros: async () => (await pedir<{ datos: Parametro[] }>("/api/parametros")).datos,
+
+  obtenerAvisos: () => pedir<Avisos>("/api/avisos"),
+  movimientosSinObligacion: () => pedir<MovimientosSinObligacion>("/api/movimientos-sin-obligacion"),
 
   obtenerIdentidad: () => pedir<Identidad>("/api/identidad"),
   obtenerMiConfiguracion: async () => (await pedir<{ datos: MiConfiguracion }>("/api/mi-configuracion")).datos,

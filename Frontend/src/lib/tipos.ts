@@ -343,3 +343,54 @@ export interface DetalleVencimiento {
   grupo: ObligacionDelGrupo[];
   movimientos: MovimientoDetalle[];
 }
+
+export type ClaveGrupoAviso = "vencidos" | "por_vencer" | "programados" | "por_revisar" | "sin_informacion";
+
+export interface FilaAviso {
+  id: number;
+  sociedad: string;
+  proveedor: string;
+  /** ya viene enmascarado */
+  identificador: string;
+  periodo: string;
+  /** fecha habitual de pago */
+  fecha: string;
+  estado: EstadoVencimiento;
+  textoEstado: string;
+  dias: number;
+  responsableEfectivo: string | null;
+  pasaAPorVencerEl: string | null;
+}
+
+export interface GrupoAviso {
+  clave: ClaveGrupoAviso;
+  titulo: string;
+  total: number;
+  filas: FilaAviso[];
+}
+
+export interface Avisos {
+  alcance: "mio" | "todo";
+  usuario: { nombre: string; rol: string } | null;
+  diasAviso: number;
+  hoy: string;
+  total: number;
+  grupos: GrupoAviso[];
+}
+
+export interface MovimientoSinObligacion {
+  proveedor: string;
+  identificador: string;
+  pagos: number;
+  primeraFecha: string;
+  ultimaFecha: string;
+  sociedades: string[];
+  cuentas: string[];
+}
+
+export interface MovimientosSinObligacion {
+  datos: MovimientoSinObligacion[];
+  totalGrupos: number;
+  totalPagos: number;
+  nota: string;
+}

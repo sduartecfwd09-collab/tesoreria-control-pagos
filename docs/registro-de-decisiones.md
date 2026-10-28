@@ -55,6 +55,7 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-28 | El rol «Usuario» pasa a llamarse «Tesorero» (interfaz, API, seed, Excel de usuarios, pruebas y documentos); el Excel acepta ambos nombres. | El nombre dice lo que la persona hace. |
 | 2026-10-28 | Gestionar explica cuatro cosas en cada pago sin encontrar: qué se esperaba, qué se buscó, qué se encontró y qué hacer; si el pago con ese número está asignado a otra obligación, lo dice con fecha y monto. | Un «no se encontró» sin más sugería que el pago no existía. |
 | 2026-10-28 | La frecuencia se edita solo dentro de «Editar» (y en masa con filas marcadas); la tabla ya no lleva el control ni las marcas de confirmación. | Menos ruido en la tabla; la frecuencia es un dato que se corrige pocas veces. |
+| 2026-10-28 | Paso 3.1: pantallas de solo lectura «Avisos» (cinco grupos por estado, filtradas por el responsable efectivo; Jefatura ve todo) y «Movimientos sin obligación» (débitos «Pago:PROVEEDOR número» del banco 0107 cuyo número no está en el catálogo; nunca créditos). El menú agrega ambas y renombra «Configuración» a «Mi configuración». | Ver lo que requiere atención y detectar pagos de servicios que faltan en el catálogo, sin crear nada todavía. |
 
 ## Pendientes con Tesorería
 

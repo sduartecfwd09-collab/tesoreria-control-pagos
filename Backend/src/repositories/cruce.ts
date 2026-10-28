@@ -214,3 +214,21 @@ export async function creditosParaDiagnostico(): Promise<CreditoParaDiagnostico[
   });
   return filas.map((f) => ({ sociedadId: f.cuenta.sociedadId, formato: f.cuenta.formato, fecha: f.fecha, descripcion: f.descripcion!.toUpperCase() }));
 }
+
+/** Para «Movimientos sin obligación»: solo débitos del banco 0107 (formato E1) cuya descripción puede traer «Pago:». Nunca créditos. */
+export async function debitosConPagoDelBanco() {
+  return prisma.movimiento.findMany({
+    where: {
+      debito: { gt: 0n },
+      archivo: { retiradoEn: null },
+      descripcion: { contains: "pago" },
+      cuenta: { OR: [{ formato: "E1" }, { codigoBanco: "0107" }] },
+    },
+    select: { fecha: true, descripcion: true, cuenta: { select: { numero: true, sociedad: { select: { codigo: true, nombreLargo: true } } } } },
+  });
+}
+
+/** Identificadores de todas las obligaciones del catálogo (activas o no): un servicio desactivado sigue siendo del catálogo. */
+export async function identificadoresDelCatalogo(): Promise<string[]> {
+  return (await prisma.obligacion.findMany({ select: { identificador: true } })).map((o) => o.identificador);
+}

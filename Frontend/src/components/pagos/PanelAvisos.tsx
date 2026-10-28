@@ -1,0 +1,107 @@
+"use client";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { nombreFecha, nombrePeriodo } from "@/lib/formato";
+import type { Avisos } from "@/lib/tipos";
+import { CajaError } from "../ui";
+import { DetallePago } from "./DetallePago";
+import { EstadoPago } from "./EstadoPago";
+
+const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
+
+/** Pantalla de solo lectura: los avisos del servidor por grupo, con «Gestionar» que abre la misma ficha de Pagos del mes. */
+export function PanelAvisos() {
+  const [datos, setDatos] = useState<Avisos | null>(null);
+  const [abierto, setAbierto] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
+
+  useEffect(() => {
+    let vigente = true;
+    api.obtenerAvisos().then((r) => vigente && (setDatos(r), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    return () => {
+      vigente = false;
+    };
+  }, [intento]);
+
+  if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
+  if (datos === null) return <p className="mt-8 text-suave" role="status">Cargando avisos…</p>;
+
+  const jefatura = datos.usuario?.rol === "Jefatura";
+  const nota =
+    datos.alcance === "todo" || !datos.usuario
+      ? "Mostrando todo."
+      : jefatura
+        ? `Mostrando lo de ${datos.usuario.nombre}, con el aviso de ${datos.diasAviso} días.`
+        : `Mostrando lo de ${datos.usuario.nombre}, con tu aviso de ${datos.diasAviso} días.`;
+
+  return (
+    <>
+      <p className="mt-3 text-sm" aria-live="polite">{nota}</p>
+
+      <ul className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+        {datos.grupos.map((g) => (
+          <li key={g.clave} className="rounded-xl border border-linea p-4">
+            <b className="block text-3xl font-extrabold tabular-nums">{g.total.toLocaleString("es-CR")}</b>
+            <span className="mt-1 block text-sm text-suave">{g.titulo}</span>
+          </li>
+        ))}
+      </ul>
+
+      {datos.total === 0 && (
+        <p className="mt-8 text-suave" role="status">{datos.alcance === "mio" ? "Nada por atender con tus días de aviso" : "Nada por atender."}</p>
+      )}
+
+      {datos.grupos.filter((g) => g.total > 0).map((g) => (
+        <section key={g.clave} className="mt-8" aria-labelledby={`aviso-${g.clave}`}>
+          <h2 id={`aviso-${g.clave}`} className="text-xl font-bold">{g.titulo} <span className="font-normal text-suave">({g.total.toLocaleString("es-CR")})</span></h2>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[1000px] border-collapse text-sm">
+              <caption className="sr-only">{g.titulo}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className={th}>Sociedad</th>
+                  <th scope="col" className={th}>Proveedor</th>
+                  <th scope="col" className={th}>Identificador</th>
+                  <th scope="col" className={th}>Mes</th>
+                  <th scope="col" className={th}>Fecha habitual de pago</th>
+                  <th scope="col" className={th}>Estado</th>
+                  <th scope="col" className={th}><span className="sr-only">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.filas.map((f) => (
+                  <tr key={f.id} className="border-t border-linea">
+                    <td className="px-3.5 py-4 align-top"><span title={f.sociedad} className="line-clamp-3 max-w-64 text-xs">{f.sociedad}</span></td>
+                    <td className="px-3.5 py-4 align-top font-semibold">{f.proveedor}</td>
+                    <td className="px-3.5 py-4 align-top font-mono text-[13px] text-suave whitespace-nowrap">{f.identificador}</td>
+                    <td className="px-3.5 py-4 align-top whitespace-nowrap">{nombrePeriodo(f.periodo)}</td>
+                    <td className="px-3.5 py-4 align-top whitespace-nowrap">{nombreFecha(f.fecha)}</td>
+                    <td className="px-3.5 py-4 align-top">
+                      <EstadoPago estado={f.estado} />
+                      <span className="mt-1 block max-w-72 text-xs text-suave">{f.textoEstado}</span>
+                      {g.clave === "programados" && f.pasaAPorVencerEl && (
+                        <span className="mt-0.5 block text-xs text-suave">Pasa a Por vencer el {nombreFecha(f.pasaAPorVencerEl)}</span>
+                      )}
+                    </td>
+                    <td className="px-3.5 py-4 align-top text-right">
+                      <button
+                        type="button"
+                        onClick={() => setAbierto(f.id)}
+                        aria-label={`Gestionar ${f.proveedor} ${f.identificador}`}
+                        className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave"
+                      >
+                        Gestionar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ))}
+      {abierto !== null && <DetallePago id={abierto} alCerrar={() => setAbierto(null)} />}
+    </>
+  );
+}

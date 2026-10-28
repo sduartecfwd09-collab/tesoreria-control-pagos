@@ -164,3 +164,16 @@ export async function asignadosAOtraObligacion(ids: number[], obligacionId: numb
   const filas = await prisma.vencimiento.findMany({ where: { movimientoId: { in: ids }, obligacionId: { not: obligacionId } }, select: { movimientoId: true, proveedor: true } });
   return new Map(filas.flatMap((f) => (f.movimientoId === null ? [] : [[f.movimientoId, f.proveedor] as [number, string]])));
 }
+
+/** Vencimientos de obligaciones activas que requieren atención (todos los meses), con lo necesario para saber de quién son. */
+export async function vencimientosParaAvisos(estados: string[]) {
+  return prisma.vencimiento.findMany({
+    where: { estado: { in: estados }, obligacion: { activa: true } },
+    select: {
+      id: true, obligacionId: true, sociedadId: true, periodo: true, fecha: true, estado: true, motivo: true, sinInfoHasta: true, proveedor: true,
+      sociedad: { select: { codigo: true, nombreLargo: true, tesoreroId: true, tesorero: { select: { nombre: true } } } },
+      obligacion: { select: { identificador: true, responsable: true } },
+    },
+    orderBy: [{ fecha: "asc" }, { id: "asc" }],
+  });
+}
