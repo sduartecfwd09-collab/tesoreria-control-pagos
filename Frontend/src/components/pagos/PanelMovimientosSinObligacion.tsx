@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { nombreFecha } from "@/lib/formato";
 import type { MovimientosSinObligacion } from "@/lib/tipos";
+import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
 
 const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
@@ -27,7 +28,7 @@ export function PanelMovimientosSinObligacion() {
   const n = (x: number) => x.toLocaleString("es-CR");
   return (
     <>
-      <p className="mt-3 max-w-3xl text-sm">{datos.nota}</p>
+      <LineaAlcance alcance={datos.alcance} />
       <p className="mt-3 text-sm" aria-live="polite">
         {datos.totalGrupos === 0
           ? "No hay movimientos sin obligación."

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { usuarioActual } from "../identidad/usuario-actual.js";
-import { fijarPreferencias, listarTesoreros } from "../repositories/usuarios.js";
+import { fijarPreferencias, listarUsuariosActivos } from "../repositories/usuarios.js";
 import { valorGlobal } from "../repositories/parametros.js";
 
 // «Mi configuración» y el selector de tesorero temporal. El selector solo existe con MODO_PRUEBAS=true; cuando llegue el
@@ -15,7 +15,7 @@ const valorOpcional = (max: number) =>
   z.number({ error: "Indique un número de días" }).int("Debe ser un número entero").min(0, "Debe ser al menos 0").max(max, `Debe ser como máximo ${max}`);
 
 export async function rutasIdentidad(app: FastifyInstance, opts: { modoPruebas: boolean }) {
-  app.get("/api/identidad", async () => ({ modoPruebas: opts.modoPruebas, tesoreros: opts.modoPruebas ? await listarTesoreros() : [] }));
+  app.get("/api/identidad", async () => ({ modoPruebas: opts.modoPruebas, usuarios: opts.modoPruebas ? await listarUsuariosActivos() : [] }));
 
   const sinUsuario = (reply: import("fastify").FastifyReply) =>
     reply.code(401).send({ error: opts.modoPruebas ? "Elija con qué tesorero está actuando." : "No hay una sesión iniciada." });

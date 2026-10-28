@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { nombreFecha, nombrePeriodo } from "@/lib/formato";
 import type { Avisos } from "@/lib/tipos";
+import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { EstadoPago } from "./EstadoPago";
@@ -27,19 +28,11 @@ export function PanelAvisos() {
   if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
   if (datos === null) return <p className="mt-8 text-suave" role="status">Cargando avisos…</p>;
 
-  const jefatura = datos.usuario?.rol === "Jefatura";
-  const nota =
-    datos.alcance === "todo" || !datos.usuario
-      ? "Mostrando todo."
-      : jefatura
-        ? `Mostrando lo de ${datos.usuario.nombre}, con el aviso de ${datos.diasAviso} días.`
-        : `Mostrando lo de ${datos.usuario.nombre}, con tu aviso de ${datos.diasAviso} días.`;
-
   return (
     <>
-      <p className="mt-3 text-sm" aria-live="polite">{nota}</p>
+      <LineaAlcance alcance={datos.alcance} detalle={datos.alcance.tipo === "mio" ? `Con tu aviso de ${datos.diasAviso} días` : undefined} />
 
-      <ul className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+      <ul className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         {datos.grupos.map((g) => (
           <li key={g.clave} className="rounded-xl border border-linea p-4">
             <b className="block text-3xl font-extrabold tabular-nums">{g.total.toLocaleString("es-CR")}</b>
@@ -49,7 +42,7 @@ export function PanelAvisos() {
       </ul>
 
       {datos.total === 0 && (
-        <p className="mt-8 text-suave" role="status">{datos.alcance === "mio" ? "Nada por atender con tus días de aviso" : "Nada por atender."}</p>
+        <p className="mt-8 text-suave" role="status">{datos.alcance.tipo === "mio" ? "Nada por atender con tus días de aviso" : "Nada por atender."}</p>
       )}
 
       {datos.grupos.filter((g) => g.total > 0).map((g) => (
@@ -80,9 +73,6 @@ export function PanelAvisos() {
                     <td className="px-3.5 py-4 align-top">
                       <EstadoPago estado={f.estado} />
                       <span className="mt-1 block max-w-72 text-xs text-suave">{f.textoEstado}</span>
-                      {g.clave === "programados" && f.pasaAPorVencerEl && (
-                        <span className="mt-0.5 block text-xs text-suave">Pasa a Por vencer el {nombreFecha(f.pasaAPorVencerEl)}</span>
-                      )}
                     </td>
                     <td className="px-3.5 py-4 align-top text-right">
                       <button

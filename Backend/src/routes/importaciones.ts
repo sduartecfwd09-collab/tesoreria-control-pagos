@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { alcanceDe, alcanceParaRespuesta, sociedadesDelAlcance } from "../identidad/alcance.js";
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
@@ -21,9 +22,12 @@ type DetalleArchivo = {
   conImagenes?: boolean;
 };
 
-export async function rutasImportaciones(app: FastifyInstance) {
-  app.get("/api/importaciones", async () => {
-    const archivos = await listarArchivos();
+export async function rutasImportaciones(app: FastifyInstance, opts: { modoPruebas: boolean }) {
+  app.get("/api/importaciones", async (req) => {
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const sociedades = await sociedadesDelAlcance(alcance);
+    // un archivo sin sociedad asignada no es de ninguna sociedad: solo lo ve quien ve todo
+    const archivos = (await listarArchivos()).filter((a) => !sociedades || (a.sociedadId !== null && sociedades.includes(a.sociedadId)));
     const datos = archivos.map((a) => {
       const d = (a.detalle ?? {}) as DetalleArchivo;
       return {
@@ -47,6 +51,7 @@ export async function rutasImportaciones(app: FastifyInstance) {
       };
     });
     return {
+      alcance: alcanceParaRespuesta(alcance),
       datos,
       // Archivos = Leídos + Con error + Sin sociedad; los retirados de la carpeta se cuentan aparte
       resumen: {
@@ -57,13 +62,16 @@ export async function rutasImportaciones(app: FastifyInstance) {
     };
   });
 
-  app.get("/api/cobertura", async () => {
-    const archivos = (await listarArchivos()).filter((a) => a.retiradoEn === null);
-    return { datos: coberturaSegura(calcularCobertura(archivos)) };
+  app.get("/api/cobertura", async (req) => {
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const sociedades = await sociedadesDelAlcance(alcance);
+    const archivos = (await listarArchivos()).filter((a) => a.retiradoEn === null && (!sociedades || (a.sociedadId !== null && sociedades.includes(a.sociedadId))));
+    return { alcance: alcanceParaRespuesta(alcance), datos: coberturaSegura(calcularCobertura(archivos)) };
   });
 
-  app.get("/api/cuentas", async () => {
-    const cuentas = await listarCuentas();
+  app.get("/api/cuentas", async (req) => {
+    const sociedades = await sociedadesDelAlcance(await alcanceDe(req, opts.modoPruebas));
+    const cuentas = (await listarCuentas()).filter((c) => !sociedades || sociedades.includes(c.sociedadId));
     return {
       datos: cuentas.map((c) => ({
         id: c.id, sociedad: etiquetaSociedad(c.sociedad), numero: enmascararCuenta(c.numero), banco: c.banco, bancoPorConfirmar: c.bancoPorConfirmar,

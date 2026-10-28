@@ -11,6 +11,7 @@ import {
   CAMPOS_EDITABLES, calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe,
   estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
+import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
@@ -19,7 +20,6 @@ import {
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import { ultimosPeriodos } from "../repositories/vencimientos.js";
 import { proximoPago } from "../domain/vencimientos.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
@@ -59,7 +59,7 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     responsable: o.responsable, responsableEfectivo: responsableEfectivo(o).nombre, responsableDe: responsableEfectivo(o).de,
     activa: o.activa, origen: o.origen,
     controlDesde: periodoDeControl(o.controlDesde),
-    proximoPago, // dato calculado según la frecuencia a partir del último vencimiento
+    proximoPago, // dato calculado: el próximo vencimiento con fecha igual o posterior a hoy, según la frecuencia
     actualizado: o.actualizado.toISOString(),
     etiquetas: observaciones,
     estado: estadoDeObligacion(o.activa, observaciones),
@@ -68,10 +68,9 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
 
 /** Próximo pago calculado de cada obligación (fecha ISO o null). */
 async function proximosPagos(obs: ObligacionCompleta[], reloj: Reloj): Promise<Map<number, string | null>> {
-  const ultimos = await ultimosPeriodos(obs.map((o) => o.id));
   const hoy = hoyDe(reloj);
   return new Map(obs.map((o) => {
-    const f = proximoPago({ ...o, controlDesde: periodoDeControl(o.controlDesde) }, ultimos.get(o.id) ?? null, hoy);
+    const f = proximoPago({ ...o, controlDesde: periodoDeControl(o.controlDesde) }, hoy);
     return [o.id, f ? f.toISOString().slice(0, 10) : null];
   }));
 }
@@ -91,7 +90,7 @@ async function errorCuenta(cuentaId: number | null | undefined, sociedadId: numb
 
 const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.code(422).send({ error, ...(campo ? { campo } : {}) });
 
-export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj }) {
+export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
     return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, tesorero: x.tesorero?.nombre ?? null, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
@@ -105,19 +104,26 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
   app.get("/api/obligaciones", async (req, reply) => {
     const q = consulta.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
-    const [{ total, datos }, repetidos] = await Promise.all([listarObligaciones(q.data), repetidosActuales()]);
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const ids = (await obligacionesDelAlcance(alcance)) ?? undefined;
+    const [{ total, datos }, repetidos] = await Promise.all([listarObligaciones({ ...q.data, ids }), repetidosActuales()]);
     const proximos = await proximosPagos(datos, opts.reloj);
     return {
+      alcance: alcanceParaRespuesta(alcance),
       datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null)),
       total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
     };
   });
 
-  app.get("/api/obligaciones/resumen", async () => {
-    const [obs, sociedades, conEstados] = await Promise.all([todasLasObligaciones(), listarSociedades(), sociedadesConEstados()]);
+  app.get("/api/obligaciones/resumen", async (req) => {
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const ids = await obligacionesDelAlcance(alcance);
+    const [todas, sociedades, conEstados] = await Promise.all([todasLasObligaciones(), listarSociedades(), sociedadesConEstados()]);
+    const obs = ids ? todas.filter((o) => ids.includes(o.id)) : todas;
     const activas = obs.filter((o) => o.activa);
     const contar = (xs: string[]) => xs.reduce<Record<string, number>>((m, x) => ({ ...m, [x]: (m[x] ?? 0) + 1 }), {});
     return {
+      alcance: alcanceParaRespuesta(alcance),
       datos: {
         ...calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) }))),
         porSociedad: { ...Object.fromEntries(sociedades.map((s) => [etiquetaSociedad(s), 0])), ...contar(activas.map((o) => etiquetaSociedad(o.sociedad))) },
@@ -130,7 +136,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const id = idParam.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
     const o = await obtenerObligacion(id.data);
-    if (!o) return reply.code(404).send({ error: "Obligación no encontrada" });
+    const propias = await obligacionesDelAlcance(await alcanceDe(req, opts.modoPruebas));
+    if (!o || (propias && !propias.includes(o.id))) return reply.code(404).send({ error: "Obligación no encontrada" });
     return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null) };
   });
 

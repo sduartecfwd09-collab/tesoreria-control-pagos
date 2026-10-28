@@ -32,16 +32,6 @@ export async function obtenerActor(id: number) {
   return u ? { id: u.id, activo: u.activo, rol: u.rol.nombre } : null;
 }
 
-/** Tesoreros activos (rol Tesorero). Para el selector de identidad temporal. */
-export async function listarTesoreros() {
-  return prisma.usuario.findMany({ where: { activo: true, rol: { nombre: "Tesorero" } }, select: { id: true, nombre: true }, orderBy: { nombre: "asc" } });
-}
-
-/** Un tesorero activo con sus preferencias propias (null = usa el valor general). */
-export async function obtenerTesorero(id: number) {
-  return prisma.usuario.findFirst({ where: { id, activo: true, rol: { nombre: "Tesorero" } }, select: { id: true, nombre: true, diasAviso: true, diasEspera: true } });
-}
-
 export async function fijarPreferencias(id: number, d: { diasAviso: number | null; diasEspera: number | null }) {
   return prisma.usuario.update({ where: { id }, data: d, select: { id: true, nombre: true, diasAviso: true, diasEspera: true } });
 }
@@ -52,8 +42,14 @@ export async function mayorAvisoDeUsuarios(): Promise<number | null> {
   return r._max.diasAviso;
 }
 
-/** Una persona activa con su rol (Tesorero o Jefatura). */
+/** Una persona activa con su rol (Tesorero o Jefatura) y sus preferencias propias (null = usa el valor general). */
 export async function obtenerUsuarioActivo(id: number) {
-  const u = await prisma.usuario.findFirst({ where: { id, activo: true }, select: { id: true, nombre: true, nombreNormalizado: true, rol: { select: { nombre: true } } } });
-  return u ? { id: u.id, nombre: u.nombre, nombreNormalizado: u.nombreNormalizado, rol: u.rol.nombre } : null;
+  const u = await prisma.usuario.findFirst({ where: { id, activo: true }, select: { id: true, nombre: true, nombreNormalizado: true, diasAviso: true, diasEspera: true, rol: { select: { nombre: true } } } });
+  return u ? { id: u.id, nombre: u.nombre, nombreNormalizado: u.nombreNormalizado, rol: u.rol.nombre, diasAviso: u.diasAviso, diasEspera: u.diasEspera } : null;
+}
+
+/** Todas las personas activas con su rol, para el selector de pruebas; Jefatura primero. */
+export async function listarUsuariosActivos() {
+  const u = await prisma.usuario.findMany({ where: { activo: true }, select: { id: true, nombre: true, rol: { select: { nombre: true } } }, orderBy: { nombre: "asc" } });
+  return u.map((x) => ({ id: x.id, nombre: x.nombre, rol: x.rol.nombre })).sort((a, b) => Number(b.rol === "Jefatura") - Number(a.rol === "Jefatura"));
 }

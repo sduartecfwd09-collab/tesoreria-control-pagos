@@ -1,14 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { MESES, ordenarSociedades } from "@/lib/formato";
+import { ordenarSociedades } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type {
   CambiosObligacion, Categoria, FiltroObligaciones, Frecuencia, Obligacion, Regeneracion,
   ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad,
 } from "@/lib/tipos";
+import { LineaAlcance } from "../LineaAlcance";
 import { CajaError, claseBoton, claseBotonSecundario, claseControl, FinDeLista } from "../ui";
-import { ConfirmarCambio, type CambioPendiente } from "../ConfirmarCambio";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { FormularioObligacion } from "./FormularioObligacion";
 import { ResumenCalidad } from "./ResumenCalidad";
@@ -22,31 +22,6 @@ interface Catalogos {
   sociedades: Sociedad[];
   categorias: Categoria[];
   frecuenciaDefecto: Frecuencia;
-}
-
-const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
-
-const textoFrecuencia = (f: Frecuencia, mes: number | null) => (f === "mensual" || mes === null ? NOMBRE_FRECUENCIA[f] : `${NOMBRE_FRECUENCIA[f]}, desde ${MESES[mes - 1]}`);
-
-const plural = (n: number, uno: string, varios: string) => `${n.toLocaleString("es-CR")} ${n === 1 ? uno : varios}`;
-
-function textoCalendario(c: Regeneracion): string {
-  const partes = [
-    c.creados && `se crearon ${plural(c.creados, "vencimiento", "vencimientos")}`,
-    c.actualizados && `se ajustaron ${plural(c.actualizados, "vencimiento", "vencimientos")}`,
-    c.eliminados && `se eliminaron ${plural(c.eliminados, "vencimiento", "vencimientos")} que ya no corresponden`,
-    c.protegidos && `${plural(c.protegidos, "vencimiento quedó", "vencimientos quedaron")} sin tocar por tener un pago conciliado`,
-  ].filter(Boolean);
-  return partes.length ? ` Calendario: ${partes.join("; ")}.` : " No hubo que ajustar el calendario.";
-}
-
-function resumenActual(filas: Obligacion[]): string {
-  const por = new Map<string, number>();
-  for (const o of filas) {
-    const k = textoFrecuencia(o.frecuencia, o.mesArranque);
-    por.set(k, (por.get(k) ?? 0) + 1);
-  }
-  return [...por.entries()].map(([k, n]) => `${n.toLocaleString("es-CR")} con ${k.toLowerCase()}`).join("\n");
 }
 
 function textoRegeneracion(r: Regeneracion | null): string {
@@ -70,10 +45,6 @@ export function PanelObligaciones() {
   const [editando, setEditando] = useState<Obligacion | "nueva" | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
-  const [seleccion, setSeleccion] = useState<Map<number, Obligacion>>(new Map());
-  const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
-  const [masFrecuencia, setMasFrecuencia] = useState<Frecuencia>("mensual");
-  const [masMes, setMasMes] = useState("");
   const [importacion, setImportacion] = useState<ResultadoImportacionCatalogo | null>(null);
 
   const cambiarFiltro = useCallback((f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f })), []);
@@ -117,50 +88,6 @@ export function PanelObligaciones() {
     recargar();
   }
 
-  const alternar = useCallback((o: Obligacion) => {
-    setSeleccion((s) => {
-      const n = new Map(s);
-      if (n.has(o.id)) n.delete(o.id);
-      else n.set(o.id, o);
-      return n;
-    });
-  }, []);
-
-  const datosCargados = lista.datos;
-  const alternarTodas = useCallback(() => {
-    setSeleccion((s) => {
-      const filas = datosCargados ?? [];
-      const todas = filas.length > 0 && filas.every((o) => s.has(o.id));
-      const n = new Map(s);
-      for (const o of filas) {
-        if (todas) n.delete(o.id);
-        else n.set(o.id, o);
-      }
-      return n;
-    });
-  }, [datosCargados]);
-
-  function cambiarSeleccionadas() {
-    const filas = [...seleccion.values()];
-    const mes = masFrecuencia === "mensual" || masMes === "" ? null : Number(masMes);
-    if (filas.length === 0) return;
-    if (masFrecuencia !== "mensual" && mes === null) {
-      setAviso("Indique el mes de arranque: en qué mes toca el primer pago de esta frecuencia.");
-      return;
-    }
-    setConfirmacion({
-      titulo: `Cambiar la frecuencia de ${plural(filas.length, "obligación seleccionada", "obligaciones seleccionadas")}`,
-      antes: resumenActual(filas),
-      despues: `${plural(filas.length, "obligación", "obligaciones")} con ${textoFrecuencia(masFrecuencia, mes).toLowerCase()}`,
-      ejecutar: async () => {
-        const r = await api.cambiarFrecuencia(filas.map((o) => o.id), masFrecuencia, mes);
-        setAviso(`Se cambió la frecuencia de ${plural(r.actualizadas, "obligación", "obligaciones")}.${textoCalendario(r.calendario)}`);
-        setSeleccion(new Map());
-        setIntento((n) => n + 1);
-      },
-    });
-  }
-
   async function importar() {
     setImportando(true);
     try {
@@ -173,7 +100,6 @@ export function PanelObligaciones() {
     }
   }
 
-  const seleccionIds = new Set(seleccion.keys());
   const mensajeError = error ?? lista.error;
   if (mensajeError) return <CajaError mensaje={mensajeError} alReintentar={() => (setError(null), recargar())} />;
   if (!catalogos || !resumen || !lista.datos)
@@ -187,6 +113,7 @@ export function PanelObligaciones() {
 
   return (
     <>
+      <LineaAlcance alcance={lista.alcance} />
       {aviso && (
         <div role="status" className="mt-6 flex flex-wrap items-start justify-between gap-3 rounded border-2 border-control bg-fondo-suave p-4">
           <p>
@@ -306,56 +233,9 @@ export function PanelObligaciones() {
 
         {lista.datos.length > 0 && (
           <>
-            {seleccion.size > 0 && (
-            <div className="mt-4 flex flex-wrap items-end gap-3 rounded border border-divisor bg-fondo-suave p-3 text-sm">
-              <span className="font-medium" aria-live="polite">
-                {plural(seleccion.size, "obligación seleccionada", "obligaciones seleccionadas")}
-              </span>
-              <label className="font-medium">
-                Frecuencia
-                <select
-                  className={`${claseControl} ml-2 py-1`}
-                  value={masFrecuencia}
-                  onChange={(e) => {
-                    const f = e.target.value as Frecuencia;
-                    setMasFrecuencia(f);
-                    if (f === "mensual") setMasMes("");
-                  }}
-                >
-                  {(Object.keys(NOMBRE_FRECUENCIA) as Frecuencia[]).map((f) => (
-                    <option key={f} value={f}>
-                      {NOMBRE_FRECUENCIA[f]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {masFrecuencia !== "mensual" && (
-                <label className="font-medium">
-                  Mes de arranque
-                  <select className={`${claseControl} ml-2 py-1`} value={masMes} onChange={(e) => setMasMes(e.target.value)}>
-                    <option value="">Elija el mes</option>
-                    {MESES.map((m, i) => (
-                      <option key={m} value={i + 1}>
-                        {m.charAt(0).toUpperCase() + m.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <button type="button" className={claseBoton} disabled={masFrecuencia !== "mensual" && masMes === ""} onClick={cambiarSeleccionadas}>
-                Cambiar frecuencia de las seleccionadas
-              </button>
-                <button type="button" className="underline" onClick={() => setSeleccion(new Map())}>
-                  Quitar selección
-                </button>
-            </div>
-            )}
             <TablaObligaciones
               datos={lista.datos}
               alEditar={setEditando}
-              seleccion={seleccionIds}
-              alAlternar={alternar}
-              alAlternarTodas={alternarTodas}
             />
             <FinDeLista cantidad={lista.datos.length} total={lista.total} unidad="obligaciones" hayMas={lista.hayMas} cargando={lista.cargandoMas} alLlegar={lista.cargarMas} />
           </>
@@ -365,8 +245,6 @@ export function PanelObligaciones() {
           generan vencimientos. Pase el cursor sobre una observación para ver el detalle.
         </p>
       </section>
-
-      {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
 
       {editando && (
         <FormularioObligacion

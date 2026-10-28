@@ -21,9 +21,15 @@ export interface Parametro {
   actualizado: string;
 }
 
+export interface Alcance {
+  tipo: "todo" | "mio";
+  nombre: string | null;
+}
+
 export interface Identidad {
   modoPruebas: boolean;
-  tesoreros: { id: number; nombre: string }[];
+  /** todas las personas activas, Jefatura primero; vacía si no hay modo de pruebas */
+  usuarios: { id: number; nombre: string; rol: "Jefatura" | "Tesorero" }[];
 }
 
 export interface MiConfiguracion {
@@ -32,11 +38,6 @@ export interface MiConfiguracion {
   diasAviso: number;
   diasEspera: number;
   propios: { diasAviso: number | null; diasEspera: number | null };
-}
-
-export interface ResultadoFrecuencia {
-  actualizadas: number;
-  calendario: { creados: number; actualizados: number; eliminados: number; protegidos: number };
 }
 
 export type EstadoCelda = "leido" | "error" | "sin_sociedad" | "falta";
@@ -101,6 +102,7 @@ export interface Importaciones {
   /** archivos = leídos + con error + sin sociedad; los retirados de la carpeta no cuentan */
   resumen: { archivos: number; leidos: number; conError: number; sinSociedad: number; retirados: number; movimientos: number };
   enCurso: boolean;
+  alcance: Alcance;
 }
 
 export interface Pagina<T> {
@@ -109,6 +111,7 @@ export interface Pagina<T> {
   pagina: number;
   porPagina: number;
   paginas: number;
+  alcance?: Alcance;
 }
 
 export interface Sociedad {
@@ -344,7 +347,7 @@ export interface DetalleVencimiento {
   movimientos: MovimientoDetalle[];
 }
 
-export type ClaveGrupoAviso = "vencidos" | "por_vencer" | "programados" | "por_revisar" | "sin_informacion";
+export type ClaveGrupoAviso = "vencidos" | "por_vencer" | "por_revisar" | "sin_informacion";
 
 export interface FilaAviso {
   id: number;
@@ -359,7 +362,6 @@ export interface FilaAviso {
   textoEstado: string;
   dias: number;
   responsableEfectivo: string | null;
-  pasaAPorVencerEl: string | null;
 }
 
 export interface GrupoAviso {
@@ -370,7 +372,7 @@ export interface GrupoAviso {
 }
 
 export interface Avisos {
-  alcance: "mio" | "todo";
+  alcance: Alcance;
   usuario: { nombre: string; rol: string } | null;
   diasAviso: number;
   hoy: string;
@@ -392,5 +394,5 @@ export interface MovimientosSinObligacion {
   datos: MovimientoSinObligacion[];
   totalGrupos: number;
   totalPagos: number;
-  nota: string;
+  alcance: Alcance;
 }

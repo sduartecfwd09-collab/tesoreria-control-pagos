@@ -21,11 +21,10 @@ const entero = async (clave: string, defecto: number) => {
   return Number.isInteger(n) && n >= 0 ? n : defecto;
 };
 
-/** Recalcula el estado de todos los vencimientos de obligaciones activas. Determinista e idempotente. */
-export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
-  const datos = await cargarDatosCruce();
+/** Los parámetros del cruce tal como están en la base para un «hoy» dado. Solo lee. */
+export async function parametrosDeCruce(hoy: Date): Promise<ResumenCruce["parametros"]> {
   const preferencias = await preferenciasPorObligacion();
-  const parametros = {
+  return {
     diasAntes: await entero("ventana_dias_antes", 10),
     diasDespues: await entero("ventana_dias_despues", 12),
     diasAviso: await diasDeAviso(),
@@ -33,8 +32,14 @@ export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
     esperaPorObligacion: preferencias.espera,
     diasEspera: await entero("dias_espera_vencido", 3),
     marcarVencidoSinEstado: (await valorGlobal("marcar_vencido_sin_estado")) === "si",
-    hoy: hoyDe(reloj),
+    hoy,
   };
+}
+
+/** Recalcula el estado de todos los vencimientos de obligaciones activas. Determinista e idempotente. */
+export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
+  const datos = await cargarDatosCruce();
+  const parametros = await parametrosDeCruce(hoyDe(reloj));
   const { resultados, estadisticas } = cruzar({ ...datos, ...parametros });
   const cambiados = await guardarResultadosCruce(datos.vencimientos, resultados);
   const porEstado: Record<string, number> = {};

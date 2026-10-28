@@ -50,6 +50,8 @@ export async function aplicarCambios(c: CambiosVencimientos) {
 }
 
 export interface FiltroVencimientos {
+  /** solo vencimientos de estas obligaciones (el alcance de la persona); ausente = todas */
+  obligacionIds?: number[];
   sociedad?: string; // abreviatura
   sociedadId?: number; // identificador: sirve también para sociedades sin abreviatura
   categoria?: number;
@@ -80,13 +82,14 @@ export async function listarVencimientos(f: FiltroVencimientos) {
   const sinEstado: Prisma.VencimientoWhereInput = {
     AND: [
       dePeriodo,
+      f.obligacionIds ? { obligacionId: { in: f.obligacionIds } } : {},
       // sociedad, categoría y proveedor salen de la copia del vencimiento: el Histórico no cambia si la obligación se edita
       {
         ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
         ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
         ...(f.categoria ? { categoriaId: f.categoria } : {}),
       },
-      f.q ? { OR: [{ proveedor: { contains: f.q } }, { obligacion: { identificador: { contains: f.q.replace(/s+/g, "") } } }] } : {},
+      f.q ? { OR: [{ proveedor: { contains: f.q } }, { obligacion: { identificador: { contains: f.q.replace(/ +/g, "") } } }] } : {},
     ],
   };
   const where: Prisma.VencimientoWhereInput = f.estados?.length ? { AND: [sinEstado, { estado: { in: f.estados } }] } : sinEstado;

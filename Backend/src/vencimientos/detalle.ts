@@ -124,6 +124,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
 
   return {
     id: v.id,
+    obligacionId: v.obligacionId,
     proveedor: v.proveedor,
     categoria: v.categoria.nombre,
     identificador: v.obligacion.identificador,

@@ -4,7 +4,6 @@ import { normalizarNombrePersona } from "./usuarios.js";
 export const GRUPOS_AVISO = [
   { clave: "vencidos", titulo: "Vencidos", estados: ["vencido"] },
   { clave: "por_vencer", titulo: "Por vencer", estados: ["por_vencer"] },
-  { clave: "programados", titulo: "Programados", estados: ["proyectado"] },
   { clave: "por_revisar", titulo: "Por revisar", estados: ["por_revisar"] },
   { clave: "sin_informacion", titulo: "Sin información", estados: ["sin_informacion"] },
 ] as const;

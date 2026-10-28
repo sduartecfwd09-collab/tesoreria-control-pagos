@@ -15,6 +15,7 @@ import { rutasVencimientos } from "./routes/vencimientos.js";
 export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPruebas?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? false });
   const reloj = opts.reloj ?? relojSistema;
+  const modoPruebas = opts.modoPruebas ?? env.MODO_PRUEBAS;
 
   // JSON no admite BigInt: las rutas convierten los montos, y esta red de seguridad evita que un BigInt olvidado rompa la respuesta.
   app.setReplySerializer((payload) => JSON.stringify(payload, (_clave, v) => (typeof v === "bigint" ? aNumero(v) : v)));
@@ -34,12 +35,12 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
 
   app.get("/api/salud", async () => ({ estado: "ok", hora: reloj().toISOString() }));
   await app.register(rutasParametros);
-  await app.register(rutasAvisos, { reloj, modoPruebas: opts.modoPruebas ?? env.MODO_PRUEBAS });
-  await app.register(rutasMovimientosSinObligacion);
-  await app.register(rutasIdentidad, { modoPruebas: opts.modoPruebas ?? env.MODO_PRUEBAS });
-  await app.register(rutasImportaciones);
-  await app.register(rutasObligaciones, { reloj });
-  await app.register(rutasVencimientos, { reloj });
+  await app.register(rutasAvisos, { reloj, modoPruebas });
+  await app.register(rutasMovimientosSinObligacion, { modoPruebas });
+  await app.register(rutasIdentidad, { modoPruebas });
+  await app.register(rutasImportaciones, { modoPruebas });
+  await app.register(rutasObligaciones, { reloj, modoPruebas });
+  await app.register(rutasVencimientos, { reloj, modoPruebas });
 
   return app;
 }

@@ -60,8 +60,21 @@ export function PanelConfiguracion() {
   const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
   const [errorCampos, setErrorCampos] = useState<{ aviso?: string; espera?: string }>({});
   const [ok, setOk] = useState<string | null>(null);
+  const [modoPruebas, setModoPruebas] = useState<boolean | null>(null);
 
   useEffect(() => {
+    let vigente = true;
+    api
+      .obtenerIdentidad()
+      .then((i) => vigente && setModoPruebas(i.modoPruebas))
+      .catch((e) => vigente && (setModoPruebas(true), setError({ texto: e instanceof Error ? e.message : "No se pudo cargar su configuración.", sinUsuario: false })));
+    return () => {
+      vigente = false;
+    };
+  }, [intento]);
+
+  useEffect(() => {
+    if (modoPruebas !== true) return;
     let vigente = true;
     api
       .obtenerMiConfiguracion()
@@ -76,8 +89,14 @@ export function PanelConfiguracion() {
     return () => {
       vigente = false;
     };
-  }, [intento]);
+  }, [intento, modoPruebas]);
 
+  if (modoPruebas === false)
+    return (
+      <p role="status" className="mt-8 max-w-2xl rounded border-2 border-control bg-fondo-suave p-4 font-semibold">
+        Esta pantalla estará disponible cuando exista el inicio de sesión.
+      </p>
+    );
   if (error)
     return error.sinUsuario ? (
       <div role="alert" className="mt-8 max-w-2xl rounded border-2 border-control bg-fondo-suave p-4">

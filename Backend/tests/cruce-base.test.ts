@@ -211,7 +211,7 @@ describe("API de obligaciones: próximo pago", () => {
     const app = await crearApp({ reloj });
     try {
       const r = (await app.inject(`/api/obligaciones/${obligacionId}`)).json();
-      expect(r.datos.proximoPago).toBe("2026-11-15"); // ya existe octubre; el siguiente es noviembre
+      expect(r.datos.proximoPago).toBe("2026-11-15"); // el 15 de octubre ya pasó; el próximo es el de noviembre
     } finally {
       await app.close();
     }
@@ -222,21 +222,35 @@ describe("próximo pago (dato calculado)", () => {
   const o = { frecuencia: "mensual", mesArranque: null, diaEsperadoPago: 15, controlDesde: null };
   const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
-  it("es el periodo siguiente al último vencimiento según la frecuencia", () => {
-    expect(iso(proximoPago(o, "2026-10", dia(2026, 10, 27)))).toBe("2026-11-15");
-    expect(iso(proximoPago({ ...o, frecuencia: "trimestral", mesArranque: 8 }, "2026-11", dia(2026, 11, 27)))).toBe("2027-02-15");
-    expect(iso(proximoPago({ ...o, frecuencia: "anual", mesArranque: 3 }, "2026-03", dia(2026, 10, 1)))).toBe("2027-03-15");
-    expect(iso(proximoPago({ ...o, diaEsperadoPago: 31 }, "2027-01", dia(2027, 1, 31)))).toBe("2027-02-28");
+  it("es el próximo vencimiento con fecha igual o posterior a hoy; el día de hoy cuenta", () => {
+    expect(iso(proximoPago(o, dia(2026, 10, 10)))).toBe("2026-10-15");
+    expect(iso(proximoPago(o, dia(2026, 10, 15)))).toBe("2026-10-15");
+    expect(iso(proximoPago(o, dia(2026, 10, 16)))).toBe("2026-11-15");
   });
 
-  it("sin vencimientos parte del mes de hoy (o de «Control desde» si es futuro) y no sugiere fechas ya pasadas", () => {
-    expect(iso(proximoPago(o, null, dia(2026, 10, 10)))).toBe("2026-10-15");
-    expect(iso(proximoPago(o, null, dia(2026, 10, 20)))).toBe("2026-11-15");
-    expect(iso(proximoPago({ ...o, controlDesde: "2027-01" }, null, dia(2026, 10, 10)))).toBe("2027-01-15");
+  it("28 de octubre de 2026: día 1 mensual es el 1 de noviembre (no el 1 de diciembre) y los días 10 y 15 son de noviembre", () => {
+    const hoy = dia(2026, 10, 28);
+    expect(iso(proximoPago({ ...o, diaEsperadoPago: 1 }, hoy))).toBe("2026-11-01");
+    expect(iso(proximoPago({ ...o, diaEsperadoPago: 10 }, hoy))).toBe("2026-11-10");
+    expect(iso(proximoPago({ ...o, diaEsperadoPago: 15 }, hoy))).toBe("2026-11-15");
+    expect(iso(proximoPago({ ...o, diaEsperadoPago: 30 }, hoy))).toBe("2026-10-30");
+  });
+
+  it("respeta la frecuencia y el mes de arranque", () => {
+    expect(iso(proximoPago({ ...o, frecuencia: "trimestral", mesArranque: 8 }, dia(2026, 11, 27)))).toBe("2027-02-15");
+    expect(iso(proximoPago({ ...o, frecuencia: "bimestral", mesArranque: 9, diaEsperadoPago: 5 }, dia(2026, 10, 28)))).toBe("2026-11-05");
+    expect(iso(proximoPago({ ...o, frecuencia: "bimestral", mesArranque: 9, diaEsperadoPago: 5 }, dia(2026, 11, 6)))).toBe("2027-01-05");
+    expect(iso(proximoPago({ ...o, frecuencia: "anual", mesArranque: 3 }, dia(2026, 10, 1)))).toBe("2027-03-15");
+    expect(iso(proximoPago({ ...o, diaEsperadoPago: 31 }, dia(2027, 1, 31)))).toBe("2027-01-31");
+    expect(iso(proximoPago({ ...o, diaEsperadoPago: 31 }, dia(2027, 2, 1)))).toBe("2027-02-28");
+  });
+
+  it("parte de «Control desde» si es futuro", () => {
+    expect(iso(proximoPago({ ...o, controlDesde: "2027-01" }, dia(2026, 10, 10)))).toBe("2027-01-15");
   });
 
   it("es null si falta el día o el mes de arranque de una frecuencia no mensual", () => {
-    expect(proximoPago({ ...o, diaEsperadoPago: null }, "2026-10", dia(2026, 10, 1))).toBeNull();
-    expect(proximoPago({ ...o, frecuencia: "bimestral", mesArranque: null }, "2026-10", dia(2026, 10, 1))).toBeNull();
+    expect(proximoPago({ ...o, diaEsperadoPago: null }, dia(2026, 10, 1))).toBeNull();
+    expect(proximoPago({ ...o, frecuencia: "bimestral", mesArranque: null }, dia(2026, 10, 1))).toBeNull();
   });
 });

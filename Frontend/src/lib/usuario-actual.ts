@@ -1,4 +1,4 @@
-// Identidad temporal del tesorero que actúa. ÚNICO punto del Frontend que sabe quién es el usuario: en el Hito 4A lo
+// Identidad temporal de la persona que actúa. ÚNICO punto del Frontend que sabe quién es el usuario: en el Hito 4A lo
 // reemplaza la sesión de Microsoft (este módulo devolverá el encabezado de la sesión o nada) sin tocar las pantallas.
 // Solo se usa cuando /api/identidad informa modoPruebas=true; el id elegido vive en este navegador.
 const CLAVE = "tesorero-actual";

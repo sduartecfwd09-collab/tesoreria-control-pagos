@@ -1,6 +1,6 @@
 import type {
-  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Frecuencia, Identidad, Importaciones, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
-  Parametro, Regeneracion, ResultadoFrecuencia, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
+  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
+  Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
 
@@ -65,9 +65,6 @@ export const api = {
     pedir<{ datos: Obligacion; regeneracion: Regeneracion }>("/api/obligaciones", { method: "POST", body: JSON.stringify(c) }),
   editarObligacion: (id: number, c: CambiosObligacion) =>
     pedir<{ datos: Obligacion; regeneracion: Regeneracion | null }>(`/api/obligaciones/${id}`, { method: "PATCH", body: JSON.stringify(c) }),
-  /** Cambio masivo: la frecuencia queda confirmada y el calendario se ajusta una sola vez. */
-  cambiarFrecuencia: async (ids: number[], frecuencia: Frecuencia, mesArranque: number | null) =>
-    (await pedir<{ datos: ResultadoFrecuencia }>("/api/obligaciones/frecuencia", { method: "POST", body: JSON.stringify({ ids, frecuencia, mesArranque }) })).datos,
 
   listarVencimientos: (f: FiltroVencimientos) =>
     pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number }>(`/api/vencimientos${consulta(f)}`),
@@ -76,9 +73,9 @@ export const api = {
     let pagina = 1;
     const datos: Vencimiento[] = [];
     for (;;) {
-      const r = await pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number }>(`/api/vencimientos${consulta({ ...f, pagina, porPagina: 500 })}`);
+      const r = await pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number; alcance: Alcance }>(`/api/vencimientos${consulta({ ...f, pagina, porPagina: 500 })}`);
       datos.push(...r.datos);
-      if (pagina >= r.paginas) return { datos, resumen: r.resumen, hoy: r.hoy, diasAviso: r.diasAviso };
+      if (pagina >= r.paginas) return { datos, resumen: r.resumen, hoy: r.hoy, diasAviso: r.diasAviso, alcance: r.alcance };
       pagina++;
     }
   },

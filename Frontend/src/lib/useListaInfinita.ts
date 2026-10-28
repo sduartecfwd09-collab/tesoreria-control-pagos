@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Pagina } from "./tipos";
+import type { Alcance, Pagina } from "./tipos";
 
 /**
  * Lista que continúa hacia abajo: pide la primera página cuando cambia `cargar` (la función que trae una página con el
@@ -10,6 +10,7 @@ import type { Pagina } from "./tipos";
 export function useListaInfinita<T>(cargar: ((pagina: number) => Promise<Pagina<T>>) | null, intento: number) {
   const [datos, setDatos] = useState<T[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [alcance, setAlcance] = useState<Alcance | undefined>(undefined);
   const [siguiente, setSiguiente] = useState<number | null>(null); // próxima página por pedir; null = no hay más
   const [cargandoMas, setCargandoMas] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function useListaInfinita<T>(cargar: ((pagina: number) => Promise<Pagina<
         if (g !== generacion.current) return;
         setDatos(p.datos);
         setTotal(p.total);
+        setAlcance(p.alcance);
         setSiguiente(p.pagina < p.paginas ? p.pagina + 1 : null);
         setCargandoMas(false);
         setError(null);
@@ -53,5 +55,5 @@ export function useListaInfinita<T>(cargar: ((pagina: number) => Promise<Pagina<
       });
   }, [cargar, siguiente]);
 
-  return { datos, total, cargandoMas, error, cargarMas, hayMas: siguiente !== null };
+  return { datos, total, alcance, cargandoMas, error, cargarMas, hayMas: siguiente !== null };
 }

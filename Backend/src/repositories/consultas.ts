@@ -6,6 +6,7 @@ export interface ArchivoFila {
   id: number;
   ruta: string;
   sociedad: string | null;
+  sociedadId: number | null;
   cuentaId: number | null;
   cuenta: string | null;
   banco: string | null;
@@ -31,7 +32,7 @@ export async function listarArchivos(): Promise<ArchivoFila[]> {
     orderBy: { ruta: "asc" },
   });
   return filas.map((a) => ({
-    id: a.id, ruta: a.ruta, sociedad: a.sociedad ? etiquetaSociedad(a.sociedad) : null,
+    id: a.id, ruta: a.ruta, sociedadId: a.sociedadId, sociedad: a.sociedad ? etiquetaSociedad(a.sociedad) : null,
     cuentaId: a.cuentaId, cuenta: a.cuenta?.numero ?? null,
     banco: a.cuenta?.banco ?? null, bancoPorConfirmar: a.cuenta?.bancoPorConfirmar ?? null,
     moneda: a.cuenta?.moneda ?? null, monedaPorConfirmar: a.cuenta?.monedaPorConfirmar ?? null,

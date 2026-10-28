@@ -57,7 +57,7 @@ async function escenario() {
   return { luz, agua, gas };
 }
 
-type Respuesta = { alcance: string; usuario: { nombre: string } | null; diasAviso: number; total: number; grupos: { clave: string; total: number; filas: { id: number; proveedor: string; identificador: string; estado: string; textoEstado: string; pasaAPorVencerEl: string | null; sociedad: string }[] }[] };
+type Respuesta = { alcance: { tipo: string; nombre: string | null }; usuario: { nombre: string } | null; diasAviso: number; total: number; grupos: { clave: string; total: number; filas: { id: number; proveedor: string; identificador: string; estado: string; textoEstado: string; pasaAPorVencerEl: string | null; sociedad: string }[] }[] };
 const avisos = async (modoPruebas: boolean, cabeceras: Record<string, string> = {}) => {
   const app = await crearApp({ reloj, modoPruebas });
   try {
@@ -69,12 +69,12 @@ const avisos = async (modoPruebas: boolean, cabeceras: Record<string, string> = 
 const proveedoresDe = (r: Respuesta) => r.grupos.flatMap((g) => g.filas.map((f) => f.proveedor)).sort();
 
 describe("Avisos", () => {
-  it("sin persona elegida muestra todo, en cinco grupos con su contador, sin los pagados y con el identificador enmascarado", async () => {
+  it("sin persona elegida muestra todo, en cuatro grupos con su contador (sin Programados), sin los pagados y con el identificador enmascarado", async () => {
     await escenario();
     const r = await avisos(false);
-    expect(r.alcance).toBe("todo");
-    expect(r.grupos.map((g) => [g.clave, g.total])).toEqual([["vencidos", 1], ["por_vencer", 1], ["programados", 1], ["por_revisar", 1], ["sin_informacion", 1]]);
-    expect(r.total).toBe(5);
+    expect(r.alcance).toEqual({ tipo: "todo", nombre: null });
+    expect(r.grupos.map((g) => [g.clave, g.total])).toEqual([["vencidos", 1], ["por_vencer", 1], ["por_revisar", 1], ["sin_informacion", 1]]);
+    expect(r.total).toBe(4); // el programado de Gas y el pagado de Luz no se listan
     const luz = r.grupos[0]!.filas[0]!;
     expect(luz).toMatchObject({ proveedor: "Luz Ana", identificador: "****1234", estado: "vencido" });
     expect(JSON.stringify(r)).not.toContain("7771234");
@@ -83,31 +83,29 @@ describe("Avisos", () => {
   it("un tesorero ve lo de sus obligaciones: las suyas por responsable propio o por ser el tesorero de la sociedad", async () => {
     await escenario();
     const deAna = await avisos(true, encabezado(ana));
-    expect(deAna.alcance).toBe("mio");
+    expect(deAna.alcance).toEqual({ tipo: "mio", nombre: "Ana Uno" });
     expect(deAna.usuario).toMatchObject({ nombre: "Ana Uno" });
     expect(proveedoresDe(deAna)).toEqual(["Luz Ana"]); // Agua es de Beto aunque la sociedad sea de Ana
     const deBeto = await avisos(true, encabezado(beto));
-    expect(proveedoresDe(deBeto)).toEqual(["Agua Beto", "Agua Beto", "Gas Beto", "Gas Beto"]);
-    expect(deBeto.total).toBe(4);
+    expect(proveedoresDe(deBeto)).toEqual(["Agua Beto", "Agua Beto", "Gas Beto"]);
+    expect(deBeto.total).toBe(3);
   });
 
   it("Jefatura ve todo; el encabezado se ignora sin MODO_PRUEBAS", async () => {
     await escenario();
     const jefatura = await avisos(true, encabezado(jefa));
-    expect(jefatura.alcance).toBe("todo");
-    expect(jefatura.total).toBe(5);
+    expect(jefatura.alcance).toEqual({ tipo: "todo", nombre: null });
+    expect(jefatura.total).toBe(4);
     const sinModo = await avisos(false, encabezado(ana));
-    expect(sinModo.alcance).toBe("todo");
-    expect(sinModo.total).toBe(5);
+    expect(sinModo.alcance.tipo).toBe("todo");
+    expect(sinModo.total).toBe(4);
   });
 
-  it("Por vencer dice «El día de pago pasó hace N días; se espera el pago.» y Programados dice cuándo pasa a Por vencer según el aviso del responsable", async () => {
+  it("Por vencer dice «El día de pago pasó hace N días; se espera el pago.»; los Programados no se listan", async () => {
     await escenario();
     const r = await avisos(false);
     expect(r.grupos.find((g) => g.clave === "por_vencer")!.filas[0]!.textoEstado).toBe("El día de pago pasó hace 2 días; se espera el pago.");
-    const programado = r.grupos.find((g) => g.clave === "programados")!.filas[0]!;
-    expect(programado.proveedor).toBe("Gas Beto");
-    expect(programado.pasaAPorVencerEl).toBe("2026-10-29"); // 5 de noviembre menos los 7 días de aviso de Beto
+    expect(r.grupos.map((g) => g.clave)).not.toContain("programados");
   });
 
   it("muestra el aviso de la persona: el propio o el general", async () => {
@@ -120,7 +118,7 @@ describe("Avisos", () => {
     await escenario();
     const sinNada = await prisma.usuario.create({ data: { correo: "c@x.cr", nombre: "Carla Cuatro", nombreNormalizado: "carla cuatro", rolId: (await mapaDeRoles()).get("Tesorero")! } });
     const r = await avisos(true, encabezado(sinNada.id));
-    expect(r).toMatchObject({ alcance: "mio", total: 0 });
+    expect(r).toMatchObject({ alcance: { tipo: "mio", nombre: "Carla Cuatro" }, total: 0 });
     expect(r.grupos.every((g) => g.total === 0)).toBe(true);
   });
 
@@ -171,7 +169,8 @@ describe("Movimientos sin obligación", () => {
     const r = await lista();
     expect(r.datos.map((g) => [g.proveedor, g.identificador, g.pagos])).toEqual([["TIGO", "****0055", 2], ["CNFL", "****0066", 1]]);
     expect(r.datos[0]).toMatchObject({ primeraFecha: "2026-10-03", ultimaFecha: "2026-10-20", sociedades: ["Sociedad AAA"], cuentas: ["****1234"] });
-    expect(r).toMatchObject({ totalGrupos: 2, totalPagos: 3, nota: "Revisar con Tesorería si debe agregarse al catálogo." });
+    expect(r).toMatchObject({ totalGrupos: 2, totalPagos: 3, alcance: { tipo: "todo", nombre: null } });
+    expect(JSON.stringify(r)).not.toContain("Revisar con Tesorería");
     const texto = JSON.stringify(r);
     for (const prohibido of ["55500055", "66600066", "CR0000"]) expect(texto).not.toContain(prohibido);
   });

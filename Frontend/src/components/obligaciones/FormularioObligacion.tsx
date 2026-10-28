@@ -257,7 +257,7 @@ export function FormularioObligacion({
             </Campo>
             <Campo
               id="f-frecuencia"
-              etiqueta="Frecuencia"
+              etiqueta="Frecuencia de pago de esta obligación"
               ayuda="Cada cuánto se paga. Si no es mensual, indique el mes de arranque."
               error={errors.frecuencia?.message}
             >

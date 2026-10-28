@@ -1,4 +1,5 @@
 "use client";
+import { LineaAlcance } from "./LineaAlcance";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { compararSociedades } from "@/lib/formato";
@@ -213,6 +214,8 @@ export function PanelArchivos() {
     );
   if (imp.datos.length === 0)
     return (
+      <>
+      <LineaAlcance alcance={imp.alcance} />
       <div className="mt-8 rounded border border-divisor bg-fondo-suave p-6 max-w-2xl">
         <p className="font-semibold">Todavía no se ha importado ninguna carpeta.</p>
         <p className="mt-2 text-sm text-suave">
@@ -221,10 +224,12 @@ export function PanelArchivos() {
           esta página.
         </p>
       </div>
+      </>
     );
 
   return (
     <>
+      <LineaAlcance alcance={imp.alcance} />
       <Resumen r={imp.resumen} />
 
       <h2 className="mt-12 text-lg font-bold border-b-2 border-acento pb-1">Cobertura por cuenta y mes</h2>

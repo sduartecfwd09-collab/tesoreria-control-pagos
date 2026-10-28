@@ -1,25 +1,23 @@
-// Único lugar que decide quién es el usuario actual. Hoy lee el selector de tesorero de la pantalla (encabezado
+// Único lugar que decide quién es el usuario actual. Hoy lee el selector de pruebas de la pantalla (encabezado
 // X-Usuario-Actual) y SOLO si MODO_PRUEBAS=true; en el Hito 4A lo reemplaza la sesión de Microsoft sin tocar las pantallas
 // ni las rutas que lo usan. Sin modo de pruebas, el encabezado se ignora por completo.
 import type { FastifyRequest } from "fastify";
-import { obtenerTesorero, obtenerUsuarioActivo } from "../repositories/usuarios.js";
+import { obtenerUsuarioActivo } from "../repositories/usuarios.js";
 
 export const ENCABEZADO_USUARIO = "x-usuario-actual";
 
-export interface UsuarioActual { id: number; nombre: string; diasAviso: number | null; diasEspera: number | null }
-
-export async function usuarioActual(req: FastifyRequest, modoPruebas: boolean): Promise<UsuarioActual | null> {
-  if (!modoPruebas) return null;
-  const crudo = req.headers[ENCABEZADO_USUARIO];
-  const id = Number(Array.isArray(crudo) ? crudo[0] : crudo);
-  if (!Number.isInteger(id) || id <= 0) return null;
-  return obtenerTesorero(id);
+export interface UsuarioActual {
+  id: number;
+  nombre: string;
+  nombreNormalizado: string;
+  /** Jefatura o Tesorero */
+  rol: string;
+  diasAviso: number | null;
+  diasEspera: number | null;
 }
 
-export interface UsuarioConRol { id: number; nombre: string; nombreNormalizado: string; rol: string }
-
-/** Como `usuarioActual`, pero para cualquier persona activa (Tesorero o Jefatura) y con su rol: lo que necesita «Avisos». */
-export async function usuarioActualConRol(req: FastifyRequest, modoPruebas: boolean): Promise<UsuarioConRol | null> {
+/** La persona activa (cualquier rol) que el selector indica, o null si no hay modo de pruebas o no se eligió a nadie. */
+export async function usuarioActual(req: FastifyRequest, modoPruebas: boolean): Promise<UsuarioActual | null> {
   if (!modoPruebas) return null;
   const crudo = req.headers[ENCABEZADO_USUARIO];
   const id = Number(Array.isArray(crudo) ? crudo[0] : crudo);

@@ -42,16 +42,21 @@ function noCuadra(detalle: string | null): boolean {
   }
 }
 
-/** Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos. */
-export async function cargarCoberturaCuentas(): Promise<Map<number, CuentaCorte[]>> {
-  const [archivos, ultimas, primeras] = await Promise.all([
+/**
+ * Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos.
+ * Con `hasta` (solo para simular un «hoy» pasado) se ignoran los meses y los movimientos posteriores a esa fecha.
+ */
+export async function cargarCoberturaCuentas(hasta?: Date): Promise<Map<number, CuentaCorte[]>> {
+  const [archivosTodos, ultimas, primeras] = await Promise.all([
     prisma.archivoImportado.findMany({
       where: { estado: "leido", retiradoEn: null, cuentaId: { not: null }, mes: { not: null } },
       select: { cuentaId: true, mes: true, detalle: true, cuenta: { select: { sociedadId: true } } },
     }),
-    prisma.movimiento.groupBy({ by: ["cuentaId", "periodo"], where: { archivo: { retiradoEn: null } }, _max: { fecha: true } }),
+    prisma.movimiento.groupBy({ by: ["cuentaId", "periodo"], where: { archivo: { retiradoEn: null }, ...(hasta ? { fecha: { lte: hasta } } : {}) }, _max: { fecha: true } }),
     primerasFechasPorCuenta(),
   ]);
+  const mesHasta = hasta?.toISOString().slice(0, 7);
+  const archivos = mesHasta ? archivosTodos.filter((a) => a.mes! <= mesHasta) : archivosTodos;
   const ultima = new Map(ultimas.map((u) => [`${u.cuentaId}|${u.periodo}`, u._max.fecha]));
   const porCuenta = new Map<number, { sociedadId: number; corte: CuentaCorte }>();
   const primerArchivo = new Map<number, { mes: string; del: Date }>();
@@ -80,7 +85,7 @@ export async function contarCuentasPorMoneda(): Promise<Record<string, number>> 
 }
 
 /** Obligaciones activas con sus vencimientos, los débitos de archivos vigentes y la cobertura de cada cuenta. */
-export async function cargarDatosCruce(): Promise<DatosCruce> {
+export async function cargarDatosCruce(hasta?: Date): Promise<DatosCruce> {
   const [obligaciones, vencimientos, movimientos, cuentas] = await Promise.all([
     prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
     prisma.vencimiento.findMany({
@@ -88,10 +93,10 @@ export async function cargarDatosCruce(): Promise<DatosCruce> {
       select: { id: true, obligacionId: true, sociedadId: true, fecha: true, periodo: true, estado: true, movimientoId: true, motivo: true, diferenciaDias: true, sinInfoHasta: true, cuentaEsperadaId: true },
     }),
     prisma.movimiento.findMany({
-      where: { debito: { gt: 0n }, archivo: { retiradoEn: null } },
+      where: { debito: { gt: 0n }, archivo: { retiradoEn: null }, ...(hasta ? { fecha: { lte: hasta } } : {}) },
       select: { id: true, fecha: true, descripcion: true, cuenta: { select: { sociedadId: true } } },
     }),
-    cargarCoberturaCuentas(),
+    cargarCoberturaCuentas(hasta),
   ]);
 
   return {
@@ -224,11 +229,16 @@ export async function debitosConPagoDelBanco() {
       descripcion: { contains: "pago" },
       cuenta: { OR: [{ formato: "E1" }, { codigoBanco: "0107" }] },
     },
-    select: { fecha: true, descripcion: true, cuenta: { select: { numero: true, sociedad: { select: { codigo: true, nombreLargo: true } } } } },
+    select: { fecha: true, descripcion: true, cuenta: { select: { numero: true, sociedadId: true, sociedad: { select: { codigo: true, nombreLargo: true } } } } },
   });
 }
 
 /** Identificadores de todas las obligaciones del catálogo (activas o no): un servicio desactivado sigue siendo del catálogo. */
 export async function identificadoresDelCatalogo(): Promise<string[]> {
   return (await prisma.obligacion.findMany({ select: { identificador: true } })).map((o) => o.identificador);
+}
+
+/** Para la simulación: cuántos débitos vigentes tienen fecha posterior a la dada (solo lectura). */
+export async function contarDebitosPosteriores(fecha: Date): Promise<number> {
+  return prisma.movimiento.count({ where: { debito: { gt: 0n }, archivo: { retiradoEn: null }, fecha: { gt: fecha } } });
 }

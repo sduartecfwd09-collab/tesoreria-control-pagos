@@ -31,27 +31,9 @@ function Observaciones({ o }: { o: Obligacion }) {
 
 const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
 
-export function TablaObligaciones({
-  datos, alEditar, seleccion, alAlternar, alAlternarTodas,
-}: {
-  datos: Obligacion[];
-  alEditar: (o: Obligacion) => void;
-  seleccion: ReadonlySet<number>;
-  alAlternar: (o: Obligacion) => void;
-  alAlternarTodas: () => void;
-}) {
-  const todas = datos.length > 0 && datos.every((o) => seleccion.has(o.id));
+export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; alEditar: (o: Obligacion) => void }) {
   const columnas = useMemo(
     () => [
-      col.display({
-        id: "seleccion",
-        header: () => (
-          <input type="checkbox" className="h-4 w-4" aria-label="Seleccionar todas las obligaciones cargadas" checked={todas} onChange={alAlternarTodas} />
-        ),
-        cell: ({ row: { original: o } }) => (
-          <input type="checkbox" className="h-4 w-4" aria-label={`Seleccionar ${o.proveedor} ${o.identificador} (${o.sociedad})`} checked={seleccion.has(o.id)} onChange={() => alAlternar(o)} />
-        ),
-      }),
       col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="min-w-28 max-w-44" /> }),
       col.accessor("proveedor", {
         header: "Proveedor",
@@ -119,7 +101,7 @@ export function TablaObligaciones({
         ),
       }),
     ],
-    [alEditar, seleccion, todas, alAlternar, alAlternarTodas],
+    [alEditar],
   );
 
   const tabla = useReactTable({ data: datos, columns: columnas, getCoreRowModel: getCoreRowModel(), getRowId: (o) => String(o.id) });

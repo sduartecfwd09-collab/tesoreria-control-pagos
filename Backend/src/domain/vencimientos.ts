@@ -108,22 +108,23 @@ export function planificar(obligaciones: ObligacionPlan[], periodos: string[]): 
 const SIGUIENTE = (p: string) => periodosEntre(p, dePeriodoIndice(aIndice(p) + 1))[1]!;
 
 /**
- * Próximo pago de una obligación: dato calculado (no son filas). Es la fecha del primer periodo que le toca según la
- * frecuencia después del último vencimiento generado; sin vencimientos, desde el mes de «Control desde» o de hoy.
+ * Próximo pago de una obligación: dato calculado (no son filas). Es el próximo vencimiento con fecha igual o posterior a hoy
+ * según su frecuencia y su mes de arranque (el día de hoy cuenta). Parte del mes de hoy, o de «Control desde» si es futuro.
+ * No depende de los vencimientos ya generados: un vencimiento generado con anticipación (por ejemplo el del día 1 del mes
+ * siguiente) sigue siendo el próximo hasta que pase su fecha.
  * null si no se puede calcular (falta el día, o falta el mes de arranque en las frecuencias no mensuales).
  */
 export function proximoPago(
   o: { frecuencia: string; mesArranque: number | null; diaEsperadoPago: number | null; controlDesde: string | null },
-  ultimoPeriodo: string | null,
   hoy: Date,
 ): Date | null {
   if (o.diaEsperadoPago === null || !PASO_MESES[o.frecuencia]) return null;
   const mesDeHoy = hoy.toISOString().slice(0, 7);
-  let periodo = ultimoPeriodo ? SIGUIENTE(ultimoPeriodo) : o.controlDesde && o.controlDesde > mesDeHoy ? o.controlDesde : mesDeHoy;
+  let periodo = o.controlDesde && o.controlDesde > mesDeHoy ? o.controlDesde : mesDeHoy;
   for (let i = 0; i < 24; i++, periodo = SIGUIENTE(periodo)) {
     if (!tocaEnPeriodo(o.frecuencia, o.mesArranque, periodo)) continue;
     const fecha = fechaVencimiento(periodo, o.diaEsperadoPago);
-    if (ultimoPeriodo || fecha >= hoy) return fecha;
+    if (fecha >= hoy) return fecha;
   }
   return null;
 }

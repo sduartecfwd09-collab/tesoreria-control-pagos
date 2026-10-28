@@ -38,10 +38,10 @@ afterAll(async () => {
 });
 
 describe("identidad temporal", () => {
-  it("el selector solo existe con MODO_PRUEBAS: sin él, la API no lista tesoreros ni acepta el encabezado", async () => {
+  it("el selector solo existe con MODO_PRUEBAS: sin él, la API no lista personas ni acepta el encabezado", async () => {
     const apagado = await crearApp({ reloj, modoPruebas: false });
     try {
-      expect((await apagado.inject("/api/identidad")).json()).toEqual({ modoPruebas: false, tesoreros: [] });
+      expect((await apagado.inject("/api/identidad")).json()).toEqual({ modoPruebas: false, usuarios: [] });
       const r = await apagado.inject({ method: "GET", url: "/api/mi-configuracion", headers: ENCABEZADO(ana) });
       expect(r.statusCode).toBe(401);
       expect(r.json().error).toBe("No hay una sesión iniciada.");
@@ -51,13 +51,14 @@ describe("identidad temporal", () => {
     }
   });
 
-  it("con MODO_PRUEBAS lista solo tesoreros (no Jefatura) y rechaza a quien no lo es", async () => {
+  it("con MODO_PRUEBAS lista a todas las personas activas con su rol (Jefatura primero); sin elegir a nadie pide elegir", async () => {
     const app = await crearApp({ reloj, modoPruebas: true });
     try {
-      const lista = (await app.inject("/api/identidad")).json() as { modoPruebas: boolean; tesoreros: { id: number; nombre: string }[] };
+      const lista = (await app.inject("/api/identidad")).json() as { modoPruebas: boolean; usuarios: { id: number; nombre: string; rol: string }[] };
       expect(lista.modoPruebas).toBe(true);
-      expect(lista.tesoreros.map((t) => t.nombre)).toEqual(["Ana Uno", "Beto Dos"]);
-      expect((await app.inject({ method: "GET", url: "/api/mi-configuracion", headers: ENCABEZADO(jefa) })).statusCode).toBe(401);
+      expect(lista.usuarios.map((t) => [t.nombre, t.rol])).toEqual([["Jefa Tres", "Jefatura"], ["Ana Uno", "Tesorero"], ["Beto Dos", "Tesorero"]]);
+      // Mi configuración es personal y vale para cualquier rol, también Jefatura
+      expect((await app.inject({ method: "GET", url: "/api/mi-configuracion", headers: ENCABEZADO(jefa) })).json().datos.usuario.nombre).toBe("Jefa Tres");
       const sinElegir = await app.inject("/api/mi-configuracion");
       expect(sinElegir.statusCode).toBe(401);
       expect(sinElegir.json().error).toBe("Elija con qué tesorero está actuando.");

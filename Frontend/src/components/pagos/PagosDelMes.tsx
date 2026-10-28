@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { MESES, sumarMeses } from "@/lib/formato";
-import type { AvisoDatos, EstadoVencimiento, Vencimiento } from "@/lib/tipos";
+import type { Alcance, AvisoDatos, EstadoVencimiento, Vencimiento } from "@/lib/tipos";
+import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { ORDEN } from "./EstadoPago";
@@ -55,7 +56,7 @@ const textoHoy = (hoy: string) =>
 export function PagosDelMes() {
   const [hoy, setHoy] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<string | null>(null);
-  const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; diasAviso: number } | null>(null);
+  const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; alcance: Alcance } | null>(null);
   const [pestana, setPestana] = useState<Pestana>("atencion");
   const [abierto, setAbierto] = useState<number | null>(null);
   const [avisos, setAvisos] = useState<AvisoDatos[]>([]);
@@ -82,7 +83,7 @@ export function PagosDelMes() {
   useEffect(() => {
     if (!periodo) return;
     let vigente = true;
-    api.listarTodosVencimientos({ periodo }).then((r) => vigente && (setMes({ periodo, datos: r.datos, diasAviso: r.diasAviso }), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    api.listarTodosVencimientos({ periodo }).then((r) => vigente && (setMes({ periodo, datos: r.datos, alcance: r.alcance }), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
     return () => {
       vigente = false;
     };
@@ -122,6 +123,7 @@ export function PagosDelMes() {
           </button>
         </div>
       </header>
+      <LineaAlcance alcance={mes?.alcance} />
 
       {avisos.length > 0 && (
         <section role="status" aria-label="Datos desactualizados" className="mt-6 max-w-3xl rounded-xl border-2 border-texto bg-ambar-fondo p-4 text-texto">
@@ -137,7 +139,7 @@ export function PagosDelMes() {
       <section aria-label="Resumen del mes" className="mt-7 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         <Tarjeta titulo="Vencidos" acento="bg-rojo" detalle="Sin pago encontrado" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></Icono>}
           insignia={<Insignia clase="bg-rojo text-fondo">Atender hoy</Insignia>}>{cuenta("vencido")}</Tarjeta>
-        <Tarjeta titulo="Por vencer" acento="bg-ambar" detalle={`En los próximos ${mes?.diasAviso ?? ""} días`} icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></Icono>}
+        <Tarjeta titulo="Por vencer" acento="bg-ambar" detalle="Dentro de los días de aviso" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></Icono>}
           insignia={<Insignia clase="bg-ambar text-texto">Próximos</Insignia>}>{cuenta("por_vencer")}</Tarjeta>
         <Tarjeta titulo="Pagados" acento="bg-acento" barra={pct} icono={<Icono><path d="M20 6L9 17l-5-5" /></Icono>} insignia={<Insignia clase="bg-acento text-sobre-acento">de {N}</Insignia>}>
           {pagados}

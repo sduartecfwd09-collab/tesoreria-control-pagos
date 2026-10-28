@@ -99,6 +99,8 @@ export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefec
 }
 
 export interface FiltroObligaciones {
+  /** solo estas obligaciones (el alcance de la persona); ausente = todas */
+  ids?: number[];
   sociedad?: string; // abreviatura
   sociedadId?: number; // identificador: sirve también para sociedades sin abreviatura
   categoria?: number;
@@ -117,8 +119,18 @@ const FALTA: Record<NonNullable<FiltroObligaciones["falta"]>, Prisma.ObligacionW
   dia: { diaEsperadoPago: null },
 };
 
+/** Lo mínimo para decidir el alcance de una persona: responsable propio y tesorero de la sociedad de cada obligación (y las sociedades de las que es tesorero). */
+export async function datosParaAlcance(tesoreroId?: number) {
+  const [obligaciones, sociedades] = await Promise.all([
+    prisma.obligacion.findMany({ select: { id: true, sociedadId: true, responsable: true, sociedad: { select: { tesoreroId: true } } } }),
+    tesoreroId === undefined ? Promise.resolve([]) : prisma.sociedad.findMany({ where: { tesoreroId }, select: { id: true } }),
+  ]);
+  return { obligaciones, sociedadesDeTesorero: sociedades.map((x) => x.id) };
+}
+
 export async function listarObligaciones(f: FiltroObligaciones) {
   const where: Prisma.ObligacionWhereInput = {
+    ...(f.ids ? { id: { in: f.ids } } : {}),
     ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
     ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
     ...(f.categoria ? { categoriaId: f.categoria } : {}),
