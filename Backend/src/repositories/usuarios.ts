@@ -31,3 +31,18 @@ export async function obtenerActor(id: number) {
   const u = await prisma.usuario.findUnique({ where: { id }, select: { id: true, activo: true, rol: { select: { nombre: true } } } });
   return u ? { id: u.id, activo: u.activo, rol: u.rol.nombre } : null;
 }
+
+/** Usuarios activos con su aviso propio (null = usa el parámetro general). Para la tabla «Avisos por tesorero». */
+export async function listarUsuariosConAviso() {
+  return prisma.usuario.findMany({ where: { activo: true }, select: { id: true, nombre: true, diasAviso: true, rol: { select: { nombre: true } } }, orderBy: { nombre: "asc" } });
+}
+
+export async function fijarDiasAviso(id: number, diasAviso: number | null) {
+  return prisma.usuario.update({ where: { id }, data: { diasAviso }, select: { id: true, nombre: true, diasAviso: true } });
+}
+
+/** El mayor aviso propio entre los usuarios activos (null si nadie tiene el suyo). */
+export async function mayorAvisoDeUsuarios(): Promise<number | null> {
+  const r = await prisma.usuario.aggregate({ where: { activo: true, diasAviso: { not: null } }, _max: { diasAviso: true } });
+  return r._max.diasAviso;
+}

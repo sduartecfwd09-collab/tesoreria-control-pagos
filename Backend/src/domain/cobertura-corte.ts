@@ -13,6 +13,8 @@ export interface CuentaCorte {
   meses: Map<string, Date | null>;
   /** primera fecha con movimientos cargados de la cuenta (null o ausente = no se conoce) */
   primeraFecha?: Date | null;
+  /** desde cuándo cubre la cuenta: el «Del» que declara su primer archivo leído (o el día 1 del mes del archivo); sin ella se usa `primeraFecha` */
+  inicioCobertura?: Date | null;
   /** meses con archivo leído cuyo saldo no cuadra: la cuenta es conocida, pero ese mes NO cuenta como cobertura (no está en `meses`) */
   mesesNoCuadran?: Set<string>;
 }
@@ -40,9 +42,9 @@ export function corteDeMes(cuenta: CuentaCorte, mes: string, hoy: Date): Date | 
   return null;
 }
 
-/** Desde cuándo hay movimientos cargados en TODAS las cuentas de la sociedad (la primera fecha más tardía entre ellas); null si no se conoce. */
+/** Desde cuándo cubre la sociedad: la mayor de las fechas de inicio de cobertura de sus cuentas; null si no se conoce. */
 export function inicioDeDatos(cuentas: CuentaCorte[]): Date | null {
-  const fechas = cuentas.map((c) => c.primeraFecha).filter((f): f is Date => f instanceof Date);
+  const fechas = cuentas.map((c) => c.inicioCobertura ?? c.primeraFecha).filter((f): f is Date => f instanceof Date);
   return fechas.length === 0 ? null : fechas.reduce((m, f) => (f > m ? f : m));
 }
 

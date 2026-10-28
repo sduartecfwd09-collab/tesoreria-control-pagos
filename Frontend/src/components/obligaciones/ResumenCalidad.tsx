@@ -20,7 +20,7 @@ export function ResumenCalidad({
   ];
   const fuera = r.sociedadesSinEstadosNiObligaciones;
   // las sociedades sin estados de cuenta ni obligaciones cuentan como una sola línea resumen
-  const pendientes = r.identificadoresRepetidos.length + r.formatoIban.length + r.sociedadesSinObligaciones.length + (fuera.length > 0 ? 1 : 0);
+  const pendientes = r.identificadoresRepetidos.length + r.formatoIban.length + r.sociedadesSinObligaciones.length + (r.frecuenciaPorConfirmar > 0 ? 1 : 0) + (fuera.length > 0 ? 1 : 0);
 
   return (
     <section aria-labelledby="h-calidad" className="mt-6">
@@ -86,6 +86,11 @@ export function ResumenCalidad({
                 </button>
               </li>
             ))}
+            {r.frecuenciaPorConfirmar > 0 && (
+              <li className="py-2">
+                {r.frecuenciaPorConfirmar.toLocaleString("es-CR")} {r.frecuenciaPorConfirmar === 1 ? "obligación con frecuencia sin confirmar." : "obligaciones con frecuencia sin confirmar."}
+              </li>
+            )}
             {r.sociedadesSinObligaciones.map((s) => (
               <li key={s} className="py-2">
                 <strong>Sociedad sin obligaciones:</strong> {s} tiene estados de cuenta pero no tiene obligaciones activas en la tabla de pagos. Si debería tenerlas, créelas con «Nueva obligación».
@@ -109,9 +114,9 @@ export function ResumenCalidad({
             )}
           </ul>
         )}
-        {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0 || r.sinMesArranque > 0) && (
+        {(r.monedaPorConfirmar > 0 || r.sinMesArranque > 0) && (
           <p className="mt-3 text-sm text-suave">
-            {(r.frecuenciaPorConfirmar > 0 || r.monedaPorConfirmar > 0) && "La tabla de pagos no trae frecuencia, moneda ni monto; se aplicó mensual y colones. "}
+            {r.monedaPorConfirmar > 0 && "La tabla de pagos no trae moneda ni monto; se aplicó colones. "}
             {r.sinMesArranque > 0 && `${r.sinMesArranque} con frecuencia no mensual no tienen mes de arranque y no generan vencimientos.`}
           </p>
         )}

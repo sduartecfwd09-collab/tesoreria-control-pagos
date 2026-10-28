@@ -6,6 +6,7 @@
 import { nombresEnDescripcion, proveedorCanonico } from "../config/alias-proveedores.js";
 import { leerPagoConForma } from "../config/patron-pago.js";
 import { cruzar, MOTIVOS, type ResultadoCruce } from "../domain/cruce.js";
+import { NOMBRE_ESTADO } from "../domain/textos-pago.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { estadoDeArchivo } from "../domain/estado-archivo.js";
 import { razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
@@ -446,6 +447,22 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
     for (const q of resultados) if (q.movimientoId !== null) usados.set(q.movimientoId, (usados.get(q.movimientoId) ?? 0) + 1);
     const repetidos = [...usados.values()].filter((n) => n > 1).length;
     L.push(`  ${dAntes} días antes${dAntes === diasAntes ? " (valor actual)" : ""}: ${partes.join(" · ")} · pagos que respaldan más de un vencimiento: ${repetidos}`);
+  }
+
+  // 10. Regla «desde»: la cobertura de una cuenta empieza en el «Del» que declara su primer archivo (o el día 1 del mes del archivo).
+  // Se compara con la regla anterior (primera fecha con movimientos de cada cuenta). Solo en memoria.
+  L.push("", "10. Vencimientos que cambian de estado por la regla «desde» (cobertura desde el Del declarado por el primer archivo de cada cuenta, o el día 1 de su mes), frente a la regla anterior (primera fecha con movimientos):");
+  const cuentasAntes = new Map([...r.datos.cuentas].map(([s, cs]) => [s, cs.map((c) => ({ ...c, inicioCobertura: c.primeraFecha ?? null }))]));
+  const estadoAntes = new Map(cruzar({ ...r.datos, ...r.parametros, cuentas: cuentasAntes }).resultados.map((q) => [q.vencimientoId, q.estado]));
+  const cambian = r.resultados.filter((q) => estadoAntes.get(q.vencimientoId) !== q.estado);
+  const totalCambian = new Conteo();
+  for (const q of cambian) totalCambian.add(grupoVenc(q.vencimientoId));
+  L.push(`  vencimientos que cambian: ${totalCambian.texto()}`);
+  const nombreEstado = (e: string | undefined) => NOMBRE_ESTADO[e ?? ""] ?? "sin estado";
+  for (const q of cambian.slice().sort((a, b) => nombre(venc.get(a.vencimientoId)!.sociedadId).localeCompare(nombre(venc.get(b.vencimientoId)!.sociedadId)) || mesDe(venc.get(a.vencimientoId)!.fecha).localeCompare(mesDe(venc.get(b.vencimientoId)!.fecha)))) {
+    const v = venc.get(q.vencimientoId)!;
+    const o = obl.get(v.obligacionId)!;
+    L.push(`  ${nombre(v.sociedadId)} | ${o.proveedor} | ${mesDe(v.fecha)} | ${ultimos4(o.identificador)} | ${nombreEstado(estadoAntes.get(q.vencimientoId))} -> ${nombreEstado(q.estado)} | cobertura ${grupoVenc(q.vencimientoId)}`);
   }
   return L.join("\n");
 }

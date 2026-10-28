@@ -14,7 +14,25 @@ export interface Parametro {
   max: number | null;
   opciones: string[] | null;
   supuesto: boolean;
+  /** solo los visibles se muestran en Configuración */
+  visible: boolean;
+  /** ejemplo con fechas, redactado por el servidor */
+  ejemplo: string | null;
   actualizado: string;
+}
+
+export interface AvisoTesorero {
+  id: number;
+  nombre: string;
+  rol: string;
+  /** null = usa el general */
+  diasAviso: number | null;
+  diasEfectivos: number;
+}
+
+export interface ResultadoFrecuencia {
+  actualizadas: number;
+  calendario: { creados: number; actualizados: number; eliminados: number; protegidos: number };
 }
 
 export type EstadoCelda = "leido" | "error" | "sin_sociedad" | "falta";

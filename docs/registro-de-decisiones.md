@@ -44,6 +44,12 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | Integridad por saldo: un archivo que «no cuadra» no cuenta como cobertura (Sin información, nunca Vencido); «no verificable» no cambia la cobertura. Tolerancia de redondeo como parámetro (1 centavo). Estados de cuenta muestra Cuadra, No cuadra y No verificable con su motivo. | Un estado de cuenta con saldo inconsistente puede estar incompleto: no sirve para afirmar que no hubo pago. |
 | 2026-10-27 | Cada archivo guarda su Del y Al reales (primera y última fecha con movimientos) y el período que declara el encabezado; ninguna regla de cobertura los usa todavía. | Preparar una cobertura por fechas reales sin cambiarla aún. |
 | 2026-10-27 | «ICETEL» se reconoce como ICE en la descripción del banco (supuesto; solo desempate por nombre). No hay alias para CARTA, MUAL, CTAMUSA ni MUEZ. | Reconocer pagos del ICE sin unir proveedores en la importación. |
+| 2026-10-27 | Días de espera antes de marcar Vencido (parámetro, inicial 3): pasado el día de pago, el pago sigue «Por vencer» durante la espera y luego pasa a Vencido, que se sigue buscando hasta F + días después. | Un pago puede aparecer en el banco unos días tarde: marcar Vencido el día siguiente alarmaba sin motivo. |
+| 2026-10-27 | Configuración muestra solo dos parámetros; el resto sigue existiendo para una sección «Avanzado» de Jefatura. Margen técnico: días antes 10 y después 12, con suma menor que 30. | Lo técnico no debe editarlo Tesorería. |
+| 2026-10-27 | Aviso propio por tesorero (opcional); el calendario llega hasta el mayor aviso. | Cada persona decide con cuántos días de anticipación quiere el aviso. |
+| 2026-10-27 | Frecuencia editable por obligación (fila y masiva) con mes de arranque obligatorio y marca «frecuencia confirmada»; «Frecuencia por defecto» sale de Configuración. | La tabla de pagos no trae la frecuencia: Tesorería la confirma obligación por obligación. |
+| 2026-10-27 | Regla «desde» por cuenta: el Del declarado por su primer archivo (o el día 1 de su mes); la sociedad, la mayor de sus cuentas. Reemplaza la primera fecha con movimientos. | Es el período que el banco dice cubrir, no el primer movimiento. |
+| 2026-10-27 | Menú lateral contraído con apertura al pasar el cursor, por teclado o toque. | Más espacio para las tablas (diferencia con la maqueta aprobada por Saraí). |
 
 ## Pendientes con Tesorería
 

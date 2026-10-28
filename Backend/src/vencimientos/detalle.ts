@@ -12,7 +12,8 @@ import { responsableEfectivo } from "../domain/obligaciones.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { normalizar } from "../ingest/utiles.js";
-import { TEXTO_SALDO_NO_CUADRA, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
+import { avisosPorObligacion } from "../repositories/cruce.js";
+import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
@@ -31,7 +32,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
   const v = await obtenerVencimientoDetalle(id);
   if (!v) return null;
   const hoy = hoyDe(reloj);
-  const diasAntes = await entero("ventana_dias_antes", 3);
+  const diasAntes = await entero("ventana_dias_antes", 10);
   const diasDespues = await entero("ventana_dias_despues", 12);
   const desde = new Date(v.fecha.getTime() - diasAntes * MS_DIA);
   const hasta = new Date(v.fecha.getTime() + diasDespues * MS_DIA);
@@ -107,7 +108,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
   const datosDesde = v.estado === "sin_informacion" ? inicioDeDatos((await cargarCoberturaCuentas()).get(v.sociedadId) ?? []) : null;
 
   const dias = Math.round((v.fecha.getTime() - hoy.getTime()) / MS_DIA);
-  const diasAviso = await diasDeAviso();
+  const diasAviso = (await avisosPorObligacion()).get(v.obligacionId) ?? (await diasDeAviso()); // el del responsable de la obligación o el general
   const textos = textosDePago({
     estado: v.estado, motivo: v.motivo, fecha: iso(v.fecha), dias, diasAviso, diferenciaDias: v.diferenciaDias,
     ventana: { desde: iso(desde), hasta: iso(hasta) },
@@ -127,7 +128,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     movida: v.fechaOriginal !== null,
     estado: v.estado,
     motivo: v.motivo,
-    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : v.motivo,
+    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias, fecha: iso(v.fecha), fechaHasta: iso(hasta) }),
     textos,
     diferenciaDias: v.diferenciaDias,
     sinInfoHasta: v.sinInfoHasta ? iso(v.sinInfoHasta) : null,

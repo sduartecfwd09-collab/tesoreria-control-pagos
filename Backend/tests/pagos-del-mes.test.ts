@@ -5,7 +5,7 @@ import { listarSociedades } from "../src/repositories/obligaciones.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../src/vencimientos/diagnostico.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
+import { fijarRango, vaciarImportaciones } from "./helpers/db.js";
 
 // «Pagos del mes», «Vencidos», el detalle y el diagnóstico deben dar los mismos números. Datos inventados; hoy = 2026-10-27.
 const reloj = () => new Date(2026, 9, 27, 10, 0);
@@ -14,7 +14,7 @@ let app: Awaited<ReturnType<typeof crearApp>>;
 let n = 0;
 
 beforeAll(async () => {
-  await fijarDiasDespues(3);
+  await fijarRango(3, 3);
   await vaciarImportaciones();
   const categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
   const aaa = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } });
@@ -49,7 +49,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await app.close();
-  await fijarDiasDespues(12);
+  await fijarRango(10, 12);
   await vaciarImportaciones();
 });
 

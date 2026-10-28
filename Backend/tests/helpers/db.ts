@@ -46,3 +46,10 @@ export async function fijarDiasDespues(valor: number) {
   exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
   await prisma.parametro.updateMany({ where: { clave: "ventana_dias_despues" }, data: { valor: String(valor) } });
 }
+
+/** Fija el rango de búsqueda (días antes y días después). Los valores de fábrica son 10 y 12; varias pruebas fijan 3 y 3 para probar el borde. */
+export async function fijarRango(antes: number, despues: number) {
+  exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
+  await prisma.parametro.updateMany({ where: { clave: "ventana_dias_antes" }, data: { valor: String(antes) } });
+  await prisma.parametro.updateMany({ where: { clave: "ventana_dias_despues" }, data: { valor: String(despues) } });
+}

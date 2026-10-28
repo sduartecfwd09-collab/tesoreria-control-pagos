@@ -5,7 +5,7 @@ import type { CuentaCorte } from "../src/domain/cobertura-corte.js";
 import { cruzar, MOTIVOS, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
 import { textoSinEstadosAnteriores } from "../src/domain/textos-pago.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
+import { fijarRango, vaciarImportaciones } from "./helpers/db.js";
 
 const dia = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 const HOY = dia(2026, 10, 27);
@@ -38,7 +38,7 @@ describe("rango que empieza antes de la primera fecha cargada", () => {
     expect(estadoDe(r, 10).estado).toBe("pagado");
   });
   it("el texto dice desde cuándo hay estados de cuenta", () => {
-    expect(textoSinEstadosAnteriores("2026-10-14")).toBe("No hay estados de cuenta anteriores al 14 oct 2026; el pago pudo hacerse antes");
+    expect(textoSinEstadosAnteriores("2026-10-14")).toBe("No hay estados de cuenta anteriores al 14 oct 2026");
   });
 });
 
@@ -75,7 +75,7 @@ describe("detalle de Vencido: pago con el mismo número fuera del rango", () => 
   let n = 0;
 
   beforeAll(async () => {
-    await fijarDiasDespues(3);
+    await fijarRango(3, 3);
     await vaciarImportaciones();
     const categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
     const sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
@@ -99,7 +99,7 @@ describe("detalle de Vencido: pago con el mismo número fuera del rango", () => 
   });
   afterAll(async () => {
     await app.close();
-    await fijarDiasDespues(12);
+    await fijarRango(10, 12);
     await vaciarImportaciones();
   });
 

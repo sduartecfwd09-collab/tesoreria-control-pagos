@@ -184,6 +184,27 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null), regeneracion, advertencias: advertencia ? [advertencia] : [] });
   });
 
+  // Cambio masivo de frecuencia sobre las filas elegidas: la frecuencia queda confirmada y el calendario se ajusta una sola vez.
+  app.post("/api/obligaciones/frecuencia", async (req, reply) => {
+    const r = z.object({
+      ids: z.array(z.number().int().positive(), { error: "Elija las obligaciones" }).min(1, "Elija al menos una obligación").max(500, "Elija como máximo 500 obligaciones"),
+      frecuencia: z.string({ error: "Indique la frecuencia" }).refine((f) => FRECUENCIAS.includes(f), `La frecuencia debe ser una de: ${FRECUENCIAS.join(", ")}`),
+      mesArranque: z.number().int().min(1, "El mes debe estar entre 1 y 12").max(12, "El mes debe estar entre 1 y 12").nullable().optional(),
+    }).safeParse(req.body);
+    if (!r.success) return reply.code(422).send(primerError(r.error));
+    const { ids, frecuencia } = r.data;
+    const mes = frecuencia === "mensual" ? null : (r.data.mesArranque ?? null);
+    if (frecuencia !== "mensual" && mes === null) return invalido(reply, "Indique el mes de arranque: en qué mes toca el primer pago de esta frecuencia", "mesArranque");
+    let actualizadas = 0;
+    for (const id of new Set(ids)) {
+      if (!(await obtenerObligacion(id))) continue;
+      await actualizarObligacion(id, { frecuencia, mesArranque: mes, frecuenciaPorConfirmar: false });
+      actualizadas++;
+    }
+    const { calendario } = await actualizarVencimientos(opts.reloj);
+    return { datos: { actualizadas, calendario } };
+  });
+
   app.patch("/api/obligaciones/:id", async (req, reply) => {
     const id = idParam.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
@@ -206,6 +227,10 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     if (d.frecuencia === "mensual" && d.mesArranque === undefined) d.mesArranque = null; // al pasar a mensual se limpia
     const mes = errorMesArranque(d.frecuencia ?? actual.frecuencia, d.mesArranque === undefined ? actual.mesArranque : d.mesArranque);
     if (mes) return invalido(reply, mes, "mesArranque");
+    // al cambiar la frecuencia o el mes, una frecuencia no mensual exige indicar en qué mes toca el primer pago
+    if ((d.frecuencia !== undefined || d.mesArranque !== undefined) && (d.frecuencia ?? actual.frecuencia) !== "mensual" && (d.mesArranque === undefined ? actual.mesArranque : d.mesArranque) == null) {
+      return invalido(reply, "Indique el mes de arranque: en qué mes toca el primer pago de esta frecuencia", "mesArranque");
+    }
     const cuenta = await errorCuenta(d.cuentaEsperadaId, actual.sociedadId);
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 

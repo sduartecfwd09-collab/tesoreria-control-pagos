@@ -6,6 +6,7 @@ import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
 import { copiaDe, ESTADOS_PAGADOS, periodosEntre, planificar, type VencimientoPlan } from "../domain/vencimientos.js";
 import { valorGlobal } from "../repositories/parametros.js";
+import { mayorAvisoDeUsuarios } from "../repositories/usuarios.js";
 import { aplicarCambios, type CambiosVencimientos, obligacionesParaPlan, obligacionParaPlan, vencimientosDeObligaciones } from "../repositories/vencimientos.js";
 
 const MS_DIA = 86_400_000;
@@ -24,6 +25,11 @@ export async function diasDeAviso(): Promise<number> {
   return Number.isInteger(n) && n >= 0 ? n : 3;
 }
 
+/** Horizonte del calendario: el mayor de todos los avisos (el general y los propios de cada tesorero). */
+export async function horizonteDeAviso(): Promise<number> {
+  return Math.max(await diasDeAviso(), (await mayorAvisoDeUsuarios()) ?? 0);
+}
+
 /**
  * Deja el calendario al día. Sin `obligacionId` revisa todas las obligaciones; con él, solo esa. Crea los vencimientos
  * que faltan, corrige fecha, monto y copia de los futuros que siguen correspondiendo y elimina los futuros que ya no
@@ -35,7 +41,7 @@ export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: numbe
   // Se genera todo el mes en curso (hasta fin de mes) o, si hoy + los días de aviso cruza al mes siguiente, hasta ahí.
   // Nunca se crean meses futuros por adelantado.
   const finDeMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 0));
-  const conAviso = new Date(hoy.getTime() + (await diasDeAviso()) * MS_DIA);
+  const conAviso = new Date(hoy.getTime() + (await horizonteDeAviso()) * MS_DIA);
   const limite = conAviso > finDeMes ? conAviso : finDeMes;
   const obligaciones = obligacionId === undefined ? await obligacionesParaPlan() : [await obligacionParaPlan(obligacionId)].filter((o) => o !== null);
   const existentes = new Map<number, Awaited<ReturnType<typeof vencimientosDeObligaciones>>>();

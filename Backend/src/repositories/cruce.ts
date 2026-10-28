@@ -1,6 +1,7 @@
 // Acceso a la base del motor de cruce (única capa que usa Prisma). Lee solo lo necesario: nunca devuelve la
 // descripción de un movimiento fuera del motor, y los archivos retirados de la carpeta no cuentan en ningún caso.
 import { prisma } from "../db.js";
+import { normalizarNombrePersona } from "../domain/usuarios.js";
 import type { CuentaCorte } from "../domain/cobertura-corte.js";
 import type { MovimientoCruce, ObligacionCruce, ResultadoCruce, VencimientoCruce } from "../domain/cruce.js";
 
@@ -18,6 +19,17 @@ export interface DatosCruce {
   vencimientos: VencimientoGuardado[];
   movimientos: MovimientoCruce[];
   cuentas: Map<number, CuentaCorte[]>;
+}
+
+/** El «Del» que el encabezado del archivo declara (guardado por el lector); null si el formato no lo declara. */
+function delDeclarado(detalle: string | null): Date | null {
+  if (!detalle) return null;
+  try {
+    const del = (JSON.parse(detalle) as { periodoDeclarado?: { del?: string | null } | null }).periodoDeclarado?.del;
+    return typeof del === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(del) ? new Date(`${del}T00:00:00.000Z`) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** El lector guardó que el saldo de este archivo no cuadra (en el detalle JSON del archivo). */
@@ -42,13 +54,20 @@ export async function cargarCoberturaCuentas(): Promise<Map<number, CuentaCorte[
   ]);
   const ultima = new Map(ultimas.map((u) => [`${u.cuentaId}|${u.periodo}`, u._max.fecha]));
   const porCuenta = new Map<number, { sociedadId: number; corte: CuentaCorte }>();
+  const primerArchivo = new Map<number, { mes: string; del: Date }>();
   for (const a of archivos) {
     const cuentaId = a.cuentaId!;
     const c: { sociedadId: number; corte: CuentaCorte } = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map(), primeraFecha: primeras.get(cuentaId) ?? null } };
     if (noCuadra(a.detalle)) c.corte.mesesNoCuadran = (c.corte.mesesNoCuadran ?? new Set()).add(a.mes!);
-    else c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
+    else {
+      c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
+      // la cobertura de la cuenta empieza en el «Del» que declara su primer archivo leído (que cuadre) o, si no lo declara, el día 1 de su mes
+      const previo = primerArchivo.get(cuentaId);
+      if (previo === undefined || a.mes! < previo.mes) primerArchivo.set(cuentaId, { mes: a.mes!, del: delDeclarado(a.detalle) ?? new Date(`${a.mes}-01T00:00:00.000Z`) });
+    }
     porCuenta.set(cuentaId, c);
   }
+  for (const [cuentaId, p] of primerArchivo) porCuenta.get(cuentaId)!.corte.inicioCobertura = p.del;
   const cuentas = new Map<number, CuentaCorte[]>();
   for (const { sociedadId, corte } of porCuenta.values()) cuentas.set(sociedadId, [...(cuentas.get(sociedadId) ?? []), corte]);
   return cuentas;
@@ -133,6 +152,21 @@ export async function movimientosParaGrupos() {
     select: { fecha: true, descripcion: true, debito: true, cuenta: { select: { sociedadId: true } } },
   });
   return filas.map((f) => ({ sociedadId: f.cuenta.sociedadId, fecha: f.fecha, descripcion: f.descripcion, esDebito: f.debito > 0n }));
+}
+
+/** Aviso propio del responsable efectivo de cada obligación activa (el de la obligación o, si falta, el tesorero de la sociedad). Solo entran los que tienen el suyo. */
+export async function avisosPorObligacion(): Promise<Map<number, number>> {
+  const [obligaciones, usuarios] = await Promise.all([
+    prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, responsable: true, sociedad: { select: { tesorero: { select: { diasAviso: true } } } } } }),
+    prisma.usuario.findMany({ where: { activo: true, diasAviso: { not: null } }, select: { nombreNormalizado: true, diasAviso: true } }),
+  ]);
+  const porNombre = new Map(usuarios.map((u) => [u.nombreNormalizado, u.diasAviso!]));
+  const m = new Map<number, number>();
+  for (const o of obligaciones) {
+    const dias = o.responsable ? porNombre.get(normalizarNombrePersona(o.responsable)) : o.sociedad.tesorero?.diasAviso ?? undefined;
+    if (dias !== undefined && dias !== null) m.set(o.id, dias);
+  }
+  return m;
 }
 
 /** Para el diagnóstico: nombre de la categoría de cada obligación activa. */

@@ -1,6 +1,6 @@
 import type {
-  AvisoDatos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Importaciones, Obligacion, Pagina,
-  Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
+  AvisoDatos, AvisoTesorero, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Frecuencia, Importaciones, Obligacion, Pagina,
+  Parametro, Regeneracion, ResultadoFrecuencia, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
@@ -50,6 +50,13 @@ export const api = {
       body: JSON.stringify({ valor }),
     }),
 
+  listarAvisosTesoreros: () => pedir<{ general: number; datos: AvisoTesorero[] }>("/api/avisos-tesoreros"),
+  guardarAvisoTesorero: (id: number, diasAviso: number | null) =>
+    pedir<{ datos: { id: number; nombre: string; diasAviso: number | null; diasEfectivos: number } }>(`/api/avisos-tesoreros/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ diasAviso }),
+    }),
+
   listarSociedades: async () => (await pedir<{ datos: Sociedad[] }>("/api/sociedades")).datos,
   listarCategorias: async () => (await pedir<{ datos: Categoria[] }>("/api/categorias")).datos,
 
@@ -61,6 +68,9 @@ export const api = {
     pedir<{ datos: Obligacion; regeneracion: Regeneracion }>("/api/obligaciones", { method: "POST", body: JSON.stringify(c) }),
   editarObligacion: (id: number, c: CambiosObligacion) =>
     pedir<{ datos: Obligacion; regeneracion: Regeneracion | null }>(`/api/obligaciones/${id}`, { method: "PATCH", body: JSON.stringify(c) }),
+  /** Cambio masivo: la frecuencia queda confirmada y el calendario se ajusta una sola vez. */
+  cambiarFrecuencia: async (ids: number[], frecuencia: Frecuencia, mesArranque: number | null) =>
+    (await pedir<{ datos: ResultadoFrecuencia }>("/api/obligaciones/frecuencia", { method: "POST", body: JSON.stringify({ ids, frecuencia, mesArranque }) })).datos,
 
   listarVencimientos: (f: FiltroVencimientos) =>
     pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number }>(`/api/vencimientos${consulta(f)}`),

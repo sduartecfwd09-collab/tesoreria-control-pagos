@@ -7,7 +7,7 @@ import { parsearNombreArchivo } from "../src/ingest/nombre-archivo.js";
 import { razonDeContinuidad, textoSaldo } from "../src/domain/saldo.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { copiaDeObligacion, fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
+import { copiaDeObligacion, fijarRango, vaciarImportaciones } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
 // Pruebas con datos inventados. Hoy = 2026-10-27; rango -3/+12 salvo que la prueba lo cambie.
@@ -30,8 +30,7 @@ const fijar = (clave: string, valor: string) => prisma.parametro.updateMany({ wh
 
 beforeEach(async () => {
   await vaciarImportaciones();
-  await fijarDiasDespues(12);
-  await fijar("ventana_dias_antes", "3");
+  await fijarRango(3, 12);
   await fijar("marcar_vencido_sin_estado", "no");
   sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
   cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001234" } })).id;
@@ -44,9 +43,8 @@ beforeEach(async () => {
   await debito(dia(2026, 10, 26), "COMISION"); // datos hasta el 26 de octubre
 });
 afterAll(async () => {
-  await fijar("ventana_dias_antes", "3");
   await fijar("marcar_vencido_sin_estado", "no");
-  await fijarDiasDespues(12);
+  await fijarRango(10, 12);
   await vaciarImportaciones();
 });
 

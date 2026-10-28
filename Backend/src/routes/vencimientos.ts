@@ -4,7 +4,7 @@ import { detalleDeVencimiento } from "../vencimientos/detalle.js";
 import { avisosDeDatos } from "../domain/cobertura-corte.js";
 import { MOTIVOS } from "../domain/cruce.js";
 import { inicioDeDatos } from "../domain/cobertura-corte.js";
-import { TEXTO_SALDO_NO_CUADRA, textoDatosDesactualizados, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
+import { TEXTO_SALDO_NO_CUADRA, textoDatosDesactualizados, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
 import { enmascararCuenta } from "../domain/enmascarar.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
@@ -68,6 +68,8 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
     const hoy = hoyDe(opts.reloj);
     const diasAviso = await diasDeAviso();
+    const nDespues = Number(await valorGlobal("ventana_dias_despues"));
+    const diasDespues = Number.isInteger(nDespues) && nDespues >= 0 ? nDespues : 12;
     const { estado, ...resto } = q.data;
     const { total, datos, resumen } = await listarVencimientos({ ...resto, estados: estado });
     // «Sin información» por inicio de datos: desde cuándo hay estados de cuenta de cada sociedad
@@ -95,7 +97,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         estado: v.estado,
         motivo: v.motivo,
         // «Sin información» requiere atención y se explica con fechas; nunca se presenta como Vencido
-        textoEstado: v.estado !== "sin_informacion" ? v.motivo : v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde.get(v.sociedadId) ?? null) : textoFaltanEstados(v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null),
+        textoEstado: v.estado !== "sin_informacion" ? textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias: Math.round((v.fecha.getTime() - hoy.getTime()) / 86_400_000), fecha: v.fecha.toISOString().slice(0, 10), fechaHasta: new Date(v.fecha.getTime() + diasDespues * 86_400_000).toISOString().slice(0, 10) }) : v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde.get(v.sociedadId) ?? null) : textoFaltanEstados(v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null),
         // el pago que respalda el estado; la moneda es la de la cuenta que pagó (null = sin dato: sin símbolo ni código)
         pago: v.movimiento ? { fecha: v.movimiento.fecha.toISOString().slice(0, 10), monto: aNumero(v.movimiento.debito), moneda: v.movimiento.cuenta.moneda, banco: v.movimiento.cuenta.banco, cuenta: enmascararCuenta(v.movimiento.cuenta.numero) } : null,
         diferenciaDias: v.diferenciaDias,

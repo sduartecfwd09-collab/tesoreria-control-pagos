@@ -7,7 +7,7 @@ import { categoriasPorObligacion, creditosParaDiagnostico, debitosParaFormato } 
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeMargenCruce } from "../src/vencimientos/diagnostico-margen.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { fijarRango, vaciarImportaciones } from "./helpers/db.js";
 
 // Diagnóstico del margen con datos inventados. Hoy = 2026-10-27, -3/+12.
 const reloj = () => new Date(2026, 9, 27, 10, 0);
@@ -41,7 +41,7 @@ async function informe(diasLejos = 45) {
 
 beforeEach(async () => {
   await vaciarImportaciones();
-  await prisma.parametro.updateMany({ where: { clave: "ventana_dias_despues" }, data: { valor: "12" } });
+  await fijarRango(3, 12);
   sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
   otraSociedadId = (await prisma.sociedad.create({ data: { codigo: "BBB", nombreLargo: "Sociedad BBB" } })).id;
   cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001234", formato: "E1", codigoBanco: "0107" } })).id;
@@ -57,7 +57,10 @@ beforeEach(async () => {
   await mov(cuentaOtraId, archivoOtroId, dia(2026, 9, 1), "COMISION BBB", 100n);
   await debito(dia(2026, 10, 26), "COMISION OTRA"); // datos de AAA hasta el 26 de octubre
 });
-afterAll(vaciarImportaciones);
+afterAll(async () => {
+  await fijarRango(10, 12);
+  await vaciarImportaciones();
+});
 
 describe("diagnóstico del margen del cruce", () => {
   it("el parámetro «días después» arranca en 12 y su descripción no usa la palabra ventana", () => {
@@ -73,6 +76,7 @@ describe("diagnóstico del margen del cruce", () => {
     const t = await informe();
     expect(t).toContain("Pagado (incluye pagado con inconsistencia): 0 -> 1 · cobertura completa 0 -> 1 · parcial 0 -> 0");
     expect(t).toContain("Vencido: 1 -> 0");
+    expect(t).toContain("10. Vencimientos que cambian de estado por la regla «desde»");
     expect(t).toContain("3 días antes (valor actual): ");
     expect(t).toContain("pagos que respaldan más de un vencimiento: 0");
     expect(t).toMatch(/7 días antes: Pagado 1 \(completa 1 · parcial 0\)/);

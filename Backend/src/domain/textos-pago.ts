@@ -108,6 +108,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
         : { resumen: "Hay que verificar este pago.", parrafos, queHacer: "Qué hacer: confirmar con quien paga." };
     }
     case "vencido": {
+      const buscando = -d.dias <= diasEntreFechas(d.fecha, d.ventana.hasta); // hoy <= fecha de pago + días después
       const c = d.cobertura;
       const donde = c && c.cuentas > 0 ? ` en ${c.cuentas === 1 ? "la cuenta" : `las ${c.cuentas} cuentas`} de la sociedad` : "";
       const parrafos = [`No se encontró un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}${donde}.`];
@@ -119,7 +120,8 @@ export function textosDePago(d: DatosTexto): TextosPago {
       );
       if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
       if (d.motivo === MOTIVOS.vencidoSinEstado) parrafos.push("Se muestra como vencido aunque ningún estado de cuenta lo confirma.");
-      return { resumen: "No se encontró el pago.", parrafos, queHacer: p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo." };
+      const resumen = buscando && d.motivo !== MOTIVOS.vencidoSinEstado ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.ventana.hasta)}.` : `No se encontró pago hasta el ${fechaTexto(d.ventana.hasta)}.`;
+      return { resumen, parrafos, queHacer: p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo." };
     }
     case "sin_informacion": {
       if (d.motivo === MOTIVOS.sinInformacionDesde) {
@@ -152,7 +154,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
     }
     case "pagado": {
       const parrafos = movs.map(lineaMovimiento);
-      if (d.diferenciaDias !== null && d.diferenciaDias !== 0) parrafos.push(`Se pagó ${plural(Math.abs(d.diferenciaDias), "día", "días")} ${d.diferenciaDias > 0 ? "después" : "antes"} de la fecha de pago.`);
+      if (d.diferenciaDias !== null && d.diferenciaDias !== 0) parrafos.push(`Se pagó ${plural(Math.abs(d.diferenciaDias), "día", "días")} ${d.diferenciaDias > 0 ? "después" : "antes"} del día habitual de pago.`);
       return { resumen: "El pago aparece en el estado de cuenta.", parrafos, queHacer: null };
     }
     case "pagado_con_inconsistencia": {
@@ -165,6 +167,13 @@ export function textosDePago(d: DatosTexto): TextosPago {
       };
     }
     case "por_vencer":
+      if (d.motivo === MOTIVOS.esperaPago) {
+        return {
+          resumen: textoEsperaPago(-d.dias),
+          parrafos: [`La fecha de pago era el ${fechaTexto(d.fecha)}. Se sigue buscando el pago hasta el ${fechaTexto(d.ventana.hasta)}.`],
+          queHacer: "Qué hacer: confirmar con quien paga si el pago ya se hizo.",
+        };
+      }
       return {
         resumen: d.dias === 0 ? "Vence hoy." : `Vence en ${plural(Math.max(d.dias, 0), "día", "días")}.`,
         parrafos: [`La fecha de pago es el ${fechaTexto(d.fecha)}. Está dentro de los ${plural(d.diasAviso, "día", "días")} de aviso.`],
@@ -181,6 +190,29 @@ export function textosDePago(d: DatosTexto): TextosPago {
   }
 }
 
+function diasEntreFechas(a: string, b: string): number {
+  return Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86_400_000);
+}
+
+/** «El día de pago pasó hace N días; se espera el pago.» */
+export function textoEsperaPago(diasPasados: number): string {
+  return `El día de pago pasó hace ${plural(Math.max(diasPasados, 0), "día", "días")}; se espera el pago.`;
+}
+
+/**
+ * Texto corto del estado para la lista: la misma idea que el detalle. `dias` = de hoy a la fecha de pago (negativo = ya pasó);
+ * `fechaHasta` = fecha de pago + días después (hasta cuándo se busca el pago).
+ */
+export function textoEstadoLista(d: { estado: string; motivo: string | null; dias: number; fecha: string; fechaHasta: string }): string | null {
+  if (d.estado === "por_vencer" && d.motivo === MOTIVOS.esperaPago) return textoEsperaPago(-d.dias);
+  if (d.estado === "vencido" && d.motivo !== MOTIVOS.vencidoSinEstado) {
+    return -d.dias <= diasEntreFechas(d.fecha, d.fechaHasta)
+      ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.fechaHasta)}.`
+      : `No se encontró pago hasta el ${fechaTexto(d.fechaHasta)}.`;
+  }
+  return d.motivo;
+}
+
 function sumarDia(f: string): string {
   return new Date(new Date(`${f}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
 }
@@ -195,7 +227,7 @@ export const TEXTO_SALDO_NO_CUADRA = "Un estado de cuenta no cuadra con su saldo
 
 /** «Sin información» porque el rango de búsqueda empieza antes de los primeros estados de cuenta cargados. */
 export function textoSinEstadosAnteriores(primeraFecha: string | null): string {
-  return primeraFecha ? `No hay estados de cuenta anteriores al ${fechaTexto(primeraFecha)}; el pago pudo hacerse antes` : "No hay estados de cuenta de esas fechas; el pago pudo hacerse antes";
+  return primeraFecha ? `No hay estados de cuenta anteriores al ${fechaTexto(primeraFecha)}` : "No hay estados de cuenta de esas fechas";
 }
 
 /** Recuadro «Datos desactualizados»: una línea por sociedad. */

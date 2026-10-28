@@ -8,7 +8,7 @@ import { movimientosParaGrupos } from "../src/repositories/cruce.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeGruposCompartidos } from "../src/vencimientos/diagnostico-grupos.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
-import { fijarDiasDespues, vaciarImportaciones } from "./helpers/db.js";
+import { fijarRango, vaciarImportaciones } from "./helpers/db.js";
 
 // Textos de la pantalla: con datos reales, sin valores técnicos crudos y sin huecos aunque falte un dato.
 const CRUDO = /por_revisar|sin_informacion|pagado_con_inconsistencia|\bnull\b|undefined|NaN|\[object|\{|\}|\(\s*\)|\s{2,}|\s[,.;:]|,\s*,|:\s*\./i;
@@ -41,7 +41,7 @@ describe("textos del detalle", () => {
 
   it("vencido: dónde y hasta cuándo se buscó, en cuántas cuentas y hasta qué fecha hay estados", () => {
     const t = textosDePago({ ...base, estado: "vencido", motivo: MOTIVOS.vencido, movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 3, sinCobertura: [] } });
-    expect(t.resumen).toBe("No se encontró el pago.");
+    expect(t.resumen).toBe("No se encontró pago hasta el 18 oct 2026.");
     expect(t.parrafos).toEqual([
       "No se encontró un pago entre el 12 oct 2026 y el 18 oct 2026 en las 3 cuentas de la sociedad.",
       "Tampoco hay un pago con este número en las fechas cercanas dentro de los estados de cuenta cargados.",
@@ -113,7 +113,7 @@ describe("grupo de obligaciones con el mismo número de servicio: detalle de Por
   };
 
   beforeAll(async () => {
-    await fijarDiasDespues(3);
+    await fijarRango(3, 3);
     await vaciarImportaciones();
     sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
     cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001111", banco: "Banco Uno", moneda: "CRC" } })).id;
@@ -133,7 +133,7 @@ describe("grupo de obligaciones con el mismo número de servicio: detalle de Por
   });
   afterAll(async () => {
     await app.close();
-    await fijarDiasDespues(12);
+    await fijarRango(10, 12);
     await vaciarImportaciones();
   });
 

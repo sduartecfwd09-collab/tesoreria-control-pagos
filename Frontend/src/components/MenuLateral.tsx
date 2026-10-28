@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 
 // Menú lateral negro como el de la maqueta. Solo las pantallas que existen, en grupos separados por una línea.
 const Icono = ({ children }: { children: ReactNode }) => (
@@ -28,43 +28,70 @@ const GRUPOS: Pantalla[][] = [
   ],
 ];
 
-const CLAVE = "menu-plegado";
-
-// El estado «menú oculto» se recuerda en el navegador; si no hay almacenamiento, solo mientras la página está abierta.
-let enMemoria = false;
-const escuchas = new Set<() => void>();
-const leerPlegado = () => {
-  try {
-    return localStorage.getItem(CLAVE) === "1";
-  } catch {
-    return enMemoria;
-  }
-};
-const suscribir = (f: () => void) => {
-  escuchas.add(f);
-  return () => void escuchas.delete(f);
-};
-const guardarPlegado = (valor: boolean) => {
-  enMemoria = valor;
-  try {
-    localStorage.setItem(CLAVE, valor ? "1" : "0");
-  } catch {
-    /* sin almacenamiento */
-  }
-  escuchas.forEach((f) => f());
-};
 const foco = "focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-acento"; // el foco gris no se ve sobre negro
+const DEMORA_ABRIR = 150;
+const DEMORA_CERRAR = 300;
 
 /**
- * Cubre toda la pantalla: en pantallas anchas el menú es una columna fija que se puede ocultar (queda solo con iconos);
- * en pantallas angostas es una barra superior con un botón que abre y cierra la lista. Todo se maneja con el teclado.
+ * En pantallas anchas el menú es un riel angosto con solo iconos que se abre ENCIMA del contenido (no lo empuja):
+ * al pasar el cursor (demora corta), con el foco del teclado o con un toque en pantallas táctiles. Se cierra al quitar
+ * el cursor (demora algo mayor), con Esc o al sacar el foco. En pantallas angostas es una barra superior con un botón.
  */
 export function MenuLateral({ children }: { children: ReactNode }) {
   const ruta = usePathname();
-  const plegado = useSyncExternalStore(suscribir, leerPlegado, () => false);
-  const [abierto, setAbierto] = useState(false);
+  const [expandido, setExpandido] = useState(false);
+  const [abierto, setAbierto] = useState(false); // lista en pantallas angostas
+  const toqueAbrio = useRef(false);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const alternar = () => guardarPlegado(!plegado);
+  const limpiar = () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    temporizador.current = null;
+  };
+  useEffect(() => limpiar, []);
+
+  const programar = (valor: boolean, demora: number) => {
+    limpiar();
+    temporizador.current = setTimeout(() => setExpandido(valor), demora);
+  };
+  const fijar = (valor: boolean) => {
+    limpiar();
+    setExpandido(valor);
+  };
+
+  const alEntrar = (e: PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    programar(true, DEMORA_ABRIR);
+  };
+  const alSalir = (e: PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    programar(false, DEMORA_CERRAR);
+  };
+  // Con el dedo, un toque en el riel cerrado lo abre sin navegar; un toque fuera de los enlaces lo cierra.
+  const alTocar = (e: PointerEvent) => {
+    if (e.pointerType !== "touch") return;
+    const enEnlace = (e.target as HTMLElement).closest("a");
+    if (!expandido) {
+      toqueAbrio.current = true;
+      fijar(true);
+    } else if (!enEnlace) fijar(false);
+  };
+  const alHacerClic = (e: MouseEvent) => {
+    // El navegador genera el clic tras el toque: si ese toque abrió el riel, no debe navegar.
+    if (toqueAbrio.current) {
+      toqueAbrio.current = false;
+      e.preventDefault();
+    }
+  };
+  const alEnfocar = (e: FocusEvent<HTMLElement>) => {
+    if (e.target.matches(":focus-visible")) fijar(true);
+  };
+  const alDesenfocar = (e: FocusEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) fijar(false);
+  };
+  const alTeclear = (e: KeyboardEvent) => {
+    if (e.key === "Escape") fijar(false);
+  };
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -85,56 +112,56 @@ export function MenuLateral({ children }: { children: ReactNode }) {
         </button>
       </header>
 
-      <aside
-        id="menu-principal"
-        className={`${abierto ? "flex" : "hidden"} flex-col gap-7 bg-cabecera px-4 py-6 text-sobre-cabecera md:sticky md:top-0 md:flex md:h-screen md:flex-none md:self-start md:overflow-y-auto ${plegado ? "md:w-[76px] md:px-2.5" : "md:w-64"}`}
-      >
-        <button
-          type="button"
-          onClick={alternar}
-          aria-pressed={plegado}
-          aria-label={plegado ? "Mostrar menú" : "Ocultar menú"}
-          className={`hidden items-center gap-2 self-end rounded-lg border border-suave px-2.5 py-1.5 text-xs font-semibold hover:bg-[#1a1a1a] md:flex ${plegado ? "self-center" : ""} ${foco}`}
+      {/* Reserva el ancho del riel; el menú abierto se superpone sin mover el contenido. */}
+      <div className="md:relative md:w-[72px] md:flex-none">
+        <aside
+          id="menu-principal"
+          onPointerEnter={alEntrar}
+          onPointerLeave={alSalir}
+          onPointerDownCapture={alTocar}
+          onClickCapture={alHacerClic}
+          onFocus={alEnfocar}
+          onBlur={alDesenfocar}
+          onKeyDown={alTeclear}
+          className={`${abierto ? "flex" : "hidden"} flex-col gap-7 bg-cabecera px-4 py-6 text-sobre-cabecera md:fixed md:inset-y-0 md:left-0 md:z-40 md:flex md:overflow-x-hidden md:overflow-y-auto md:px-3 md:transition-[width] md:duration-150 motion-reduce:md:transition-none ${expandido ? "md:w-64" : "md:w-[72px]"}`}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d={plegado ? "M9 18l6-6-6-6" : "M15 18l-6-6 6-6"} />
-          </svg>
-          {!plegado && "Ocultar menú"}
-        </button>
-
-        <div className={`flex items-center gap-3 px-1.5 ${plegado ? "md:justify-center md:px-0" : ""}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Garnier" width={48} height={48} className="h-12 w-12 rounded-xl" />
-          <div className={plegado ? "md:hidden" : ""}>
-            <b className="block text-[19px] font-extrabold tracking-[0.08em]">GARNIER</b>
-            <small className="mt-0.5 block whitespace-nowrap text-[10px] font-light uppercase tracking-[0.16em]">Control de pagos</small>
+          <div className="flex items-center gap-3 px-1.5 md:px-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Garnier" width={48} height={48} className="h-12 w-12 flex-none rounded-xl" />
+            <div className={expandido ? "" : "md:sr-only"}>
+              <b className="block text-[19px] font-extrabold tracking-[0.08em]">GARNIER</b>
+              <small className="mt-0.5 block whitespace-nowrap text-[10px] font-light uppercase tracking-[0.16em]">Control de pagos</small>
+            </div>
           </div>
-        </div>
 
-        <nav aria-label="Principal">
-          {GRUPOS.map((grupo, i) => (
-            <ul key={i} className={`flex flex-col gap-1 ${i > 0 ? "mt-3 border-t border-suave pt-3" : ""}`}>
-              {grupo.map((p) => {
-                const activa = p.href === "/" ? ruta === "/" : ruta.startsWith(p.href);
-                return (
-                  <li key={p.href}>
-                    <Link
-                      href={p.href}
-                      onClick={() => setAbierto(false)}
-                      aria-current={activa ? "page" : undefined}
-                      title={plegado ? p.texto : undefined}
-                      className={`flex items-center gap-3 rounded-lg p-3 text-sm ${activa ? "bg-acento font-bold text-sobre-acento" : "font-medium hover:bg-[#1a1a1a]"} ${plegado ? "md:justify-center" : ""} ${foco}`}
-                    >
-                      {p.icono}
-                      <span className={plegado ? "md:sr-only" : ""}>{p.texto}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          ))}
-        </nav>
-      </aside>
+          <nav aria-label="Principal">
+            {GRUPOS.map((grupo, i) => (
+              <ul key={i} className={`flex flex-col gap-1 ${i > 0 ? "mt-3 border-t border-suave pt-3" : ""}`}>
+                {grupo.map((p) => {
+                  const activa = p.href === "/" ? ruta === "/" : ruta.startsWith(p.href);
+                  return (
+                    <li key={p.href}>
+                      <Link
+                        href={p.href}
+                        onClick={() => {
+                          setAbierto(false);
+                          fijar(false);
+                        }}
+                        aria-current={activa ? "page" : undefined}
+                        title={p.texto}
+                        className={`flex items-center gap-3 rounded-lg p-3 text-sm ${activa ? "bg-acento font-bold text-sobre-acento shadow-[inset_4px_0_0_0_var(--color-sobre-acento)]" : "font-medium hover:bg-[#1a1a1a]"} ${foco}`}
+                      >
+                        {p.icono}
+                        <span className={`whitespace-nowrap ${expandido ? "" : "md:sr-only"}`}>{p.texto}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ))}
+          </nav>
+        </aside>
+      </div>
 
       <main className="min-w-0 flex-1 px-5 py-8 md:px-11 md:py-9">{children}</main>
     </div>
