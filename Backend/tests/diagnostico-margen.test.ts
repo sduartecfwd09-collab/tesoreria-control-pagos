@@ -73,6 +73,9 @@ describe("diagnóstico del margen del cruce", () => {
     const t = await informe();
     expect(t).toContain("Pagado (incluye pagado con inconsistencia): 0 -> 1 · cobertura completa 0 -> 1 · parcial 0 -> 0");
     expect(t).toContain("Vencido: 1 -> 0");
+    expect(t).toContain("3 días antes (valor actual): ");
+    expect(t).toContain("pagos que respaldan más de un vencimiento: 0");
+    expect(t).toMatch(/7 días antes: Pagado 1 \(completa 1 · parcial 0\)/);
     expect(t).toMatch(/AAA \[cobertura completa\]: 1 pagos · antes de -10: 0 · después de \+20: 0\n\s+\+5: 1/);
   });
 
@@ -125,15 +128,16 @@ describe("diagnóstico del margen del cruce", () => {
     expect(t).toContain("AAA [cobertura parcial]: 1 pagos");
   });
 
-  it("5b: columna de saldo y archivos que cuadran por formato", async () => {
-    const detalle = (estado: string, motivo?: string) => JSON.stringify({ continuidad: { estado, motivo, usoSaldoApertura: estado === "cuadra" } });
-    await prisma.archivoImportado.updateMany({ where: { mes: "2026-10", cuentaId }, data: { formato: "E1", detalle: detalle("cuadra") } });
+  it("5b: columna de saldo, archivos que cuadran por formato, razones de «no verificable» y fechas", async () => {
+    const detalle = (estado: string, motivo?: string, extra: object = {}) => JSON.stringify({ continuidad: { estado, motivo, usoSaldoApertura: estado === "cuadra" }, ...extra });
+    await prisma.archivoImportado.updateMany({ where: { mes: "2026-10", cuentaId }, data: { formato: "E1", detalle: detalle("cuadra", undefined, { fechas: { del: "2026-10-01", al: "2026-10-31" }, periodoDeclarado: { del: "2026-10-01", al: "2026-10-31" } }) } });
     await prisma.archivoImportado.updateMany({ where: { mes: "2026-09", cuentaId }, data: { formato: "E1", detalle: detalle("no_cuadra") } });
     await prisma.archivoImportado.updateMany({ where: { cuentaId: cuentaOtraId }, data: { formato: "E2", detalle: detalle("no_verificable", "hay movimientos sin saldo") } });
     const t = await informe();
     expect(t).toMatch(/E1: columna de saldo en el formato: sí · archivos leídos: 2 /);
     expect(t).toMatch(/cuadran: 1 \([^)]*\) · no cuadran: 1 /);
-    expect(t).toMatch(/E2: columna de saldo en el formato: sí · archivos leídos: 2 [^\n]*\n\s+cuadran: 0 [^\n]*no verificables: 2 [^\n]*con filas sin saldo: 2 /);
+    expect(t).toMatch(/Del y Al reales guardados: 1 [^\n]*declaran el período en el encabezado: 1 [^\n]*mismo Del y Al que las fechas reales: 1 /);
+    expect(t).toMatch(/E2: columna de saldo en el formato: sí · archivos leídos: 2 [^\n]*\n\s+cuadran: 0 [^\n]*no verificables: 2 [^\n]*\n\s+no verificables porque algunas filas no traen saldo: 2 /);
   });
 
   it("3: obligaciones sin coincidencia por sociedad y proveedor", async () => {
@@ -144,19 +148,19 @@ describe("diagnóstico del margen del cruce", () => {
     expect(t).toContain("AAA | Fono Tres: 1 (cobertura completa 1 · parcial 0)");
   });
 
-  it("4, 5 y 6: débitos «Pago:» sin obligación, por formato y variantes sin alias", async () => {
+  it("4, 5 y 6: débitos «Pago:» sin obligación, por formato y variantes sin alias (ICETEL se reconoce como ICE)", async () => {
     await obligacion("ICE", "5550005");
     await debito(dia(2026, 10, 14), "Pago:ICE 55500051"); // proveedor reconocido, pero sin obligación con ese número
-    await debito(dia(2026, 10, 14), "Pago:ICETEL 66600066"); // variante sin alias
+    await debito(dia(2026, 10, 14), "Pago:ICETEL 66600066"); // ICETEL: alias supuesto de ICE
     await debito(dia(2026, 10, 14), "Pago:TIGO 77700077");
     await debito(dia(2026, 10, 14), "OTRO SIN FORMA", { referencia: "12345678" });
     const t = await informe();
     expect(t).toContain("total: 3 (cobertura completa 3 · parcial 0) · identificadores distintos: 3 (de 3 débitos con esa forma)");
-    expect(t).toMatch(/por proveedor reconocido[^\n]*\n\s+ICE: 1/);
-    expect(t).toMatch(/por proveedor NO reconocido:\n\s+ICETEL: 1 [^\n]*\n\s+TIGO: 1 /);
+    expect(t).toMatch(/por proveedor reconocido[^\n]*\n\s+ICE: 2 /);
+    expect(t).toMatch(/por proveedor NO reconocido:\n\s+TIGO: 1 /);
     expect(t).toContain("banco 0107 | formato E1: 6 débitos\n    cobertura completa: 6 débitos · con la forma de pago: 3 · con 8+ dígitos en descripción: 3, en referencia: 1");
-    expect(t).toContain("ICETEL: 1 (cobertura completa 1 · parcial 0) débitos · 1 identificadores distintos · correspondería a: ICE");
     expect(t).toContain("TIGO: 1 (cobertura completa 1 · parcial 0) débitos · 1 identificadores distintos · correspondería a: sin sugerencia");
+    expect(t).not.toContain("ICETEL");
   });
 
   it("7: vencimientos cuyo rango empieza antes de la primera fecha con datos", async () => {

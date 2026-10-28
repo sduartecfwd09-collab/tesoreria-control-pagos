@@ -132,6 +132,16 @@ export function textosDePago(d: DatosTexto): TextosPago {
           queHacer: "Qué hacer: cargar los estados de cuenta anteriores a esa fecha.",
         };
       }
+      if (d.motivo === MOTIVOS.sinInformacionSaldo) {
+        return {
+          resumen: "Todavía no se puede saber si se pagó.",
+          parrafos: [
+            "Un estado de cuenta de esta sociedad no cuadra con su saldo, así que no se usa para confirmar pagos.",
+            `Se buscaba un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}; la fecha de pago era el ${fechaTexto(d.fecha)}.`,
+          ],
+          queHacer: "Qué hacer: revisar el estado de cuenta cuyo saldo no cuadra o cargar uno corregido.",
+        };
+      }
       const c = d.cobertura;
       const cuentas = (c?.sinCobertura ?? []).map((x) => `${x.banco ? `${x.banco} ` : ""}${x.cuenta}${x.hasta ? ` desde el ${fechaTexto(sumarDia(x.hasta))}` : ""}`);
       const faltan = cuentas.length > 0 ? `Faltan los estados de cuenta de ${listaTexto(cuentas)}.` : c && c.cuentas === 0 ? "No hay estados de cuenta cargados de esta sociedad." : "Faltan los estados de cuenta posteriores.";
@@ -179,6 +189,9 @@ function sumarDia(f: string): string {
 export function textoFaltanEstados(sinInfoHasta: string | null): string {
   return sinInfoHasta ? `Faltan estados de cuenta desde el ${fechaTexto(sumarDia(sinInfoHasta))}` : "Faltan estados de cuenta de este período";
 }
+
+/** «Sin información» porque un estado de cuenta no cuadra con su saldo (texto corto de la lista). */
+export const TEXTO_SALDO_NO_CUADRA = "Un estado de cuenta no cuadra con su saldo; no se usa para confirmar pagos";
 
 /** «Sin información» porque el rango de búsqueda empieza antes de los primeros estados de cuenta cargados. */
 export function textoSinEstadosAnteriores(primeraFecha: string | null): string {

@@ -5,9 +5,10 @@
 // leído de ese mes = completa) y mantiene su total.
 import { nombresEnDescripcion, proveedorCanonico } from "../config/alias-proveedores.js";
 import { leerPagoConForma } from "../config/patron-pago.js";
-import { MOTIVOS, type ResultadoCruce } from "../domain/cruce.js";
+import { cruzar, MOTIVOS, type ResultadoCruce } from "../domain/cruce.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { estadoDeArchivo } from "../domain/estado-archivo.js";
+import { razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
 import { FORMATOS } from "../ingest/formatos.js";
 import { normalizar } from "../ingest/utiles.js";
 import type { CreditoParaDiagnostico, DebitoParaFormato } from "../repositories/cruce.js";
@@ -322,8 +323,8 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
   L.push("", "5b. Saldo por formato (E1 a E7): ¿trae columna de saldo? y archivos que cuadran (saldo anterior + créditos - débitos = saldo siguiente en todas las filas), con la cobertura de la sociedad en el mes del archivo:");
   const sociedadDeCuenta = new Map<number, number>();
   for (const [sociedadId, cuentas] of r.datos.cuentas) for (const c of cuentas) sociedadDeCuenta.set(c.cuentaId, sociedadId);
-  type Saldo = { leidos: Conteo; cuadran: Conteo; noCuadran: Conteo; noVerificables: Conteo; sinSaldo: Conteo; conApertura: Conteo };
-  const nuevoSaldo = (): Saldo => ({ leidos: new Conteo(), cuadran: new Conteo(), noCuadran: new Conteo(), noVerificables: new Conteo(), sinSaldo: new Conteo(), conApertura: new Conteo() });
+  type Saldo = { leidos: Conteo; cuadran: Conteo; noCuadran: Conteo; noVerificables: Conteo; razones: Map<string, Conteo>; conApertura: Conteo; conFechas: Conteo; declaran: Conteo; declaranYCoinciden: Conteo };
+  const nuevoSaldo = (): Saldo => ({ leidos: new Conteo(), cuadran: new Conteo(), noCuadran: new Conteo(), noVerificables: new Conteo(), razones: new Map(), conApertura: new Conteo(), conFechas: new Conteo(), declaran: new Conteo(), declaranYCoinciden: new Conteo() });
   const porSaldo = new Map<string, Saldo>();
   for (const a of x.archivos) {
     if (estadoDeArchivo(a) !== "leido") continue;
@@ -331,19 +332,27 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
     const f = porSaldo.get(k) ?? nuevoSaldo();
     const s = a.cuentaId === null ? undefined : sociedadDeCuenta.get(a.cuentaId);
     const g: Grupo = s !== undefined && a.mes !== null ? grupoDe(s, a.mes) : "parcial";
-    const c = (a.detalle as { continuidad?: { estado?: string; motivo?: string; usoSaldoApertura?: boolean } } | null)?.continuidad;
+    const det = a.detalle as { continuidad?: ContinuidadGuardada & { usoSaldoApertura?: boolean }; fechas?: { del: string; al: string } | null; periodoDeclarado?: { del: string | null; al: string | null } | null } | null;
+    const c = det?.continuidad;
     f.leidos.add(g);
     if (c?.estado === "cuadra") f.cuadran.add(g);
     else if (c?.estado === "no_cuadra") f.noCuadran.add(g);
-    else { f.noVerificables.add(g); if (c?.motivo === "hay movimientos sin saldo") f.sinSaldo.add(g); }
+    else { f.noVerificables.add(g); conteoDe(f.razones, TEXTO_RAZON[razonDeContinuidad(c) ?? "otro"]).add(g); }
     if (c?.usoSaldoApertura) f.conApertura.add(g);
+    if (det?.fechas) f.conFechas.add(g);
+    if (det?.periodoDeclarado) {
+      f.declaran.add(g);
+      if (det.fechas && det.periodoDeclarado.del === det.fechas.del && det.periodoDeclarado.al === det.fechas.al) f.declaranYCoinciden.add(g);
+    }
     porSaldo.set(k, f);
   }
   for (const [k, f] of [...porSaldo].sort(([a], [b]) => a.localeCompare(b))) {
     const spec = FORMATOS.find((e) => e.id === k);
     const columna = spec ? (spec.columnas.saldo ? `sí${spec.saldoDiario ? " (saldo de cierre del día)" : ""}` : "no") : "no se sabe";
     L.push(`  ${k}: columna de saldo en el formato: ${columna} · archivos leídos: ${f.leidos.texto()}`);
-    L.push(`    cuadran: ${f.cuadran.texto()} · no cuadran: ${f.noCuadran.texto()} · no verificables: ${f.noVerificables.texto()} (de ellos, con filas sin saldo: ${f.sinSaldo.texto()}) · comparados con saldo de apertura: ${f.conApertura.texto()}`);
+    L.push(`    cuadran: ${f.cuadran.texto()} · no cuadran: ${f.noCuadran.texto()} · no verificables: ${f.noVerificables.texto()} · comparados con saldo de apertura: ${f.conApertura.texto()}`);
+    for (const [razon, n] of [...f.razones].sort((a, b) => b[1].total - a[1].total)) L.push(`      no verificables porque ${razon}: ${n.texto()}`);
+    L.push(`    Del y Al reales guardados: ${f.conFechas.texto()} · declaran el período en el encabezado: ${f.declaran.texto()} · de ellos, con el mismo Del y Al que las fechas reales: ${f.declaranYCoinciden.texto()}`);
   }
   if (porSaldo.size === 0) L.push("  sin archivos leídos");
 
@@ -422,5 +431,24 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
   for (const a of abiertos) totalAbiertos.add(a.grupo);
   L.push(`  total: ${totalAbiertos.texto()}`);
   for (const a of abiertos) L.push(`  ${a.socNombre} | ${a.proveedor} | ${a.categoria} | ${a.mes} | ${a.id} | ${a.estado} | cobertura ${a.grupo} | ${a.motivo}`);
+
+  // 9. Rango de búsqueda: qué pasa con más días antes (los días después quedan como están). Solo en memoria: no guarda nada.
+  L.push("", `9. Más días antes de la fecha de pago (días después = ${diasDespues}); cifras por estado con su separación por cobertura:`);
+  for (const dAntes of DIAS_ANTES_PRUEBA) {
+    const { resultados } = cruzar({ ...r.datos, ...r.parametros, diasAntes: dAntes });
+    const partes = ESTADOS_CIFRAS.slice(0, 4).map((f) => {
+      const c = new Conteo();
+      for (const q of resultados) if (f.estados.includes(q.estado)) c.add(grupoVenc(q.vencimientoId));
+      return `${f.etiqueta.split(" (")[0]} ${c.total} (completa ${c.completa} · parcial ${c.parcial})`;
+    });
+    // un pago nunca respalda dos vencimientos: se cuenta cuántos movimientos aparecen en más de un resultado
+    const usados = new Map<number, number>();
+    for (const q of resultados) if (q.movimientoId !== null) usados.set(q.movimientoId, (usados.get(q.movimientoId) ?? 0) + 1);
+    const repetidos = [...usados.values()].filter((n) => n > 1).length;
+    L.push(`  ${dAntes} días antes${dAntes === diasAntes ? " (valor actual)" : ""}: ${partes.join(" · ")} · pagos que respaldan más de un vencimiento: ${repetidos}`);
+  }
   return L.join("\n");
 }
+
+/** Días antes que prueba la tabla 9. */
+const DIAS_ANTES_PRUEBA = [3, 5, 7, 10];

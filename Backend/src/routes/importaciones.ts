@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
+import { textoSaldo, type ContinuidadGuardada } from "../domain/saldo.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
@@ -13,6 +14,8 @@ type DetalleArchivo = {
   advertencias?: string[];
   discrepancias?: { tipo: string; mensaje: string }[];
   continuidad?: unknown;
+  fechas?: { del: string; al: string } | null;
+  periodoDeclarado?: { del: string | null; al: string | null } | null;
   monedaOrigen?: string;
   filasPieIgnoradas?: number;
   conImagenes?: boolean;
@@ -33,7 +36,11 @@ export async function rutasImportaciones(app: FastifyInstance) {
         retiradoEn: a.retiradoEn?.toISOString() ?? null,
         advertencias: (d.advertencias ?? []).map((t) => textoSeguro(t)),
         discrepancias: (d.discrepancias ?? []).map((x) => ({ tipo: x.tipo, mensaje: textoSeguro(x.mensaje) })),
-        continuidad: d.continuidad ?? null, monedaOrigen: d.monedaOrigen ?? null,
+        continuidad: d.continuidad ?? null,
+        // resultado del saldo en lenguaje claro: Cuadra, No cuadra o No verificable, con su motivo
+        saldo: textoSaldo(d.continuidad as ContinuidadGuardada | undefined),
+        fechas: d.fechas ?? null, periodoDeclarado: d.periodoDeclarado ?? null,
+        monedaOrigen: d.monedaOrigen ?? null,
         // el lector ignora las imágenes (sin OCR); null = archivo leído antes de registrar este dato
         conImagenes: typeof d.conImagenes === "boolean" ? d.conImagenes : null,
         leidoEn: a.leidoEn?.toISOString() ?? null,

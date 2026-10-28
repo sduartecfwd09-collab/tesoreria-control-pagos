@@ -41,6 +41,9 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | El detalle de Vencido dice si hay un pago con el mismo número fuera del margen (el más cercano que no respalda otro vencimiento). | Un «no se encontró» sin más sugería que el pago no existía en ningún estado. |
 | 2026-10-27 | Los días después de la fecha de pago pasan de 3 a 12 (sigue siendo parámetro editable); los días antes se quedan en 3. | Los pagos de servicios llegan al banco varios días después de la fecha del catálogo; el diagnóstico con datos reales mostrará si 12 es suficiente. |
 | 2026-10-27 | La distancia máxima del diagnóstico (45 días) pasa a parámetro; el diagnóstico agrega la categoría (h) «el número aparece en un crédito», créditos con número del catálogo por formato, cobertura de saldo por formato y separa toda cifra en sociedades con cobertura completa y parcial. | Entender por qué un pago no cruza sin cambiar ningún estado. |
+| 2026-10-27 | Integridad por saldo: un archivo que «no cuadra» no cuenta como cobertura (Sin información, nunca Vencido); «no verificable» no cambia la cobertura. Tolerancia de redondeo como parámetro (1 centavo). Estados de cuenta muestra Cuadra, No cuadra y No verificable con su motivo. | Un estado de cuenta con saldo inconsistente puede estar incompleto: no sirve para afirmar que no hubo pago. |
+| 2026-10-27 | Cada archivo guarda su Del y Al reales (primera y última fecha con movimientos) y el período que declara el encabezado; ninguna regla de cobertura los usa todavía. | Preparar una cobertura por fechas reales sin cambiarla aún. |
+| 2026-10-27 | «ICETEL» se reconoce como ICE en la descripción del banco (supuesto; solo desempate por nombre). No hay alias para CARTA, MUAL, CTAMUSA ni MUEZ. | Reconocer pagos del ICE sin unir proveedores en la importación. |
 
 ## Pendientes con Tesorería
 

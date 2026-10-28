@@ -1,5 +1,6 @@
 import { estadoDeArchivo, motivoDeArchivo } from "./estado-archivo.js";
 import { parsearNombreArchivo } from "../ingest/nombre-archivo.js";
+import { textoSaldo, type ContinuidadGuardada } from "./saldo.js";
 
 export interface ArchivoCobertura {
   id?: number;
@@ -33,6 +34,8 @@ export interface CeldaCobertura {
   duplicados: number;
   /** "cuadra" | "no_cuadra" | "no_verificable" */
   saldo?: string;
+  /** el resultado del saldo en lenguaje claro (también para Cuadra y No verificable) */
+  saldoMotivo?: string;
   error?: string | null;
 }
 
@@ -60,6 +63,7 @@ export const conImagenesDe = (d: unknown): boolean | null => {
 };
 
 const continuidadDe = (d: unknown): string | undefined => (d as { continuidad?: { estado?: string } } | null)?.continuidad?.estado;
+const saldoDe = (d: unknown) => textoSaldo((d as { continuidad?: ContinuidadGuardada } | null)?.continuidad);
 
 /**
  * Cobertura por sociedad, cuenta y mes: qué hay, qué falta y qué falló.
@@ -98,6 +102,7 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       movimientos: a.numMovimientos,
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
+      saldoMotivo: saldoDe(a.detalle)?.motivo,
       error: motivoDeArchivo(a),
     };
     filas.set(k, fila);

@@ -25,7 +25,14 @@ export interface Continuidad {
   filasConFallo: number[];
   usoSaldoApertura: boolean;
   motivo?: string;
+  /** por qué no se pudo verificar (solo si estado = no_verificable); ver `razonDeContinuidad` */
+  razon?: RazonNoVerificable;
+  /** movimientos del archivo y cuántos vienen sin saldo */
+  movimientos?: number;
+  filasSinSaldo?: number;
 }
+
+export type RazonNoVerificable = "sin_movimientos" | "saldo_vacio_todas" | "saldo_vacio_algunas" | "un_solo_saldo" | "otro";
 
 export interface Discrepancia {
   tipo: "sociedad" | "cuenta" | "periodo" | "formato";
@@ -42,6 +49,10 @@ export interface ResultadoLectura {
   bancoArchivo: string | null;
   movimientos: MovimientoLeido[];
   continuidad: Continuidad;
+  /** primera y última fecha con movimientos del archivo (AAAA-MM-DD); null si no tiene movimientos */
+  fechas: { del: string; al: string } | null;
+  /** período declarado en el encabezado; null si el formato no lo declara */
+  periodoDeclarado: { del: string | null; al: string | null } | null;
   discrepancias: Discrepancia[];
   advertencias: string[];
   /** filas del pie (resúmenes, totales) posteriores al último movimiento: se ignoran, solo se cuentan */

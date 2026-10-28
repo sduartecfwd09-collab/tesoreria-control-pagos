@@ -20,6 +20,9 @@ export const proveedorCanonico = (nombre: string): string => PORCLAVE.get(clave(
 // servicio. Es configuración del código: cada línea es una decisión explícita; la comparación ignora mayúsculas, tildes y espacios.
 const ROTULOS_EN_DESCRIPCION: Record<string, string[]> = {
   Movistar: ["MOVIS"],
+  // SUPUESTO (pendiente de confirmar con Tesorería): «ICETEL» en la descripción del banco es el ICE. Solo afecta el
+  // desempate por nombre y el reconocimiento en el diagnóstico; no une proveedores en la importación del catálogo.
+  ICE: ["ICETEL"],
 };
 
 const ROTULOS_POR_CLAVE = new Map(Object.entries(ROTULOS_EN_DESCRIPCION).map(([canonico, rotulos]) => [clave(canonico), rotulos.map(clave)]));

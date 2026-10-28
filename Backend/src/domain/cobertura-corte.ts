@@ -13,6 +13,8 @@ export interface CuentaCorte {
   meses: Map<string, Date | null>;
   /** primera fecha con movimientos cargados de la cuenta (null o ausente = no se conoce) */
   primeraFecha?: Date | null;
+  /** meses con archivo leído cuyo saldo no cuadra: la cuenta es conocida, pero ese mes NO cuenta como cobertura (no está en `meses`) */
+  mesesNoCuadran?: Set<string>;
 }
 
 export interface ResultadoCobertura {
@@ -67,6 +69,15 @@ export function coberturaDeSociedad(cuentas: CuentaCorte[], desde: Date, hasta: 
     cubierto = necesario;
   }
   return { cubre: true, hasta: cubierto };
+}
+
+/** ¿Alguna cuenta tiene, dentro del rango, un mes cuyo archivo no cuadra con su saldo? */
+export function noCuadraEnRango(cuentas: CuentaCorte[], desde: Date, hasta: Date): boolean {
+  const ultimoMes = periodoDeFecha(hasta);
+  for (let mes = periodoDeFecha(desde); mes <= ultimoMes; mes = mesSiguiente(mes)) {
+    if (cuentas.some((c) => c.mesesNoCuadran?.has(mes))) return true;
+  }
+  return false;
 }
 
 /** Última fecha hasta la que una cuenta tiene datos (el corte de su mes más reciente con datos), o null si no tiene. */

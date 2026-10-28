@@ -20,12 +20,22 @@ export interface DatosCruce {
   cuentas: Map<number, CuentaCorte[]>;
 }
 
+/** El lector guardó que el saldo de este archivo no cuadra (en el detalle JSON del archivo). */
+function noCuadra(detalle: string | null): boolean {
+  if (!detalle) return false;
+  try {
+    return (JSON.parse(detalle) as { continuidad?: { estado?: string } }).continuidad?.estado === "no_cuadra";
+  } catch {
+    return false;
+  }
+}
+
 /** Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos. */
 export async function cargarCoberturaCuentas(): Promise<Map<number, CuentaCorte[]>> {
   const [archivos, ultimas, primeras] = await Promise.all([
     prisma.archivoImportado.findMany({
       where: { estado: "leido", retiradoEn: null, cuentaId: { not: null }, mes: { not: null } },
-      select: { cuentaId: true, mes: true, cuenta: { select: { sociedadId: true } } },
+      select: { cuentaId: true, mes: true, detalle: true, cuenta: { select: { sociedadId: true } } },
     }),
     prisma.movimiento.groupBy({ by: ["cuentaId", "periodo"], where: { archivo: { retiradoEn: null } }, _max: { fecha: true } }),
     primerasFechasPorCuenta(),
@@ -34,8 +44,9 @@ export async function cargarCoberturaCuentas(): Promise<Map<number, CuentaCorte[
   const porCuenta = new Map<number, { sociedadId: number; corte: CuentaCorte }>();
   for (const a of archivos) {
     const cuentaId = a.cuentaId!;
-    const c = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map(), primeraFecha: primeras.get(cuentaId) ?? null } };
-    c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
+    const c: { sociedadId: number; corte: CuentaCorte } = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map(), primeraFecha: primeras.get(cuentaId) ?? null } };
+    if (noCuadra(a.detalle)) c.corte.mesesNoCuadran = (c.corte.mesesNoCuadran ?? new Set()).add(a.mes!);
+    else c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
     porCuenta.set(cuentaId, c);
   }
   const cuentas = new Map<number, CuentaCorte[]>();

@@ -41,6 +41,13 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "45", unidad: "días", min: 1, max: 365, supuesto: false,
   },
   {
+    clave: "tolerancia_saldo",
+    etiqueta: "Tolerancia de redondeo del saldo",
+    ayuda:
+      "Diferencia máxima, en centavos, que se acepta por redondeo al comprobar que el saldo de un estado de cuenta cuadra (saldo anterior más créditos menos débitos). Se aplica al leer los archivos: después de cambiarla hay que volver a importar. Un estado de cuenta cuyo saldo no cuadra no cuenta como cobertura.",
+    tipo: "entero", ambito: "global", valorInicial: "1", unidad: "centavos", min: 0, max: 1000, supuesto: false,
+  },
+  {
     clave: "aviso_dias",
     etiqueta: "Días de aviso antes del vencimiento",
     ayuda: "Con cuántos días de anticipación un vencimiento pasa a “por vencer”, se prepara el aviso por correo y se genera en el calendario.",

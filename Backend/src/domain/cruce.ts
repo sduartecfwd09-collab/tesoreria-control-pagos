@@ -15,9 +15,22 @@
 //     no empieza antes de la primera fecha con movimientos cargados) hasta F + díasDespués; si hay
 //     duda de cobertura, Sin información (con la fecha hasta la que hay datos): es un estado que requiere atención y nunca
 //     se muestra como Vencido, salvo que el parámetro «Marcar Vencido aunque falte el estado de cuenta» esté encendido.
+//
+// ORDEN DE EVALUACIÓN de los estados de un vencimiento (el primero que se cumple gana):
+//  1. Empate de un pago entre dos vencimientos de la misma obligación -> Por revisar.
+//  2. Pago dudoso por número de servicio compartido (grupo) -> Por revisar.
+//  3. Hay pago asignado -> Pagado, o Pagado con inconsistencia (pago repetido u otra sociedad).
+//  4. Hoy antes de F menos los días de aviso -> Programado; hasta F -> Por vencer.
+//  5. Pasó F y la cobertura de estados de cuenta cubre todo el rango -> Vencido.
+//  6. No cubre y algún estado de cuenta del rango no cuadra con su saldo -> Sin información (siempre; ni el parámetro lo vuelve Vencido).
+//  7. No cubre y el parámetro «Marcar Vencido aunque falte el estado de cuenta» está encendido -> Vencido con nota.
+//  8. No cubre porque el rango empieza antes de la primera fecha con datos -> Sin información.
+//  9. No cubre por otra causa -> Sin información con la fecha hasta la que hay datos.
+// Por eso un pago candidato con duda (1 o 2) prevalece sobre Sin información: Por revisar se decide antes de mirar la cobertura.
+// Los créditos nunca cuentan como pago: solo se cruzan débitos.
 import { nombresEnDescripcion } from "../config/alias-proveedores.js";
 import { normalizar } from "../ingest/utiles.js";
-import { coberturaDeSociedad, type CuentaCorte } from "./cobertura-corte.js";
+import { coberturaDeSociedad, noCuadraEnRango, type CuentaCorte } from "./cobertura-corte.js";
 import { identificadorClave, patronIdentificador } from "./identificadores.js";
 
 export type EstadoCruce = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar";
@@ -30,6 +43,7 @@ export const MOTIVOS = {
   compartido: "No se pudo saber con certeza a cuál servicio corresponde el pago: el número de servicio está en varias obligaciones",
   vencido: "Pasó la fecha de pago y no hay pago en los estados de cuenta",
   sinInformacion: "Faltan estados de cuenta para confirmar si hubo pago",
+  sinInformacionSaldo: "Un estado de cuenta no cuadra con su saldo: no se usa para confirmar si hubo pago",
   sinInformacionDesde: "No hay estados de cuenta anteriores a la primera fecha cargada: el pago pudo hacerse antes",
   vencidoSinEstado: "Pasó la fecha de pago; sin estado de cuenta que lo confirme",
 } as const;
@@ -186,6 +200,8 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
     const inicioRango = new Date(v.fecha.getTime() - e.diasAntes * MS_DIA);
     const cobertura = coberturaDeSociedad(e.cuentas.get(v.sociedadId) ?? [], inicioRango, limite, e.hoy);
     if (cobertura.cubre) return { ...base, estado: "vencido", motivo: MOTIVOS.vencido };
+    // un estado de cuenta cuyo saldo no cuadra no cuenta como cobertura: nunca Vencido, ni siquiera con el parámetro encendido
+    if (noCuadraEnRango(e.cuentas.get(v.sociedadId) ?? [], inicioRango, limite)) return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacionSaldo, sinInfoHasta: cobertura.hasta };
     // con el parámetro encendido se muestra Vencido, pero conserva la fecha de corte y la nota de que nadie lo confirmó
     if (e.marcarVencidoSinEstado) return { ...base, estado: "vencido", motivo: MOTIVOS.vencidoSinEstado, sinInfoHasta: cobertura.hasta };
     if (cobertura.antesDe) return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacionDesde, sinInfoHasta: null };

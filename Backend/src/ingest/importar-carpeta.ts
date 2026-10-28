@@ -5,7 +5,8 @@ import { relojSistema, type Reloj } from "../domain/reloj.js";
 import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 import { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE } from "../domain/estado-archivo.js";
 import { clavesDeDeduplicacion } from "./clave-dedup.js";
-import { ErrorLectura, LECTOR_VERSION, leerEstadoDeCuenta, leerLibro } from "./lector.js";
+import { valorGlobal } from "../repositories/parametros.js";
+import { ErrorLectura, LECTOR_VERSION, TOLERANCIA_SALDO_DEFECTO, leerEstadoDeCuenta, leerLibro } from "./lector.js";
 import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
 import type { ResultadoLectura } from "./tipos.js";
 import {
@@ -99,6 +100,8 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   // Fase 1: sociedad, hash y lectura. La sociedad y el nombre se comprueban ANTES de abrir el archivo.
   // Un archivo con error se marca y se sigue con los demás.
   const lecturas: Lectura[] = [];
+  const tolerancia = Number(await valorGlobal("tolerancia_saldo"));
+  const toleranciaSaldo = Number.isInteger(tolerancia) && tolerancia >= 0 ? tolerancia : TOLERANCIA_SALDO_DEFECTO;
   const sociedades = new Map<string, Awaited<ReturnType<typeof buscarSociedadPorCodigo>>>();
   for (const cand of candidatos) {
     if (!sociedades.has(cand.carpeta)) sociedades.set(cand.carpeta, await buscarSociedadPorCodigo(cand.carpeta));
@@ -122,7 +125,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
         continue;
       }
       if (!cand.nombre) throw new ErrorLectura("El nombre no cumple la convención «<IBAN> <MMAA> <SOCIEDAD>.xlsx»");
-      const resultado = leerEstadoDeCuenta(await leerLibro(contenido), cand.nombre);
+      const resultado = leerEstadoDeCuenta(await leerLibro(contenido), cand.nombre, { toleranciaSaldo });
       lecturas.push({ cand, sociedadId: sociedad.id, hash, resultado });
     } catch (e) {
       lecturas.push({ cand, sociedadId: sociedad.id, hash, error: e instanceof ErrorLectura ? e.message : "Error inesperado al leer el archivo" });
@@ -177,7 +180,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     const claves = clavesDeDeduplicacion(cuenta.id, r.movimientos);
     const movs = r.movimientos.map((m, i) => ({ ...m, claveDedup: claves[i]! }));
     const detalle = {
-      versionLector: LECTOR_VERSION, continuidad: r.continuidad, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes,
+      versionLector: LECTOR_VERSION, continuidad: r.continuidad, fechas: r.fechas, periodoDeclarado: r.periodoDeclarado, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes,
       monedaOrigen: origen, moneda: monedaArchivo, hojaLeida: r.hoja, filaEncabezado: r.filaEncabezado,
     };
     try {

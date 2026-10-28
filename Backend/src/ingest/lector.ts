@@ -9,7 +9,7 @@ import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 6; // 6: registra si el archivo trae imágenes
+export const LECTOR_VERSION = 7; // 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
 
 export class ErrorLectura extends Error {}
 
@@ -44,7 +44,10 @@ export async function leerLibro(contenido: Buffer): Promise<LibroLeido> {
   return { wb, dibujosOmitidos, conImagenes: await tieneImagenes(contenido) };
 }
 
-export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | null): ResultadoLectura {
+/** Tolerancia de redondeo del saldo cuando no se indica otra (centavos); es el valor inicial del parámetro «Tolerancia de redondeo del saldo». */
+export const TOLERANCIA_SALDO_DEFECTO = 1;
+
+export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | null, opciones: { toleranciaSaldo?: number } = {}): ResultadoLectura {
   const wb = libro.wb;
   const det = detectarFormato(wb.worksheets, nombre?.codigoBanco ?? null);
   if (!det.ok) throw new ErrorLectura(det.error);
@@ -125,7 +128,10 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     }
   }
 
-  const continuidad = verificarContinuidad(movimientos, { apertura: meta.apertura, saldoDiario: spec.saldoDiario });
+  const continuidad = verificarContinuidad(movimientos, { apertura: meta.apertura, saldoDiario: spec.saldoDiario, tolerancia: opciones.toleranciaSaldo ?? TOLERANCIA_SALDO_DEFECTO });
+  // Primera y última fecha con movimientos del archivo (reales, no las del nombre ni las del encabezado).
+  const fechasMov = movimientos.map((m) => m.fecha.getTime());
+  const fechas = fechasMov.length ? { del: new Date(Math.min(...fechasMov)).toISOString().slice(0, 10), al: new Date(Math.max(...fechasMov)).toISOString().slice(0, 10) } : null;
 
   return {
     formato,
@@ -135,6 +141,8 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     bancoArchivo: meta.banco,
     movimientos,
     continuidad,
+    fechas,
+    periodoDeclarado: meta.periodoDeclarado,
     discrepancias,
     advertencias,
     filasPieIgnoradas,
@@ -148,6 +156,8 @@ interface Metadatos {
   banco: string | null;
   apertura: number | null;
   periodoMes: string | null;
+  /** período que el encabezado declara («Del: dd/mm/aaaa Al: dd/mm/aaaa»); null si no lo declara */
+  periodoDeclarado: { del: string | null; al: string | null } | null;
 }
 
 function textosMeta(hoja: Worksheet, hasta: number): string[] {
@@ -177,12 +187,17 @@ function leerMetadatos(wb: ExcelJS.Workbook, hoja: Worksheet, filaEncabezado: nu
   const banco = /\bbct\b/.test(junto) ? "BCT" : /davivienda/.test(junto) ? "Davivienda" : /\bbncr\b|banco nacional/.test(junto) ? "BNCR" : null;
 
   let periodoMes: string | null = null;
+  let del: string | null = null;
+  let al: string | null = null;
   for (const t of textos) {
     const m = /del:\s*(\d{2})\/(\d{2})\/(\d{4})/i.exec(t);
-    if (m) { periodoMes = `${m[3]}-${m[2]}`; break; }
+    if (m && del === null) { del = `${m[3]}-${m[2]}-${m[1]}`; periodoMes = `${m[3]}-${m[2]}`; }
+    const f = /\bal:\s*(\d{2})\/(\d{2})\/(\d{4})/i.exec(t);
+    if (f && al === null) al = `${f[3]}-${f[2]}-${f[1]}`;
   }
+  const periodoDeclarado = del !== null || al !== null ? { del, al } : null;
 
-  return { moneda: primera, monedaConflicto: monedas.size > 1, banco, apertura: leerApertura(hoja, filaEncabezado), periodoMes };
+  return { moneda: primera, monedaConflicto: monedas.size > 1, banco, apertura: leerApertura(hoja, filaEncabezado), periodoMes, periodoDeclarado };
 }
 
 /** Saldo inicial/anterior: la primera celda numérica a la derecha de una etiqueta "Saldo inicial" (o "Saldo anterior"). */

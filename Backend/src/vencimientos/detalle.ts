@@ -12,7 +12,7 @@ import { responsableEfectivo } from "../domain/obligaciones.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { normalizar } from "../ingest/utiles.js";
-import { textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
+import { TEXTO_SALDO_NO_CUADRA, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
@@ -127,7 +127,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     movida: v.fechaOriginal !== null,
     estado: v.estado,
     motivo: v.motivo,
-    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : v.motivo,
+    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : v.motivo,
     textos,
     diferenciaDias: v.diferenciaDias,
     sinInfoHasta: v.sinInfoHasta ? iso(v.sinInfoHasta) : null,

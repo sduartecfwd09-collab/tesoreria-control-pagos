@@ -28,6 +28,8 @@ export interface CeldaCobertura {
   movimientos: number;
   duplicados: number;
   saldo?: "cuadra" | "no_cuadra" | "no_verificable";
+  /** el resultado del saldo en lenguaje claro */
+  saldoMotivo?: string;
   error?: string | null;
 }
 
@@ -64,6 +66,10 @@ export interface ArchivoImportado {
   advertencias: string[];
   discrepancias: { tipo: string; mensaje: string }[];
   continuidad: { estado: string; verificados: number; fallos: number; filasConFallo: number[] } | null;
+  /** Cuadra, No cuadra o No verificable, con su motivo en lenguaje claro; null si el archivo no trae la comprobación */
+  saldo: { resultado: "cuadra" | "no_cuadra" | "no_verificable"; motivo: string } | null;
+  /** primera y última fecha con movimientos del archivo */
+  fechas: { del: string; al: string } | null;
   monedaOrigen: string | null;
   leidoEn: string | null;
 }

@@ -19,6 +19,8 @@ function Etiqueta({ children, tono }: { children: React.ReactNode; tono: "ambar"
   return <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${clases}`}>{children}</span>;
 }
 
+const TEXTO_SALDO: Record<string, string> = { cuadra: "Saldo cuadra", no_cuadra: "Saldo no cuadra", no_verificable: "Saldo no verificable" };
+
 function Celda({ c }: { c: CeldaCobertura }) {
   if (c.estado === "falta") {
     return (
@@ -50,11 +52,11 @@ function Celda({ c }: { c: CeldaCobertura }) {
     );
   }
   return (
-    <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}`} className="rounded border border-control px-2 py-1.5">
+    <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}${c.saldoMotivo ? ` · ${c.saldoMotivo}` : ""}`} className="rounded border border-control px-2 py-1.5">
       <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
-      {c.saldo === "no_cuadra" && (
+      {c.saldo !== undefined && (
         <span className="mt-1 block">
-          <Etiqueta tono="ambar">Saldo no cuadra</Etiqueta>
+          <Etiqueta tono={c.saldo === "no_cuadra" ? "ambar" : "suave"}>{TEXTO_SALDO[c.saldo] ?? "Saldo sin comprobar"}</Etiqueta>
         </span>
       )}
     </div>
@@ -111,7 +113,10 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
   const errores = archivos.filter((a) => a.estado === "con_error");
   const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
   const retirados = archivos.filter((a) => a.estado === "retirado");
-  const saldo = archivos.filter((a) => a.estado !== "retirado" && a.continuidad?.estado === "no_cuadra");
+  const vigentes = archivos.filter((a) => a.estado === "leido" && a.saldo !== null);
+  const saldo = vigentes.filter((a) => a.saldo!.resultado === "no_cuadra");
+  const noVerificable = vigentes.filter((a) => a.saldo!.resultado === "no_verificable");
+  const cuadran = vigentes.filter((a) => a.saldo!.resultado === "cuadra");
   const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0);
   return (
     <>
@@ -134,14 +139,23 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         vacio="Todos los archivos registrados siguen en la carpeta."
         filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
       />
+      <p className="mt-8 text-sm" aria-label="Resultado del saldo">
+        <span className="font-bold">Resultado del saldo de los archivos leídos:</span> {numero(cuadran.length)} cuadran · {numero(saldo.length)} no cuadran · {numero(noVerificable.length)} no se pueden verificar
+      </p>
       <ListaAtencion
         titulo="Archivos donde el saldo no cuadra"
-        ayuda="El saldo anterior más créditos y menos débitos no coincide con el saldo siguiente. Los movimientos sí se importaron; conviene revisar el archivo."
+        ayuda="El saldo anterior más créditos y menos débitos no coincide con el saldo siguiente. Un archivo así no cuenta como estado de cuenta completo: los pagos de esa sociedad quedan en «Sin información» hasta revisarlo."
         vacio="El saldo cuadra en todos los archivos que se pueden verificar."
         filas={saldo.map((a) => ({
           ruta: a.archivo,
-          texto: `${a.continuidad!.fallos} de ${a.continuidad!.verificados} comparaciones fallan (filas ${a.continuidad!.filasConFallo.join(", ")})`,
+          texto: `${a.saldo!.motivo}${a.continuidad && a.continuidad.filasConFallo.length > 0 ? ` Filas: ${a.continuidad.filasConFallo.join(", ")}.` : ""}`,
         }))}
+      />
+      <ListaAtencion
+        titulo="Archivos con saldo no verificable"
+        ayuda="No se puede comprobar el saldo de estos archivos. No cambia la cobertura: sigue por fechas."
+        vacio="El saldo se pudo comprobar en todos los archivos."
+        filas={noVerificable.map((a) => ({ ruta: a.archivo, texto: a.saldo!.motivo }))}
       />
       <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"

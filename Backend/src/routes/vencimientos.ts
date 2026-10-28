@@ -4,7 +4,7 @@ import { detalleDeVencimiento } from "../vencimientos/detalle.js";
 import { avisosDeDatos } from "../domain/cobertura-corte.js";
 import { MOTIVOS } from "../domain/cruce.js";
 import { inicioDeDatos } from "../domain/cobertura-corte.js";
-import { textoDatosDesactualizados, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
+import { TEXTO_SALDO_NO_CUADRA, textoDatosDesactualizados, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
 import { enmascararCuenta } from "../domain/enmascarar.js";
 import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
@@ -95,7 +95,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         estado: v.estado,
         motivo: v.motivo,
         // «Sin información» requiere atención y se explica con fechas; nunca se presenta como Vencido
-        textoEstado: v.estado !== "sin_informacion" ? v.motivo : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde.get(v.sociedadId) ?? null) : textoFaltanEstados(v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null),
+        textoEstado: v.estado !== "sin_informacion" ? v.motivo : v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde.get(v.sociedadId) ?? null) : textoFaltanEstados(v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null),
         // el pago que respalda el estado; la moneda es la de la cuenta que pagó (null = sin dato: sin símbolo ni código)
         pago: v.movimiento ? { fecha: v.movimiento.fecha.toISOString().slice(0, 10), monto: aNumero(v.movimiento.debito), moneda: v.movimiento.cuenta.moneda, banco: v.movimiento.cuenta.banco, cuenta: enmascararCuenta(v.movimiento.cuenta.numero) } : null,
         diferenciaDias: v.diferenciaDias,
