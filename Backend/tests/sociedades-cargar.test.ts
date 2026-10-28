@@ -39,7 +39,7 @@ beforeAll(async () => {
   await sembrarSociedad("WW", "WW Costa Rica");
   await sembrarSociedad("MEMEMC", "INVERSIONES MEMEMC, S.A");
   await sembrarSociedad("ZFL", "ZONA FRANCA LA LIMA, S.R.L.");
-  const rol = await prisma.rol.findUniqueOrThrow({ where: { nombre: "Usuario" } });
+  const rol = await prisma.rol.findUniqueOrThrow({ where: { nombre: "Tesorero" } });
   uno = (await crearUsuario({ correo: "uno@ejemplo.invalid", nombre: "Tesorera Uno", rolId: rol.id })).id;
   dos = (await crearUsuario({ correo: "dos@ejemplo.invalid", nombre: "Tesorero Dos", rolId: rol.id })).id;
 });
@@ -116,7 +116,7 @@ describe("sociedades:cargar", () => {
   });
 
   it("al cargarse el usuario que faltaba, la sociedad pendiente recibe su tesorero", async () => {
-    const rol = await prisma.rol.findUniqueOrThrow({ where: { nombre: "Usuario" } });
+    const rol = await prisma.rol.findUniqueOrThrow({ where: { nombre: "Tesorero" } });
     await crearUsuario({ correo: "sin@ejemplo.invalid", nombre: "Persona Sin Usuario", rolId: rol.id });
     const r = await cargarSociedades(await lista(FILAS));
     expect(r).toMatchObject({ tesoreroSinUsuario: 0, asignacionesNuevas: 1 });

@@ -69,8 +69,10 @@ export interface EntradaCruce {
   diasAviso: number;
   /** avisos propios del responsable efectivo de cada obligación (id de obligación -> días); sin entrada se usa `diasAviso` */
   avisoPorObligacion?: Map<number, number>;
-  /** días de espera después del día de pago antes de marcar Vencido (parámetro «Días de espera antes de marcar Vencido»); 0 = sin espera */
+  /** días de espera después del día de pago antes de marcar Vencido (valor general); 0 = sin espera */
   diasEspera?: number;
+  /** espera propia del responsable efectivo de cada obligación (id de obligación -> días); sin entrada se usa `diasEspera` */
+  esperaPorObligacion?: Map<number, number>;
   /** parámetro «Marcar Vencido aunque falte el estado de cuenta»: apagado por defecto */
   marcarVencidoSinEstado?: boolean;
   hoy: Date;
@@ -206,7 +208,8 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
     if (hoyDia < f - aviso) return { ...base, estado: "proyectado", motivo: null };
     if (hoyDia <= f) return { ...base, estado: "por_vencer", motivo: null };
     // pasó el día de pago pero dentro de los días de espera: se espera el pago, sigue «Por vencer»
-    if (hoyDia <= f + (e.diasEspera ?? 0)) return { ...base, estado: "por_vencer", motivo: MOTIVOS.esperaPago };
+    const espera = e.esperaPorObligacion?.get(v.obligacionId) ?? e.diasEspera ?? 0;
+    if (hoyDia <= f + espera) return { ...base, estado: "por_vencer", motivo: MOTIVOS.esperaPago };
     const finRango = new Date(v.fecha.getTime() + e.diasDespues * MS_DIA);
     // solo se exige cobertura hasta ayer (o hasta el fin del rango si ya pasó): lo de hoy en adelante todavía no puede estar en un estado de cuenta
     const ayer = new Date(e.hoy.getTime() - MS_DIA);

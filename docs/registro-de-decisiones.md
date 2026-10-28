@@ -50,6 +50,11 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-27 | Frecuencia editable por obligación (fila y masiva) con mes de arranque obligatorio y marca «frecuencia confirmada»; «Frecuencia por defecto» sale de Configuración. | La tabla de pagos no trae la frecuencia: Tesorería la confirma obligación por obligación. |
 | 2026-10-27 | Regla «desde» por cuenta: el Del declarado por su primer archivo (o el día 1 de su mes); la sociedad, la mayor de sus cuentas. Reemplaza la primera fecha con movimientos. | Es el período que el banco dice cubrir, no el primer movimiento. |
 | 2026-10-27 | Menú lateral contraído con apertura al pasar el cursor, por teclado o toque. | Más espacio para las tablas (diferencia con la maqueta aprobada por Saraí). |
+| 2026-10-28 | «Mi configuración» personal (aviso y espera de cada persona, sin tabla de otros usuarios ni fila general); el valor general queda interno como respaldo. | Cada tesorero decide sus propios plazos; lo general no es asunto de Tesorería. |
+| 2026-10-28 | Identidad temporal con selector de tesorero, solo con MODO_PRUEBAS=true y nunca en producción; un único módulo «usuario actual» que el Hito 4A reemplaza por la sesión de Microsoft. | Probar el comportamiento por persona sin inicio de sesión y sin riesgo de que quede abierto en producción. |
+| 2026-10-28 | El rol «Usuario» pasa a llamarse «Tesorero» (interfaz, API, seed, Excel de usuarios, pruebas y documentos); el Excel acepta ambos nombres. | El nombre dice lo que la persona hace. |
+| 2026-10-28 | Gestionar explica cuatro cosas en cada pago sin encontrar: qué se esperaba, qué se buscó, qué se encontró y qué hacer; si el pago con ese número está asignado a otra obligación, lo dice con fecha y monto. | Un «no se encontró» sin más sugería que el pago no existía. |
+| 2026-10-28 | La frecuencia se edita solo dentro de «Editar» (y en masa con filas marcadas); la tabla ya no lleva el control ni las marcas de confirmación. | Menos ruido en la tabla; la frecuencia es un dato que se corrige pocas veces. |
 
 ## Pendientes con Tesorería
 

@@ -113,14 +113,17 @@ describe("detalle de Vencido: pago con el mismo número fuera del rango", () => 
 
   it("dice que sí hay un pago con el número, cuántos días después y el margen", async () => {
     const t = await textoDe("Luz Uno");
-    expect(t).toContain("No se encontró un pago entre el 7 oct 2026 y el 13 oct 2026 en la cuenta de la sociedad.");
-    expect(t).toContain("Sí hay un pago con este número el 15 oct 2026, 5 días después del día de pago; está fuera del margen de 3 días.");
+    expect(t).toContain("Sin pago registrado de Luz Uno en octubre de 2026.");
+    expect(t).toContain("La fecha habitual de pago era el 10 oct 2026.");
+    expect(t).toContain("Se buscó un pago entre el 7 oct 2026 y el 13 oct 2026 en la cuenta de la sociedad.");
+    expect(t).toContain("Sí hay un pago con este número el 15 oct 2026, 5 días después del día habitual de pago; está fuera del margen de 3 días.");
     expect(t).not.toContain("no hay un pago con este número de servicio");
   });
 
   it("si no hay ninguno, lo dice igual de claro y sin sugerir que no existe en ningún estado", async () => {
     const t = await textoDe("Agua Dos");
-    expect(t).toContain("Tampoco hay un pago con este número en las fechas cercanas dentro de los estados de cuenta cargados.");
+    expect(t).toContain("No se encontró ningún pago con este número en los estados de cuenta cargados.");
+    expect(t).not.toContain("Tampoco hay");
     expect(t).not.toContain("Sí hay un pago");
   });
 });

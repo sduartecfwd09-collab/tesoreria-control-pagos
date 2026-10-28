@@ -157,3 +157,10 @@ export async function movimientosAsignados(ids: number[]): Promise<Set<number>> 
   const filas = await prisma.vencimiento.findMany({ where: { movimientoId: { in: ids } }, select: { movimientoId: true } });
   return new Set(filas.flatMap((f) => (f.movimientoId === null ? [] : [f.movimientoId])));
 }
+
+/** De los movimientos dados, los que respaldan un vencimiento de OTRA obligación: movimiento -> proveedor de esa obligación. */
+export async function asignadosAOtraObligacion(ids: number[], obligacionId: number): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+  const filas = await prisma.vencimiento.findMany({ where: { movimientoId: { in: ids }, obligacionId: { not: obligacionId } }, select: { movimientoId: true, proveedor: true } });
+  return new Map(filas.flatMap((f) => (f.movimientoId === null ? [] : [[f.movimientoId, f.proveedor] as [number, string]])));
+}

@@ -40,14 +40,28 @@ describe("textos del detalle", () => {
   });
 
   it("vencido: dónde y hasta cuándo se buscó, en cuántas cuentas y hasta qué fecha hay estados", () => {
-    const t = textosDePago({ ...base, estado: "vencido", motivo: MOTIVOS.vencido, movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 3, sinCobertura: [] } });
-    expect(t.resumen).toBe("No se encontró pago hasta el 18 oct 2026.");
+    const t = textosDePago({ ...base, estado: "vencido", motivo: MOTIVOS.vencido, proveedor: "Luz Uno", periodo: "2026-10", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 3, sinCobertura: [] } });
+    expect(t.resumen).toBe("Sin pago registrado de Luz Uno en octubre de 2026.");
     expect(t.parrafos).toEqual([
-      "No se encontró un pago entre el 12 oct 2026 y el 18 oct 2026 en las 3 cuentas de la sociedad.",
-      "Tampoco hay un pago con este número en las fechas cercanas dentro de los estados de cuenta cargados.",
+      "La fecha habitual de pago era el 15 oct 2026.",
+      "Se buscó un pago entre el 12 oct 2026 y el 18 oct 2026 en las 3 cuentas de la sociedad.",
+      "No se encontró ningún pago con este número en los estados de cuenta cargados.",
       "Hay estados de cuenta cargados hasta el 26 oct 2026.",
+      "No se encontró pago hasta el 18 oct 2026.",
     ]);
-    expect(textosDePago({ ...base, estado: "vencido", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 1, sinCobertura: [] } }).parrafos[0]).toContain("en la cuenta de la sociedad");
+    expect(textosDePago({ ...base, estado: "vencido", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 1, sinCobertura: [] } }).parrafos[1]).toContain("en la cuenta de la sociedad");
+  });
+
+  it("vencido con el mismo número usado por otra obligación: dice a quién se asignó el pago, con fecha y monto, y no dice «tampoco hay un pago»", () => {
+    const t = textosDePago({
+      ...base, estado: "vencido", motivo: MOTIVOS.vencido, proveedor: "Movistar", periodo: "2026-10", movimientos: [],
+      cobertura: { estadosHasta: "2026-10-26", cuentas: 1, sinCobertura: [] },
+      asignadoAOtro: { fecha: "2026-10-13", proveedor: "Cabletica", monto: 4500000, moneda: "CRC" },
+    });
+    expect(t.parrafos).toContain("El pago con este número se asignó a Cabletica.");
+    expect(t.parrafos.find((p) => p.startsWith("Fue el 13 oct 2026, por "))).toContain("45");
+    expect(t.parrafos.join(" ")).not.toMatch(/Tampoco|No se encontró ningún pago/);
+    expect(t.queHacer).toContain("Cabletica");
   });
 
   it("sin información: qué cuentas faltan y desde cuándo", () => {

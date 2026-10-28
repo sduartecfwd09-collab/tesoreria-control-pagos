@@ -84,7 +84,8 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     expect(v).toMatchObject({ estado: "vencido", motivo: MOTIVOS.vencidoBuscando });
     const d = await detalle(v.id);
     expect(d.textoEstado).toBe("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
-    expect(d.textos.resumen).toBe("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
+    expect(d.textos.resumen).toBe("Sin pago registrado de Luz Uno en octubre de 2026.");
+    expect(d.textos.parrafos).toContain("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
   });
 
   it("pago en F+8: Pagado, «Se pagó 8 días después del día habitual de pago.»", async () => {
@@ -104,6 +105,21 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     const v = await vencimientoDe(o.id);
     expect(v).toMatchObject({ estado: "vencido", motivo: MOTIVOS.vencido });
     expect((await detalle(v.id)).textoEstado).toBe("No se encontró pago hasta el 22 oct 2026.");
+  });
+
+  it("mismo número en dos servicios: el pago de Cabletica se asignó a Cabletica y Movistar lo dice con fecha y monto", async () => {
+    const cabletica = await obligacion("Cabletica", "5551083", 3);
+    const movistar = await obligacion("Movistar", "5551083", 20);
+    await debito(dia(2026, 10, 1), "PAGO CABLETICA 5551083");
+    await actualizarVencimientos(reloj);
+    expect((await vencimientoDe(cabletica.id)).estado).toBe("pagado");
+    const v = await vencimientoDe(movistar.id);
+    expect(v.estado).toBe("vencido");
+    const t = (await detalle(v.id)).textos;
+    expect(t.resumen).toBe("Sin pago registrado de Movistar en octubre de 2026.");
+    expect(t.parrafos).toContain("El pago con este número se asignó a Cabletica.");
+    expect(t.parrafos.find((p) => p.startsWith("Fue el 1 oct 2026, por "))).toBeDefined();
+    expect(t.parrafos.join(" ")).not.toContain("Tampoco");
   });
 
   it("sin días de espera: el día siguiente al pago ya es Vencido (si hay cobertura)", async () => {
@@ -127,7 +143,7 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
 describe("aviso propio de cada tesorero", () => {
   it("dos tesoreros con avisos de 3 y 7 días ven distinto Por vencer y Programado; el calendario llega al mayor aviso", async () => {
     await asegurarRoles();
-    const rolId = (await mapaDeRoles()).get("Usuario")!;
+    const rolId = (await mapaDeRoles()).get("Tesorero")!;
     await prisma.usuario.create({ data: { correo: "ana@x.cr", nombre: "Ana Uno", nombreNormalizado: "ana uno", rolId, diasAviso: 3 } });
     await prisma.usuario.create({ data: { correo: "beto@x.cr", nombre: "Beto Dos", nombreNormalizado: "beto dos", rolId, diasAviso: 7 } });
     const deAna = await obligacion("Luz Ana", "1110001", 1, { responsable: "Ana Uno" });
@@ -137,24 +153,6 @@ describe("aviso propio de cada tesorero", () => {
     expect((await vencimientoDe(deAna.id, "2026-11")).estado).toBe("proyectado"); // 5 > 3
     expect((await vencimientoDe(deBeto.id, "2026-11")).estado).toBe("por_vencer"); // 5 <= 7
     expect((await vencimientoDe(general.id, "2026-11")).estado).toBe("proyectado"); // sin aviso propio: el general (3)
-  });
-
-  it("la API guarda el aviso propio, lo vacía para usar el general y rechaza valores fuera de 0 a 60", async () => {
-    await asegurarRoles();
-    const rolId = (await mapaDeRoles()).get("Usuario")!;
-    const u = await prisma.usuario.create({ data: { correo: "ana@x.cr", nombre: "Ana Uno", nombreNormalizado: "ana uno", rolId } });
-    const app = await crearApp({ reloj });
-    try {
-      const lista = (await app.inject("/api/avisos-tesoreros")).json() as { general: number; datos: { id: number; diasAviso: number | null; diasEfectivos: number }[] };
-      expect(lista.datos.find((x) => x.id === u.id)).toMatchObject({ diasAviso: null, diasEfectivos: lista.general });
-      const ok = await app.inject({ method: "PUT", url: `/api/avisos-tesoreros/${u.id}`, payload: { diasAviso: 7 } });
-      expect(ok.json().datos).toMatchObject({ diasAviso: 7, diasEfectivos: 7 });
-      expect((await app.inject({ method: "PUT", url: `/api/avisos-tesoreros/${u.id}`, payload: { diasAviso: 61 } })).statusCode).toBe(422);
-      expect((await app.inject({ method: "PUT", url: `/api/avisos-tesoreros/${u.id}`, payload: { diasAviso: null } })).json().datos).toMatchObject({ diasAviso: null });
-      expect((await app.inject({ method: "PUT", url: "/api/avisos-tesoreros/99999", payload: { diasAviso: 3 } })).statusCode).toBe(404);
-    } finally {
-      await app.close();
-    }
   });
 });
 

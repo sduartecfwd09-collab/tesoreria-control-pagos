@@ -21,13 +21,17 @@ export interface Parametro {
   actualizado: string;
 }
 
-export interface AvisoTesorero {
-  id: number;
-  nombre: string;
-  rol: string;
-  /** null = usa el general */
-  diasAviso: number | null;
-  diasEfectivos: number;
+export interface Identidad {
+  modoPruebas: boolean;
+  tesoreros: { id: number; nombre: string }[];
+}
+
+export interface MiConfiguracion {
+  usuario: { id: number; nombre: string };
+  /** valores que se aplican (el propio o, si no hay, el general) */
+  diasAviso: number;
+  diasEspera: number;
+  propios: { diasAviso: number | null; diasEspera: number | null };
 }
 
 export interface ResultadoFrecuencia {

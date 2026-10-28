@@ -30,6 +30,7 @@
     "cruzar:diagnostico": "tsx src/cli/diagnostico-cruce.ts",
     "cruzar:grupos": "tsx src/cli/diagnostico-grupos.ts",
     "usuarios:cargar": "tsx src/cli/usuarios-cargar.ts",
+    "usuarios:verificar-rol": "tsx src/cli/usuarios-verificar-rol.ts",
     "sociedades:cargar": "tsx src/cli/sociedades-cargar.ts"
   },
   "dependencies": {

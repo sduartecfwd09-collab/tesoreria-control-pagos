@@ -12,11 +12,11 @@ import { responsableEfectivo } from "../domain/obligaciones.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { normalizar } from "../ingest/utiles.js";
-import { avisosPorObligacion } from "../repositories/cruce.js";
+import { preferenciasPorObligacion } from "../repositories/cruce.js";
 import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import { datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
+import { asignadosAOtraObligacion, datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
 import { diasDeAviso } from "./generar.js";
 
 const MS_DIA = 86_400_000;
@@ -91,11 +91,16 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
 
   // Con «Vencido»: el pago más cercano con este mismo número fuera del rango, si lo hay y no es de otro vencimiento (hasta 60 días).
   let pagoCercano: { fecha: string; dias: number; margen: number } | null = null;
+  let asignadoAOtro: { fecha: string; proveedor: string; monto: number; moneda: string | null } | null = null;
   if (v.estado === "vencido") {
     const patron = patronIdentificador(v.obligacion.identificador);
     if (patron) {
       const cercanos = (await debitosEnVentana(new Date(v.fecha.getTime() - 60 * MS_DIA), new Date(v.fecha.getTime() + 60 * MS_DIA)))
         .filter((m) => etiquetaSociedad(m.cuenta.sociedad) === etiquetaSociedad(v.sociedad) && patron.test((m.descripcion ?? "").toUpperCase()));
+      // el pago con este número puede estar asignado a otra obligación (mismo número usado por dos servicios)
+      const deOtro = await asignadosAOtraObligacion(cercanos.map((m) => m.id), v.obligacionId);
+      const delOtro = cercanos.filter((m) => deOtro.has(m.id)).sort((a, b) => Math.abs(dia(a.fecha) - dia(v.fecha)) - Math.abs(dia(b.fecha) - dia(v.fecha)) || dia(a.fecha) - dia(b.fecha))[0];
+      if (delOtro) asignadoAOtro = { fecha: iso(delOtro.fecha), proveedor: deOtro.get(delOtro.id)!, monto: aNumero(delOtro.debito), moneda: delOtro.cuenta.moneda };
       const asignados = await movimientosAsignados(cercanos.map((m) => m.id));
       const libres = cercanos.filter((m) => !asignados.has(m.id) && (dia(m.fecha) < dia(desde) || dia(m.fecha) > dia(hasta)));
       const mejor = libres.sort((a, b) => Math.abs(dia(a.fecha) - dia(v.fecha)) - Math.abs(dia(b.fecha) - dia(v.fecha)) || dia(a.fecha) - dia(b.fecha))[0];
@@ -108,11 +113,12 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
   const datosDesde = v.estado === "sin_informacion" ? inicioDeDatos((await cargarCoberturaCuentas()).get(v.sociedadId) ?? []) : null;
 
   const dias = Math.round((v.fecha.getTime() - hoy.getTime()) / MS_DIA);
-  const diasAviso = (await avisosPorObligacion()).get(v.obligacionId) ?? (await diasDeAviso()); // el del responsable de la obligación o el general
+  const diasAviso = (await preferenciasPorObligacion()).aviso.get(v.obligacionId) ?? (await diasDeAviso()); // el del responsable de la obligación o el general
   const textos = textosDePago({
     estado: v.estado, motivo: v.motivo, fecha: iso(v.fecha), dias, diasAviso, diferenciaDias: v.diferenciaDias,
     ventana: { desde: iso(desde), hasta: iso(hasta) },
     cobertura: cobertura && { estadosHasta: cobertura.estadosHasta, cuentas: cobertura.cuentas, sinCobertura: cobertura.cuentasSinCobertura },
+    proveedor: v.proveedor, periodo: v.periodo, asignadoAOtro,
     movimientos, grupo, pagoCercano, datosDesde: datosDesde ? iso(datosDesde) : null,
   });
 

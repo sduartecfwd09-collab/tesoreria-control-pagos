@@ -66,7 +66,7 @@ export const ESTADO: Record<EstadoVencimiento, Definicion> = {
     ayuda: "Pasó la fecha, pero falta el estado de cuenta que permita saber si se pagó. Requiere atención.",
   },
   por_revisar: { texto: "Por revisar", clase: "bg-acento text-sobre-acento border-2 border-texto", ayuda: "Hay que verificar este pago: no se pudo asignar con certeza." },
-  por_vencer: { texto: "Por vencer", clase: "bg-ambar text-texto", ayuda: "La fecha de pago está dentro de los días de aviso." },
+  por_vencer: { texto: "Por vencer", clase: "bg-ambar text-texto", ayuda: "La fecha de pago está dentro de los días de aviso, o pasó hace pocos días y se espera el pago." },
   pagado_con_inconsistencia: {
     texto: "Pagado con inconsistencia",
     clase: "bg-acento text-sobre-acento border-2 border-ambar",

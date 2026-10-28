@@ -39,6 +39,11 @@ export interface DatosTexto {
   grupo: ObligacionGrupoTexto[];
   /** el pago con este número más cercano fuera del rango de búsqueda y que no es de otro vencimiento; dias = pago menos fecha de pago */
   pagoCercano?: { fecha: string; dias: number; margen: number } | null;
+  /** proveedor y mes (AAAA-MM) del vencimiento: «Sin pago registrado de <proveedor> en <mes>.» */
+  proveedor?: string;
+  periodo?: string;
+  /** un pago con este mismo número que se asignó a otra obligación (mismo número usado por dos servicios) */
+  asignadoAOtro?: { fecha: string; proveedor: string; monto: number; moneda: string | null } | null;
   /** primera fecha con estados de cuenta cargados de la sociedad (para «Sin información» por inicio de datos) */
   datosDesde?: string | null;
 }
@@ -111,17 +116,28 @@ export function textosDePago(d: DatosTexto): TextosPago {
       const buscando = -d.dias <= diasEntreFechas(d.fecha, d.ventana.hasta); // hoy <= fecha de pago + días después
       const c = d.cobertura;
       const donde = c && c.cuentas > 0 ? ` en ${c.cuentas === 1 ? "la cuenta" : `las ${c.cuentas} cuentas`} de la sociedad` : "";
-      const parrafos = [`No se encontró un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}${donde}.`];
+      // Cuatro respuestas: qué se esperaba, qué se buscó, qué se encontró y qué hacer.
+      const parrafos = [
+        `La fecha habitual de pago era el ${fechaTexto(d.fecha)}.`,
+        `Se buscó un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}${donde}.`,
+      ];
       const p = d.pagoCercano;
-      parrafos.push(
-        p
-          ? `Sí hay un pago con este número el ${fechaTexto(p.fecha)}, ${plural(Math.abs(p.dias), "día", "días")} ${p.dias > 0 ? "después" : "antes"} del día de pago; está fuera del margen de ${plural(p.margen, "día", "días")}.`
-          : "Tampoco hay un pago con este número en las fechas cercanas dentro de los estados de cuenta cargados.",
-      );
+      const o = d.asignadoAOtro;
+      if (o) {
+        parrafos.push(`El pago con este número se asignó a ${o.proveedor}.`, `Fue el ${fechaTexto(o.fecha)}, por ${montoTexto(o.monto, o.moneda)}.`);
+      } else if (p) {
+        parrafos.push(`Sí hay un pago con este número el ${fechaTexto(p.fecha)}, ${plural(Math.abs(p.dias), "día", "días")} ${p.dias > 0 ? "después" : "antes"} del día habitual de pago; está fuera del margen de ${plural(p.margen, "día", "días")}.`);
+      } else {
+        parrafos.push("No se encontró ningún pago con este número en los estados de cuenta cargados.");
+      }
       if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
       if (d.motivo === MOTIVOS.vencidoSinEstado) parrafos.push("Se muestra como vencido aunque ningún estado de cuenta lo confirma.");
-      const resumen = buscando && d.motivo !== MOTIVOS.vencidoSinEstado ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.ventana.hasta)}.` : `No se encontró pago hasta el ${fechaTexto(d.ventana.hasta)}.`;
-      return { resumen, parrafos, queHacer: p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo." };
+      else parrafos.push(buscando ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.ventana.hasta)}.` : `No se encontró pago hasta el ${fechaTexto(d.ventana.hasta)}.`);
+      const resumen = d.proveedor && d.periodo ? `Sin pago registrado de ${d.proveedor} en ${mesTexto(d.periodo)}.` : "Sin pago registrado.";
+      const queHacer = o
+        ? `Qué hacer: confirmar con quien paga si ese pago era de ${o.proveedor} o de este servicio.`
+        : p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo.";
+      return { resumen, parrafos, queHacer };
     }
     case "sin_informacion": {
       if (d.motivo === MOTIVOS.sinInformacionDesde) {
@@ -189,6 +205,10 @@ export function textosDePago(d: DatosTexto): TextosPago {
       return { resumen: "Estado sin definir.", parrafos: [], queHacer: null };
   }
 }
+
+const MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "setiembre", "octubre", "noviembre", "diciembre"];
+/** "2026-10" -> "octubre de 2026". */
+const mesTexto = (p: string) => `${MESES_LARGOS[Number(p.slice(5, 7)) - 1] ?? p} de ${p.slice(0, 4)}`;
 
 function diasEntreFechas(a: string, b: string): number {
   return Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86_400_000);

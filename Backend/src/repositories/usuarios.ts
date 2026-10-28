@@ -1,7 +1,7 @@
 import { prisma } from "../db.js";
 import { normalizarNombrePersona, ROLES } from "../domain/usuarios.js";
 
-/** Crea los roles que falten (Jefatura y Usuario). */
+/** Crea los roles que falten (Jefatura y Tesorero). */
 export async function asegurarRoles() {
   for (const nombre of ROLES) await prisma.rol.upsert({ where: { nombre }, create: { nombre }, update: {} });
 }
@@ -32,13 +32,18 @@ export async function obtenerActor(id: number) {
   return u ? { id: u.id, activo: u.activo, rol: u.rol.nombre } : null;
 }
 
-/** Usuarios activos con su aviso propio (null = usa el parámetro general). Para la tabla «Avisos por tesorero». */
-export async function listarUsuariosConAviso() {
-  return prisma.usuario.findMany({ where: { activo: true }, select: { id: true, nombre: true, diasAviso: true, rol: { select: { nombre: true } } }, orderBy: { nombre: "asc" } });
+/** Tesoreros activos (rol Tesorero). Para el selector de identidad temporal. */
+export async function listarTesoreros() {
+  return prisma.usuario.findMany({ where: { activo: true, rol: { nombre: "Tesorero" } }, select: { id: true, nombre: true }, orderBy: { nombre: "asc" } });
 }
 
-export async function fijarDiasAviso(id: number, diasAviso: number | null) {
-  return prisma.usuario.update({ where: { id }, data: { diasAviso }, select: { id: true, nombre: true, diasAviso: true } });
+/** Un tesorero activo con sus preferencias propias (null = usa el valor general). */
+export async function obtenerTesorero(id: number) {
+  return prisma.usuario.findFirst({ where: { id, activo: true, rol: { nombre: "Tesorero" } }, select: { id: true, nombre: true, diasAviso: true, diasEspera: true } });
+}
+
+export async function fijarPreferencias(id: number, d: { diasAviso: number | null; diasEspera: number | null }) {
+  return prisma.usuario.update({ where: { id }, data: d, select: { id: true, nombre: true, diasAviso: true, diasEspera: true } });
 }
 
 /** El mayor aviso propio entre los usuarios activos (null si nadie tiene el suyo). */

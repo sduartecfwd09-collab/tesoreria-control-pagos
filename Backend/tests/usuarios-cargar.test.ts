@@ -19,14 +19,14 @@ describe("dominio de usuarios", () => {
     expect(correoValido("a@ejemplo.invalid")).toBe(true);
     expect(correoValido("sin-arroba")).toBe(false);
     expect(rolDesdeTexto(" jefatura ")).toBe("Jefatura");
-    expect(rolDesdeTexto("USUARIO")).toBe("Usuario");
+    expect(rolDesdeTexto("USUARIO")).toBe("Tesorero");
     expect(rolDesdeTexto("Administrador")).toBeNull();
   });
 });
 
 describe("usuarios:cargar", () => {
   it("el seed deja los roles Jefatura y Usuario y ningún usuario", async () => {
-    expect((await prisma.rol.findMany()).map((r) => r.nombre).sort()).toEqual(["Jefatura", "Usuario"]);
+    expect((await prisma.rol.findMany()).map((r) => r.nombre).sort()).toEqual(["Jefatura", "Tesorero"]);
     expect(await prisma.usuario.count()).toBe(0);
   });
 
@@ -34,12 +34,12 @@ describe("usuarios:cargar", () => {
     const filas = await hoja([
       ["Persona Uno", " Persona.Uno@Ejemplo.INVALID ", "Jefatura"],
       ["Persona Dos", "dos@ejemplo.invalid", "usuario"],
-      ["Persona Tres", "", "Usuario"], // sin correo
-      ["Persona Cuatro", "no-es-correo", "Usuario"], // mal formado
+      ["Persona Tres", "", "Tesorero"], // sin correo
+      ["Persona Cuatro", "no-es-correo", "Tesorero"], // mal formado
       ["Persona Cinco", "cinco@ejemplo.invalid", "Administrador"], // rol desconocido
-      ["", "seis@ejemplo.invalid", "Usuario"], // sin nombre
+      ["", "seis@ejemplo.invalid", "Tesorero"], // sin nombre
       [null, null, null], // fila vacía: se salta
-      ["Persona Siete", "dos@ejemplo.invalid", "Usuario"], // correo repetido
+      ["Persona Siete", "dos@ejemplo.invalid", "Tesorero"], // correo repetido
     ]);
     const r = await cargarUsuarios(filas);
     expect(r).toMatchObject({ filasLeidas: 7, creados: 2, actualizados: 0, sinCambios: 0 });
@@ -50,7 +50,7 @@ describe("usuarios:cargar", () => {
   });
 
   it("repetir la carga no duplica; un cambio de nombre o rol cuenta como actualizado", async () => {
-    const igual = [["Persona Uno", "persona.uno@ejemplo.invalid", "Jefatura"], ["Persona Dos", "dos@ejemplo.invalid", "Usuario"]];
+    const igual = [["Persona Uno", "persona.uno@ejemplo.invalid", "Jefatura"], ["Persona Dos", "dos@ejemplo.invalid", "Tesorero"]];
     expect(await cargarUsuarios(await hoja(igual))).toMatchObject({ creados: 0, actualizados: 0, sinCambios: 2 });
     const cambiado = [["Persona Uno", "persona.uno@ejemplo.invalid", "Jefatura"], ["Persona Dos Apellido", "dos@ejemplo.invalid", "Jefatura"]];
     expect(await cargarUsuarios(await hoja(cambiado))).toMatchObject({ creados: 0, actualizados: 1, sinCambios: 1 });
@@ -61,13 +61,13 @@ describe("usuarios:cargar", () => {
   });
 
   it("no permite que dos correos distintos tengan el mismo nombre", async () => {
-    const r = await cargarUsuarios(await hoja([["PERSONA UNO", "otro@ejemplo.invalid", "Usuario"]]));
+    const r = await cargarUsuarios(await hoja([["PERSONA UNO", "otro@ejemplo.invalid", "Tesorero"]]));
     expect(r.creados).toBe(0);
     expect(r.ignorados).toEqual({ "nombre ya usado por otro correo": 1 });
   });
 
   it("el informe imprime solo conteos: ni correos ni nombres", async () => {
-    const r = await cargarUsuarios(await hoja([["Persona Nueva", "nueva@ejemplo.invalid", "Usuario"], ["X", "malo", "Usuario"]]));
+    const r = await cargarUsuarios(await hoja([["Persona Nueva", "nueva@ejemplo.invalid", "Tesorero"], ["X", "malo", "Tesorero"]]));
     const texto = textoInformeUsuarios(r);
     expect(texto).toContain("creados: 1");
     expect(texto).toContain("1 fila(s): correo mal formado");
@@ -79,7 +79,7 @@ describe("usuarios:cargar", () => {
   });
 
   it("acepta los encabezados en cualquier orden y con otra capitalización", async () => {
-    const filas = await hoja([["secreto@ejemplo.invalid", "Persona Orden", "Usuario"]], ["CORREO", "nombre", "Rol"]);
+    const filas = await hoja([["secreto@ejemplo.invalid", "Persona Orden", "Tesorero"]], ["CORREO", "nombre", "Rol"]);
     expect(filas[0]).toMatchObject({ nombre: "Persona Orden", correo: "secreto@ejemplo.invalid" });
   });
 });

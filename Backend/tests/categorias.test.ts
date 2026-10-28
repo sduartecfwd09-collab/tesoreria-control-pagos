@@ -59,7 +59,7 @@ beforeEach(async () => {
   const usuario = async (n: string, r: string, activo = true) =>
     (await prisma.usuario.create({ data: { correo: `${n}@ejemplo.invalid`, nombre: n, nombreNormalizado: n, rolId: await rol(r), activo } })).id;
   jefe = await usuario("jefe", "Jefatura");
-  tesorero = await usuario("tesorero", "Usuario");
+  tesorero = await usuario("tesorero", "Tesorero");
   inactivo = await usuario("jefe-inactivo", "Jefatura", false);
 });
 afterAll(async () => {

@@ -40,10 +40,6 @@ function textoCalendario(c: Regeneracion): string {
   return partes.length ? ` Calendario: ${partes.join("; ")}.` : " No hubo que ajustar el calendario.";
 }
 
-function sumar(total: Regeneracion, c: Regeneracion): Regeneracion {
-  return { creados: total.creados + c.creados, actualizados: total.actualizados + c.actualizados, eliminados: total.eliminados + c.eliminados, protegidos: total.protegidos + c.protegidos };
-}
-
 function resumenActual(filas: Obligacion[]): string {
   const por = new Map<string, number>();
   for (const o of filas) {
@@ -144,34 +140,6 @@ export function PanelObligaciones() {
     });
   }, [datosCargados]);
 
-  /** Cambio de frecuencia de una fila: pide confirmación con el antes y el después. */
-  const cambiarUna = useCallback((o: Obligacion, f: Frecuencia, mes: number | null) => {
-    setConfirmacion({
-      titulo: `Cambiar la frecuencia de ${o.proveedor} (${o.sociedad})`,
-      antes: textoFrecuencia(o.frecuencia, o.mesArranque),
-      despues: textoFrecuencia(f, mes),
-      ejecutar: async () => {
-        const r = await api.editarObligacion(o.id, { frecuencia: f, mesArranque: f === "mensual" ? null : mes });
-        setAviso(`Se guardó la frecuencia de ${r.datos.proveedor} (${r.datos.sociedad}).${r.regeneracion ? textoCalendario(r.regeneracion) : ""}`);
-        setIntento((n) => n + 1);
-      },
-    });
-  }, []);
-
-  /** Confirmar la frecuencia actual de una fila (sin cambiarla). */
-  const confirmarUna = useCallback((o: Obligacion) => {
-    setConfirmacion({
-      titulo: `Confirmar la frecuencia de ${o.proveedor} (${o.sociedad})`,
-      antes: `${textoFrecuencia(o.frecuencia, o.mesArranque)}\nSin confirmar`,
-      despues: `${textoFrecuencia(o.frecuencia, o.mesArranque)}\nConfirmada`,
-      ejecutar: async () => {
-        const r = await api.editarObligacion(o.id, { frecuencia: o.frecuencia, mesArranque: o.frecuencia === "mensual" ? null : o.mesArranque });
-        setAviso(`Se confirmó la frecuencia de ${r.datos.proveedor} (${r.datos.sociedad}).${r.regeneracion ? textoCalendario(r.regeneracion) : ""}`);
-        setIntento((n) => n + 1);
-      },
-    });
-  }, []);
-
   function cambiarSeleccionadas() {
     const filas = [...seleccion.values()];
     const mes = masFrecuencia === "mensual" || masMes === "" ? null : Number(masMes);
@@ -187,41 +155,6 @@ export function PanelObligaciones() {
       ejecutar: async () => {
         const r = await api.cambiarFrecuencia(filas.map((o) => o.id), masFrecuencia, mes);
         setAviso(`Se cambió la frecuencia de ${plural(r.actualizadas, "obligación", "obligaciones")}.${textoCalendario(r.calendario)}`);
-        setSeleccion(new Map());
-        setIntento((n) => n + 1);
-      },
-    });
-  }
-
-  function confirmarSeleccionadas() {
-    const filas = [...seleccion.values()];
-    if (filas.length === 0) return;
-    // La frecuencia confirmada es la que cada fila ya tiene: se agrupa por frecuencia y mes de arranque.
-    const grupos = new Map<string, { f: Frecuencia; mes: number | null; ids: number[] }>();
-    const aConfirmar: Obligacion[] = [];
-    for (const o of filas) {
-      if (o.frecuencia !== "mensual" && o.mesArranque === null) continue;
-      aConfirmar.push(o);
-      const mes = o.frecuencia === "mensual" ? null : o.mesArranque;
-      const k = `${o.frecuencia}-${mes}`;
-      const g = grupos.get(k) ?? { f: o.frecuencia, mes, ids: [] };
-      g.ids.push(o.id);
-      grupos.set(k, g);
-    }
-    const omitidas = filas.length - aConfirmar.length;
-    setConfirmacion({
-      titulo: `Confirmar la frecuencia de ${plural(aConfirmar.length, "obligación seleccionada", "obligaciones seleccionadas")}`,
-      antes: `${resumenActual(aConfirmar)}\nSin confirmar${omitidas ? `\n(${plural(omitidas, "obligación se omite", "obligaciones se omiten")} por no tener mes de arranque)` : ""}`,
-      despues: `${resumenActual(aConfirmar)}\nConfirmada`,
-      ejecutar: async () => {
-        let total: Regeneracion = { creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 };
-        let n = 0;
-        for (const g of grupos.values()) {
-          const r = await api.cambiarFrecuencia(g.ids, g.f, g.mes);
-          total = sumar(total, r.calendario);
-          n += r.actualizadas;
-        }
-        setAviso(`Se confirmó la frecuencia de ${plural(n, "obligación", "obligaciones")}.${textoCalendario(total)}`);
         setSeleccion(new Map());
         setIntento((n) => n + 1);
       },
@@ -373,11 +306,10 @@ export function PanelObligaciones() {
 
         {lista.datos.length > 0 && (
           <>
+            {seleccion.size > 0 && (
             <div className="mt-4 flex flex-wrap items-end gap-3 rounded border border-divisor bg-fondo-suave p-3 text-sm">
               <span className="font-medium" aria-live="polite">
-                {seleccion.size === 0
-                  ? "Marque las casillas para cambiar la frecuencia de varias obligaciones a la vez."
-                  : plural(seleccion.size, "obligación seleccionada", "obligaciones seleccionadas")}
+                {plural(seleccion.size, "obligación seleccionada", "obligaciones seleccionadas")}
               </span>
               <label className="font-medium">
                 Frecuencia
@@ -410,26 +342,20 @@ export function PanelObligaciones() {
                   </select>
                 </label>
               )}
-              <button type="button" className={claseBoton} disabled={seleccion.size === 0 || (masFrecuencia !== "mensual" && masMes === "")} onClick={cambiarSeleccionadas}>
+              <button type="button" className={claseBoton} disabled={masFrecuencia !== "mensual" && masMes === ""} onClick={cambiarSeleccionadas}>
                 Cambiar frecuencia de las seleccionadas
               </button>
-              <button type="button" className={claseBotonSecundario} disabled={seleccion.size === 0} onClick={confirmarSeleccionadas}>
-                Confirmar frecuencia de las seleccionadas
-              </button>
-              {seleccion.size > 0 && (
                 <button type="button" className="underline" onClick={() => setSeleccion(new Map())}>
                   Quitar selección
                 </button>
-              )}
             </div>
+            )}
             <TablaObligaciones
               datos={lista.datos}
               alEditar={setEditando}
               seleccion={seleccionIds}
               alAlternar={alternar}
               alAlternarTodas={alternarTodas}
-              alCambiarFrecuencia={cambiarUna}
-              alConfirmarFrecuencia={confirmarUna}
             />
             <FinDeLista cantidad={lista.datos.length} total={lista.total} unidad="obligaciones" hayMas={lista.hayMas} cargando={lista.cargandoMas} alLlegar={lista.cargarMas} />
           </>

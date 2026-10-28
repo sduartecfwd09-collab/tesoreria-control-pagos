@@ -23,6 +23,12 @@ const esquema = z.object({
   SMTP_USER: opcional(z.string()),
   SMTP_PASSWORD: opcional(z.string()),
   SMTP_FROM: opcional(z.string()),
+  // Solo para probar con un selector de tesorero mientras no hay inicio de sesión. Nunca en producción.
+  MODO_PRUEBAS: z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() === "true" : v), z.boolean().default(false)),
+  NODE_ENV: opcional(z.string()),
+}).refine((e) => !(e.MODO_PRUEBAS && e.NODE_ENV === "production"), {
+  path: ["MODO_PRUEBAS"],
+  message: "MODO_PRUEBAS=true no se permite con NODE_ENV=production: el servidor no arranca así",
 });
 
 export type Env = z.infer<typeof esquema>;

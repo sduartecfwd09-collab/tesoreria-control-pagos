@@ -32,8 +32,8 @@ beforeEach(async () => {
   const usuario = async (n: string, rolNombre: string, activo = true) =>
     (await prisma.usuario.create({ data: { correo: `${n}@ejemplo.invalid`, nombre: n, nombreNormalizado: n, rolId: await rol(rolNombre), activo } })).id;
   jefe = await usuario("jefe", "Jefatura");
-  tesAAA = await usuario("tesorero-a", "Usuario");
-  tesBBB = await usuario("tesorero-b", "Usuario");
+  tesAAA = await usuario("tesorero-a", "Tesorero");
+  tesBBB = await usuario("tesorero-b", "Tesorero");
   inactivo = await usuario("jefe-inactivo", "Jefatura", false);
   const a = await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA", tesoreroId: tesAAA } });
   await prisma.sociedad.create({ data: { codigo: "BBB", nombreLargo: "Sociedad BBB", tesoreroId: tesBBB } });

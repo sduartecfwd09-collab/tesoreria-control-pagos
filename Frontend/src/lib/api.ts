@@ -1,7 +1,8 @@
 import type {
-  AvisoDatos, AvisoTesorero, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Frecuencia, Importaciones, Obligacion, Pagina,
+  AvisoDatos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Frecuencia, Identidad, Importaciones, MiConfiguracion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoFrecuencia, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
+import { encabezadoUsuario } from "./usuario-actual";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
@@ -21,7 +22,7 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   try {
     r = await fetch(`${BASE}${ruta}`, {
       ...init,
-      headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
+      headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...encabezadoUsuario(), ...init?.headers },
       cache: "no-store",
     });
   } catch {
@@ -44,18 +45,11 @@ export const api = {
   listarImportaciones: () => pedir<Importaciones>("/api/importaciones"),
   obtenerCobertura: async () => (await pedir<{ datos: Cobertura }>("/api/cobertura")).datos,
   listarParametros: async () => (await pedir<{ datos: Parametro[] }>("/api/parametros")).datos,
-  guardarParametro: (id: number, valor: string) =>
-    pedir<{ datos: { id: number; valor: string; actualizado: string } }>(`/api/parametros/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({ valor }),
-    }),
 
-  listarAvisosTesoreros: () => pedir<{ general: number; datos: AvisoTesorero[] }>("/api/avisos-tesoreros"),
-  guardarAvisoTesorero: (id: number, diasAviso: number | null) =>
-    pedir<{ datos: { id: number; nombre: string; diasAviso: number | null; diasEfectivos: number } }>(`/api/avisos-tesoreros/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({ diasAviso }),
-    }),
+  obtenerIdentidad: () => pedir<Identidad>("/api/identidad"),
+  obtenerMiConfiguracion: async () => (await pedir<{ datos: MiConfiguracion }>("/api/mi-configuracion")).datos,
+  guardarMiConfiguracion: async (diasAviso: number, diasEspera: number) =>
+    (await pedir<{ datos: MiConfiguracion }>("/api/mi-configuracion", { method: "PUT", body: JSON.stringify({ diasAviso, diasEspera }) })).datos,
 
   listarSociedades: async () => (await pedir<{ datos: Sociedad[] }>("/api/sociedades")).datos,
   listarCategorias: async () => (await pedir<{ datos: Categoria[] }>("/api/categorias")).datos,

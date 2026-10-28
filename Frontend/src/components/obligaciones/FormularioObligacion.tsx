@@ -4,8 +4,28 @@ import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { ErrorApi } from "@/lib/api";
 import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_MONEDA, SIMBOLO } from "@/lib/formato";
 import type { CambiosObligacion, Categoria, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
+import { ConfirmarCambio, type CambioPendiente } from "../ConfirmarCambio";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir, Etiqueta } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
+
+const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
+
+/** Texto del antes o el después de los campos que cambiaron, una línea por campo, para la confirmación. */
+function lineasCambio(v: Valores, sucios: Partial<Record<keyof Valores, unknown>>): string {
+  const l: string[] = [];
+  if (sucios.diaEsperadoPago) l.push(`Día de pago: ${v.diaEsperadoPago || "Sin día"}`);
+  if (sucios.frecuencia || sucios.mesArranque) {
+    const mes = v.frecuencia !== "mensual" && v.mesArranque !== "" ? `, desde ${MESES[Number(v.mesArranque) - 1]}` : "";
+    l.push(`Frecuencia: ${NOMBRE_FRECUENCIA[v.frecuencia]}${mes}`);
+  }
+  if (sucios.frecuenciaConfirmada) l.push(`Frecuencia: ${v.frecuenciaConfirmada ? "confirmada" : "sin confirmar"}`);
+  if (sucios.moneda) l.push(`Moneda: ${NOMBRE_MONEDA[v.moneda]}`);
+  if (sucios.monedaConfirmada) l.push(`Moneda: ${v.monedaConfirmada ? "confirmada" : "sin confirmar"}`);
+  if (sucios.monto) l.push(`Monto esperado: ${v.monto.trim() || "Sin monto"}`);
+  if (sucios.responsable) l.push(`Responsable: ${v.responsable.trim() || "Sin asignar"}`);
+  if (sucios.activa) l.push(`Estado: ${v.activa ? "Activa" : "Inactiva"}`);
+  return l.join("\n");
+}
 
 const MONTO_MAXIMO = Number.MAX_SAFE_INTEGER; // centavos (el mismo límite del Backend)
 
@@ -64,7 +84,8 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
   if (incluir("diaEsperadoPago")) c.diaEsperadoPago = v.diaEsperadoPago === "" ? null : Number(v.diaEsperadoPago);
   if (incluir("frecuencia")) c.frecuencia = v.frecuencia;
   if (incluir("frecuenciaConfirmada")) c.frecuenciaPorConfirmar = !v.frecuenciaConfirmada;
-  if (v.frecuencia !== "mensual" && (incluir("mesArranque") || incluir("frecuencia"))) c.mesArranque = v.mesArranque === "" ? null : Number(v.mesArranque);
+  // Mensual no usa mes de arranque: se limpia. Las demás frecuencias lo exigen (el formulario lo valida).
+  if (incluir("mesArranque") || incluir("frecuencia")) c.mesArranque = v.frecuencia === "mensual" || v.mesArranque === "" ? null : Number(v.mesArranque);
   if (incluir("moneda")) c.moneda = v.moneda;
   if (incluir("monedaConfirmada")) c.monedaPorConfirmar = !v.monedaConfirmada;
   if (incluir("monto")) c.montoEsperado = aCentavos(v.monto) ?? null;
@@ -86,6 +107,7 @@ export function FormularioObligacion({
   const dialogo = useRef<HTMLDialogElement>(null);
   const nueva = obligacion === null;
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
+  const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
   const { register, handleSubmit, control, setError, formState } = useForm<Valores>({
     defaultValues: valoresIniciales(obligacion, frecuenciaDefecto),
     mode: "onBlur",
@@ -105,6 +127,18 @@ export function FormularioObligacion({
 
   async function enviar(v: Valores) {
     setErrorGeneral(null);
+    if (!nueva) {
+      // Toda edición manual pide confirmación con el valor de antes y el de después.
+      const antes = valoresIniciales(obligacion, frecuenciaDefecto);
+      const sucios = dirtyFields;
+      setConfirmacion({
+        titulo: `Guardar los cambios de ${obligacion.proveedor} (${obligacion.sociedad})`,
+        antes: lineasCambio(antes, sucios),
+        despues: lineasCambio(v, sucios),
+        ejecutar: () => alGuardar(aCambios(v, sucios)),
+      });
+      return;
+    }
     try {
       await alGuardar(aCambios(v, nueva ? null : dirtyFields));
     } catch (e) {
@@ -224,7 +258,7 @@ export function FormularioObligacion({
             <Campo
               id="f-frecuencia"
               etiqueta="Frecuencia"
-              ayuda="Cada cuánto se paga."
+              ayuda="Cada cuánto se paga. Si no es mensual, indique el mes de arranque."
               error={errors.frecuencia?.message}
             >
               <select id="f-frecuencia" className={`${claseControl} w-full`} aria-describedby={desc("frecuencia")} {...register("frecuencia")}>
@@ -250,7 +284,7 @@ export function FormularioObligacion({
                 }
                 error={errors.mesArranque?.message}
               >
-                <select id="f-mesArranque" className={`${claseControl} w-full`} aria-describedby={desc("mesArranque")} {...register("mesArranque")}>
+                <select id="f-mesArranque" className={`${claseControl} w-full`} aria-describedby={desc("mesArranque")} {...register("mesArranque", { validate: (v) => v !== "" || "Indique el mes de arranque: sin él no se generan los vencimientos" })}>
                   <option value="">Sin definir</option>
                   {MESES.map((m, i) => (
                     <option key={m} value={i + 1}>{m[0]!.toUpperCase() + m.slice(1)}</option>
@@ -343,6 +377,7 @@ export function FormularioObligacion({
           {!nueva && !isDirty && <span className="text-sm text-suave">Cambie algún dato para poder guardar.</span>}
         </div>
       </form>
+      {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
     </dialog>
   );
 }

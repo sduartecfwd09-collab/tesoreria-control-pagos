@@ -63,16 +63,16 @@ export const DEFINICIONES: DefinicionParametro[] = [
   {
     clave: "aviso_dias",
     etiqueta: "Días de aviso antes del vencimiento",
-    ayuda: "Con cuántos días de anticipación un pago pasa de «Programado» a «Por vencer». Cada tesorero puede tener su propio aviso en la tabla de abajo; este valor lo usa quien no tenga el suyo.",
+    ayuda: "Con cuántos días de anticipación un pago pasa de «Programado» a «Por vencer». Cada tesorero puede tener su propio aviso en «Mi configuración»; este valor lo usa quien no tenga el suyo.",
     ejemplo: "Ejemplo: con 3 días de aviso, un pago con fecha de pago el 15 de octubre figura como «Programado» hasta el 11 de octubre y como «Por vencer» desde el 12 de octubre.",
-    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 60, supuesto: false, visible: true,
+    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 60, supuesto: false, visible: false,
   },
   {
     clave: "dias_espera_vencido",
     etiqueta: "Días de espera antes de marcar Vencido",
     ayuda: "Cuántos días después de la fecha de pago se espera el pago antes de marcarlo como «Vencido». Durante la espera el pago sigue como «Por vencer».",
     ejemplo: "Ejemplo: con 3 días de espera y fecha de pago el 10 de octubre, sin pago, el 11, 12 y 13 de octubre figura como «Por vencer» (se espera el pago) y desde el 14 de octubre pasa a «Vencido».",
-    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 15, supuesto: false, visible: true,
+    tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 15, supuesto: false, visible: false,
   },
   {
     clave: "marcar_vencido_sin_estado",

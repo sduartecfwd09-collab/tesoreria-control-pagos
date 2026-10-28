@@ -305,6 +305,7 @@ model Usuario {
   rol                  Rol                         @relation(fields: [rolId], references: [id])
   activo               Boolean                     @default(true)
   diasAviso            Int? // días de aviso propios (null = usa el parámetro general «Días de aviso antes del vencimiento»)
+  diasEspera           Int? // días de espera propios antes de marcar Vencido, de 0 a 15 (null = usa el parámetro general «Días de espera antes de marcar Vencido»)
   creadoEn             DateTime                    @default(now()) @db.DateTime(3)
   actualizado          DateTime                    @updatedAt @db.DateTime(3)
   sociedadesATesoreria Sociedad[]                  @relation("TesoreroDeSociedad")

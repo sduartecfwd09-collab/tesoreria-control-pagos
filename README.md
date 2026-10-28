@@ -26,7 +26,7 @@ Formato: `mysql://USUARIO:CLAVE@127.0.0.1:3306/NOMBRE_BASE`. Siempre `127.0.0.1`
 | `npm run db:migrar:crear` | Tras cambiar `schema.prisma`: genera una migración nueva y la aplica en `dev` (usa la base sombra). Se revisa el SQL antes de versionarlo. |
 | `npm run db:migrar` | Aplica las migraciones pendientes (`prisma migrate deploy`). Es la que se usa en producción. |
 | `npm run db:estado` | Dice si la base está al día con las migraciones. |
-| `npm run db:seed` | Siembra (idempotente): los roles Jefatura y Usuario, las 5 sociedades del piloto, las categorías y los parámetros. Los usuarios no se siembran: se cargan con `usuarios:cargar`. |
+| `npm run db:seed` | Siembra (idempotente): los roles Jefatura y Tesorero, las 5 sociedades del piloto, las categorías y los parámetros. Los usuarios no se siembran: se cargan con `usuarios:cargar`. |
 | `npm run db:setup` | Desde cero: genera el cliente, aplica las migraciones y siembra. |
 | `npm run db:reiniciar` | Borra y recrea `tesoreria_dev` (migraciones y seed). Se niega a correr contra una base `_test`, contra cualquier base que no termine en `_dev` y contra un servidor que no sea 127.0.0.1. |
 | `npm run db:preparar-test` | Reinicia `tesoreria_test` (la vacía, migra y siembra). `npm test` ya lo hace solo. |
@@ -191,3 +191,10 @@ Formato: JSON; errores como `{ "error": "texto" }` (en altas y ediciones tambié
 - **Diseño nuevo pendiente de aplicar:** las pantallas actuales todavía muestran textos internos («pronto», «Por confirmar con Tesorería») ; se reemplazan con el diseño aprobado en la maqueta (ver `CLAUDE.md`).
 - **TanStack Table 8.21.3:** se eligió la línea 8 (madura) en vez de la 9, publicada en agosto de 2026 y aún con correcciones frecuentes. `npm run lint` muestra 2 advertencias del React Compiler («incompatible library») en las tablas: el compilador no optimiza esos componentes, pero funcionan bien.
 - **Alertas al vuelo:** `GET /api/obligaciones` recalcula los identificadores repetidos sobre todo el catálogo en cada consulta; es trivial con ~65 obligaciones, revisar si el catálogo crece mucho.
+
+## Mi configuración, identidad temporal y roles
+
+- **Roles:** Tesorero (antes «Usuario») y Jefatura. El Excel de `USUARIOS_FILE` acepta «Usuario» y «Tesorero» en la columna Rol. `npm run usuarios:verificar-rol -- "<parte del nombre>"` compara el rol escrito en el Excel con el de la base y solo imprime el rol (nunca nombres ni correos).
+- **Mi configuración:** `GET/PUT /api/mi-configuracion` (aviso 0 a 60 y espera 0 a 15 días, propios de quien actúa). Los parámetros generales `aviso_dias` y `dias_espera_vencido` quedan internos como respaldo.
+- **Identidad temporal:** con `MODO_PRUEBAS=true` en `.env`, `GET /api/identidad` lista los tesoreros y la API acepta el encabezado `X-Usuario-Actual`. Sin ese modo el encabezado se ignora y el selector no aparece. El servidor no arranca con `MODO_PRUEBAS=true` y `NODE_ENV=production`. El módulo `src/identidad/usuario-actual.ts` (Backend) y `src/lib/usuario-actual.ts` (Frontend) es lo único que se reemplaza con la sesión de Microsoft (Hito 4A).
+- **Verificación de estados:** `npm run estados` (Frontend) comprueba que cada estado tenga etiqueta de texto, ícono y ayuda, además del color; `npm run contraste` verifica los contrastes.

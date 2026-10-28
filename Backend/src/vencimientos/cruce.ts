@@ -2,7 +2,7 @@
 // de datos (columnas de Vencimiento); no toca los archivos de estados de cuenta ni el catálogo.
 import { cruzar, type EstadisticasCruce, type ResultadoCruce } from "../domain/cruce.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
-import { avisosPorObligacion, cargarDatosCruce, guardarResultadosCruce, type DatosCruce } from "../repositories/cruce.js";
+import { cargarDatosCruce, preferenciasPorObligacion, guardarResultadosCruce, type DatosCruce } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { diasDeAviso } from "./generar.js";
 
@@ -13,7 +13,7 @@ export interface ResumenCruce {
   resultados: ResultadoCruce[];
   estadisticas: EstadisticasCruce;
   datos: DatosCruce;
-  parametros: { diasAntes: number; diasDespues: number; diasAviso: number; avisoPorObligacion: Map<number, number>; diasEspera: number; marcarVencidoSinEstado: boolean; hoy: Date };
+  parametros: { diasAntes: number; diasDespues: number; diasAviso: number; avisoPorObligacion: Map<number, number>; esperaPorObligacion: Map<number, number>; diasEspera: number; marcarVencidoSinEstado: boolean; hoy: Date };
 }
 
 const entero = async (clave: string, defecto: number) => {
@@ -24,11 +24,13 @@ const entero = async (clave: string, defecto: number) => {
 /** Recalcula el estado de todos los vencimientos de obligaciones activas. Determinista e idempotente. */
 export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
   const datos = await cargarDatosCruce();
+  const preferencias = await preferenciasPorObligacion();
   const parametros = {
     diasAntes: await entero("ventana_dias_antes", 10),
     diasDespues: await entero("ventana_dias_despues", 12),
     diasAviso: await diasDeAviso(),
-    avisoPorObligacion: await avisosPorObligacion(),
+    avisoPorObligacion: preferencias.aviso,
+    esperaPorObligacion: preferencias.espera,
     diasEspera: await entero("dias_espera_vencido", 3),
     marcarVencidoSinEstado: (await valorGlobal("marcar_vencido_sin_estado")) === "si",
     hoy: hoyDe(reloj),

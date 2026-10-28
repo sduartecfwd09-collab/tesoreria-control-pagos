@@ -154,19 +154,25 @@ export async function movimientosParaGrupos() {
   return filas.map((f) => ({ sociedadId: f.cuenta.sociedadId, fecha: f.fecha, descripcion: f.descripcion, esDebito: f.debito > 0n }));
 }
 
-/** Aviso propio del responsable efectivo de cada obligación activa (el de la obligación o, si falta, el tesorero de la sociedad). Solo entran los que tienen el suyo. */
-export async function avisosPorObligacion(): Promise<Map<number, number>> {
+export interface PreferenciasPorObligacion { aviso: Map<number, number>; espera: Map<number, number> }
+
+/**
+ * Aviso y espera propios del responsable efectivo de cada obligación activa (el responsable de la obligación o, si falta, el
+ * tesorero de su sociedad). Solo entran quienes tienen el suyo: sin entrada se usa el valor general.
+ */
+export async function preferenciasPorObligacion(): Promise<PreferenciasPorObligacion> {
   const [obligaciones, usuarios] = await Promise.all([
-    prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, responsable: true, sociedad: { select: { tesorero: { select: { diasAviso: true } } } } } }),
-    prisma.usuario.findMany({ where: { activo: true, diasAviso: { not: null } }, select: { nombreNormalizado: true, diasAviso: true } }),
+    prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, responsable: true, sociedad: { select: { tesorero: { select: { diasAviso: true, diasEspera: true } } } } } }),
+    prisma.usuario.findMany({ where: { activo: true }, select: { nombreNormalizado: true, diasAviso: true, diasEspera: true } }),
   ]);
-  const porNombre = new Map(usuarios.map((u) => [u.nombreNormalizado, u.diasAviso!]));
-  const m = new Map<number, number>();
+  const porNombre = new Map(usuarios.map((u) => [u.nombreNormalizado, u]));
+  const r: PreferenciasPorObligacion = { aviso: new Map(), espera: new Map() };
   for (const o of obligaciones) {
-    const dias = o.responsable ? porNombre.get(normalizarNombrePersona(o.responsable)) : o.sociedad.tesorero?.diasAviso ?? undefined;
-    if (dias !== undefined && dias !== null) m.set(o.id, dias);
+    const dueno = o.responsable ? porNombre.get(normalizarNombrePersona(o.responsable)) : o.sociedad.tesorero;
+    if (dueno?.diasAviso != null) r.aviso.set(o.id, dueno.diasAviso);
+    if (dueno?.diasEspera != null) r.espera.set(o.id, dueno.diasEspera);
   }
-  return m;
+  return r;
 }
 
 /** Para el diagnóstico: nombre de la categoría de cada obligación activa. */

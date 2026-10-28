@@ -28,13 +28,12 @@ describe("API de parámetros", () => {
     await app.inject({ method: "PUT", url: `/api/parametros/${id}`, payload: { valor: 10 } });
   });
 
-  it("en Configuración solo se ven dos parámetros; los demás siguen existiendo", async () => {
+  it("ningún parámetro general se muestra en Configuración; todos siguen existiendo", async () => {
     const d = (await app.inject("/api/parametros")).json().datos as { clave: string; visible: boolean; ejemplo: string | null }[];
-    expect(d.filter((p) => p.visible).map((p) => p.clave).sort()).toEqual(["aviso_dias", "dias_espera_vencido"]);
-    for (const clave of ["aviso_datos_dias", "marcar_vencido_sin_estado", "diagnostico_dias_lejos", "tolerancia_saldo", "ventana_dias_antes", "ventana_dias_despues", "frecuencia_defecto"]) {
+    expect(d.filter((p) => p.visible)).toEqual([]); // los avisos y la espera son personales («Mi configuración»); el general queda interno
+    for (const clave of ["aviso_dias", "dias_espera_vencido", "aviso_datos_dias", "marcar_vencido_sin_estado", "diagnostico_dias_lejos", "tolerancia_saldo", "ventana_dias_antes", "ventana_dias_despues", "frecuencia_defecto"]) {
       expect(d.find((p) => p.clave === clave)?.visible).toBe(false);
     }
-    for (const p of d.filter((x) => x.visible)) expect(p.ejemplo).toMatch(/Ejemplo: .*octubre/);
   });
 
   it("días de espera: rango de 0 a 15", async () => {
