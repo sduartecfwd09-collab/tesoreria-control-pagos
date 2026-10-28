@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { api, ErrorApi } from "@/lib/api";
 import type { MiConfiguracion } from "@/lib/tipos";
 import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
-import { CajaError, claseBoton } from "./ui";
+import { CajaError } from "./ui";
 
 const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
 const fecha = (d: Date) => d.toLocaleDateString("es-CR", { day: "numeric", month: "long" });
@@ -22,16 +22,10 @@ function CampoDias({
   id: string; titulo: string; ayuda: string; ejemplo: string; valor: string; max: number; alCambiar: (v: string) => void; error?: string;
 }) {
   return (
-    <div className="py-5 border-b border-divisor grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
-      <div>
-        <label htmlFor={id} className="font-semibold">{titulo}</label>
-        <p id={`${id}-ayuda`} className="mt-1 text-sm text-suave max-w-xl">{ayuda} Valores permitidos: de 0 a {max}.</p>
-        <p className="mt-2 max-w-xl rounded border border-divisor bg-fondo-suave px-3 py-2 text-sm">
-          <strong>Ejemplo:</strong> {ejemplo}
-        </p>
-        {error && <p id={`${id}-error`} role="alert" className="mt-2 text-sm font-medium text-rojo">{error}</p>}
-      </div>
-      <div className="flex items-center gap-2">
+    <div className="border-b border-divisor py-5">
+      <label htmlFor={id} className="font-semibold">{titulo}</label>
+      <p id={`${id}-ayuda`} className="mt-1 text-sm text-suave">{ayuda} Valores permitidos: de 0 a {max}.</p>
+      <div className="mt-3 flex items-center gap-2">
         <input
           id={id}
           type="number"
@@ -43,10 +37,14 @@ function CampoDias({
           aria-invalid={error ? true : undefined}
           value={valor}
           onChange={(e) => alCambiar(e.target.value)}
-          className="border-2 border-control bg-fondo rounded px-3 py-2 text-base w-24"
+          className="w-24 rounded border-2 border-control bg-fondo px-3 py-2 text-base"
         />
-        <span className="text-sm text-suave">días</span>
+        <span className="text-sm font-medium">días</span>
       </div>
+      {error && <p id={`${id}-error`} role="alert" className="mt-2 text-sm font-medium text-rojo">{error}</p>}
+      <p className="mt-3 rounded border border-divisor bg-fondo-suave px-3 py-2 text-sm">
+        <strong>Ejemplo:</strong> {ejemplo}
+      </p>
     </div>
   );
 }
@@ -157,7 +155,7 @@ export function PanelConfiguracion() {
   }
 
   return (
-    <form onSubmit={guardar} noValidate className="mt-8">
+    <form onSubmit={guardar} noValidate className="mt-8 max-w-[640px]">
       <section aria-labelledby="h-mis-reglas">
         <h2 id="h-mis-reglas" className="text-lg font-bold border-b-2 border-acento pb-1">
           Sus avisos y sus plazos
@@ -183,12 +181,16 @@ export function PanelConfiguracion() {
           error={errorCampos.espera}
         />
       </section>
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button type="submit" className={claseBoton} disabled={!cambiado}>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          disabled={!cambiado}
+          className="rounded bg-acento px-6 py-2.5 font-bold text-sobre-acento disabled:cursor-not-allowed disabled:opacity-40"
+        >
           Guardar
         </button>
         <span role="status" aria-live="polite" className="text-sm text-suave">
-          {ok ?? (!cambiado ? "Cambie algún valor para poder guardar." : "")}
+          {!cambiado ? ok ?? "Cambie algún valor para guardar" : ""}
         </span>
       </div>
       {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}

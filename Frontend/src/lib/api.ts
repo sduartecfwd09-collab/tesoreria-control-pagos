@@ -1,5 +1,5 @@
 import type {
-  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
+  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
@@ -48,6 +48,36 @@ export const api = {
 
   obtenerAvisos: () => pedir<Avisos>("/api/avisos"),
   movimientosSinObligacion: () => pedir<MovimientosSinObligacion>("/api/movimientos-sin-obligacion"),
+
+  movimientoSinObligacionDetalle: async (clave: string) =>
+    (await pedir<{ datos: DetalleMovimientoSinObligacion }>(`/api/movimientos-sin-obligacion/detalle?clave=${encodeURIComponent(clave)}`)).datos,
+  informacionArchivo: async (id: number) => (await pedir<{ datos: InfoArchivo }>(`/api/archivos/${id}`)).datos,
+  /** Descarga una copia del archivo: se pide con el encabezado de identidad (un enlace simple no lo lleva) y se guarda desde un enlace temporal. */
+  descargarArchivo: async (id: number, nombreAlternativo: string) => {
+    let r: Response;
+    try {
+      r = await fetch(`${BASE}/api/archivos/${id}/descargar`, { headers: encabezadoUsuario(), cache: "no-store" });
+    } catch {
+      throw new ErrorApi("No se pudo abrir el archivo");
+    }
+    if (!r.ok) throw new ErrorApi("No se pudo abrir el archivo", r.status);
+    const cd = r.headers.get("Content-Disposition") ?? "";
+    const nombre = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1] ?? /filename="([^"]+)"/i.exec(cd)?.[1] ?? nombreAlternativo;
+    let nombreFinal = nombre;
+    try {
+      nombreFinal = decodeURIComponent(nombre);
+    } catch {
+      // se deja el nombre tal como vino
+    }
+    const url = URL.createObjectURL(await r.blob());
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = nombreFinal;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
 
   obtenerIdentidad: () => pedir<Identidad>("/api/identidad"),
   obtenerMiConfiguracion: async () => (await pedir<{ datos: MiConfiguracion }>("/api/mi-configuracion")).datos,

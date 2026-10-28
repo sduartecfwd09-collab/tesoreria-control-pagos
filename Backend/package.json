@@ -32,6 +32,7 @@
     "cruzar:simular": "tsx src/cli/simular-cruce.ts",
     "usuarios:cargar": "tsx src/cli/usuarios-cargar.ts",
     "usuarios:verificar-rol": "tsx src/cli/usuarios-verificar-rol.ts",
+    "archivos:inspeccionar-saldo": "tsx src/cli/archivos-inspeccionar-saldo.ts",
     "sociedades:cargar": "tsx src/cli/sociedades-cargar.ts"
   },
   "dependencies": {

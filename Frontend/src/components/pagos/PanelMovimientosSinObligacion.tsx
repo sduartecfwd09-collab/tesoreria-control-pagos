@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { nombreFecha } from "@/lib/formato";
-import type { MovimientosSinObligacion } from "@/lib/tipos";
+import type { MovimientoSinObligacion, MovimientosSinObligacion } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
+import { FichaMovimiento } from "../archivos/FichaMovimiento";
 
 const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
 
@@ -12,6 +13,7 @@ const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider
 export function PanelMovimientosSinObligacion() {
   const [datos, setDatos] = useState<MovimientosSinObligacion | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [abierto, setAbierto] = useState<MovimientoSinObligacion | null>(null);
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -29,11 +31,16 @@ export function PanelMovimientosSinObligacion() {
   return (
     <>
       <LineaAlcance alcance={datos.alcance} />
-      <p className="mt-3 text-sm" aria-live="polite">
-        {datos.totalGrupos === 0
-          ? "No hay movimientos sin obligación."
-          : `${n(datos.totalGrupos)} ${datos.totalGrupos === 1 ? "número" : "números"} sin obligación, con ${n(datos.totalPagos)} ${datos.totalPagos === 1 ? "pago" : "pagos"}`}
-      </p>
+      <section aria-label="Resumen" aria-live="polite" className="mt-4 max-w-xl rounded-[14px] border border-divisor bg-fondo-suave p-5">
+        {datos.totalGrupos === 0 ? (
+          <p className="font-semibold">No hay movimientos sin obligación.</p>
+        ) : (
+          <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
+            <span><b className="text-[44px] font-extrabold leading-none tabular-nums">{n(datos.totalGrupos)}</b> <span className="text-sm text-suave">{datos.totalGrupos === 1 ? "número sin obligación" : "números sin obligación"}</span></span>
+            <span><b className="text-[44px] font-extrabold leading-none tabular-nums">{n(datos.totalPagos)}</b> <span className="text-sm text-suave">{datos.totalPagos === 1 ? "pago" : "pagos"}</span></span>
+          </div>
+        )}
+      </section>
       {datos.totalGrupos > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-sm">
@@ -47,11 +54,12 @@ export function PanelMovimientosSinObligacion() {
                 <th scope="col" className={th}>Última fecha</th>
                 <th scope="col" className={th}>Sociedad</th>
                 <th scope="col" className={th}>Cuenta</th>
+                <th scope="col" className={th}><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody>
               {datos.datos.map((m, i) => (
-                <tr key={`${m.proveedor}-${m.identificador}-${i}`} className="border-t border-linea">
+                <tr key={`${m.clave}-${i}`} className="border-t border-linea">
                   <td className="px-3.5 py-4 align-top font-semibold">{m.proveedor}</td>
                   <td className="px-3.5 py-4 align-top font-mono text-[13px] text-suave whitespace-nowrap">{m.identificador}</td>
                   <td className="px-3.5 py-4 align-top text-right tabular-nums">{n(m.pagos)}</td>
@@ -59,12 +67,16 @@ export function PanelMovimientosSinObligacion() {
                   <td className="px-3.5 py-4 align-top whitespace-nowrap">{nombreFecha(m.ultimaFecha)}</td>
                   <td className="px-3.5 py-4 align-top text-xs">{m.sociedades.map((s) => <span key={s} className="block">{s}</span>)}</td>
                   <td className="px-3.5 py-4 align-top font-mono text-[13px] text-suave whitespace-nowrap">{m.cuentas.map((c) => <span key={c} className="block">{c}</span>)}</td>
+                  <td className="px-3.5 py-4 align-top text-right">
+                    <button type="button" onClick={() => setAbierto(m)} aria-label={`Ver información completa de ${m.proveedor} ${m.identificador}`} className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave">Ver información completa</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {abierto && <FichaMovimiento clave={abierto.clave} proveedor={abierto.proveedor} alCerrar={() => setAbierto(null)} />}
     </>
   );
 }

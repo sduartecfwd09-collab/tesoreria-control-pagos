@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import { env } from "./config/env.js";
 import { aNumero } from "./domain/montos.js";
 import { relojSistema, type Reloj } from "./domain/reloj.js";
+import { rutasArchivos } from "./routes/archivos.js";
 import { rutasAvisos } from "./routes/avisos.js";
 import { rutasMovimientosSinObligacion } from "./routes/movimientos-sin-obligacion.js";
 import { rutasIdentidad } from "./routes/identidad.js";
@@ -12,7 +13,7 @@ import { rutasParametros } from "./routes/parametros.js";
 import { rutasVencimientos } from "./routes/vencimientos.js";
 
 /** `reloj` se inyecta en las pruebas para fijar la fecha de hoy. */
-export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPruebas?: boolean } = {}) {
+export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPruebas?: boolean; /** carpeta de estados de cuenta (solo lectura); las pruebas la fijan */ raizFuentes?: string } = {}) {
   const app = Fastify({ logger: opts.logger ?? false });
   const reloj = opts.reloj ?? relojSistema;
   const modoPruebas = opts.modoPruebas ?? env.MODO_PRUEBAS;
@@ -31,11 +32,12 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: "No encontrado" }));
 
   // CORS: solo los orígenes del Frontend configurados en CORS_ORIGINS.
-  await app.register(cors, { origin: env.CORS_ORIGINS, methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] });
+  await app.register(cors, { origin: env.CORS_ORIGINS, methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], exposedHeaders: ["Content-Disposition"] });
 
   app.get("/api/salud", async () => ({ estado: "ok", hora: reloj().toISOString() }));
   await app.register(rutasParametros);
   await app.register(rutasAvisos, { reloj, modoPruebas });
+  await app.register(rutasArchivos, { modoPruebas, raizFuentes: opts.raizFuentes ?? env.STATEMENTS_ROOT });
   await app.register(rutasMovimientosSinObligacion, { modoPruebas });
   await app.register(rutasIdentidad, { modoPruebas });
   await app.register(rutasImportaciones, { modoPruebas });

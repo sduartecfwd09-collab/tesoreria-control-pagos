@@ -32,7 +32,7 @@ describe("el código no usa operaciones de escritura sobre archivos", () => {
   });
 
   it("las únicas funciones de archivos que se importan del sistema son de lectura", () => {
-    const permitidas = new Set(["readFile", "readdir", "stat", "existsSync"]);
+    const permitidas = new Set(["readFile", "readdir", "stat", "realpath", "existsSync"]);
     const usadas = new Set<string>();
     for (const f of codigo) {
       for (const m of readFileSync(f, "utf8").matchAll(/import\s*\{([^}]*)\}\s*from\s*"node:fs(?:\/promises)?"/g)) {

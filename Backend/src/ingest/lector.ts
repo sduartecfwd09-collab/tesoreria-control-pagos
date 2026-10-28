@@ -9,7 +9,7 @@ import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 7; // 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
+export const LECTOR_VERSION = 8; // 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
 
 export class ErrorLectura extends Error {}
 
@@ -141,6 +141,8 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     bancoArchivo: meta.banco,
     movimientos,
     continuidad,
+    saldoInicial: meta.apertura,
+    saldoFinal: saldoFinalDe(movimientos, continuidad.orden),
     fechas,
     periodoDeclarado: meta.periodoDeclarado,
     discrepancias,
@@ -148,6 +150,12 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     filasPieIgnoradas,
     conImagenes: libro.conImagenes,
   };
+}
+
+/** Saldo de la última fila según el orden en que el archivo lista los movimientos (el más reciente); null si no hay o está vacío. */
+function saldoFinalDe(movs: MovimientoLeido[], orden: "ascendente" | "descendente"): number | null {
+  if (movs.length === 0) return null;
+  return (orden === "descendente" ? movs[0]! : movs[movs.length - 1]!).saldo;
 }
 
 interface Metadatos {

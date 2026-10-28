@@ -2,11 +2,15 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { nombreFecha, nombrePeriodo } from "@/lib/formato";
-import type { Avisos } from "@/lib/tipos";
+import type { Avisos, ClaveGrupoAviso, EstadoVencimiento } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
-import { EstadoPago } from "./EstadoPago";
+import { EstadoPago, IconoEstado } from "./EstadoPago";
+import { ACENTO_ESTADO, TarjetaDeEstado } from "./TarjetaEstado";
+
+/** Cada grupo de avisos toma el estado que ya se usa en Pagos del mes. */
+const ESTADO_DEL_GRUPO: Record<ClaveGrupoAviso, EstadoVencimiento> = { vencidos: "vencido", por_vencer: "por_vencer", por_revisar: "por_revisar", sin_informacion: "sin_informacion" };
 
 const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
 
@@ -32,14 +36,11 @@ export function PanelAvisos() {
     <>
       <LineaAlcance alcance={datos.alcance} detalle={datos.alcance.tipo === "mio" ? `Con tu aviso de ${datos.diasAviso} días` : undefined} />
 
-      <ul className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section aria-label="Resumen de avisos" className="mt-5 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         {datos.grupos.map((g) => (
-          <li key={g.clave} className="rounded-xl border border-linea p-4">
-            <b className="block text-3xl font-extrabold tabular-nums">{g.total.toLocaleString("es-CR")}</b>
-            <span className="mt-1 block text-sm text-suave">{g.titulo}</span>
-          </li>
+          <TarjetaDeEstado key={g.clave} estado={ESTADO_DEL_GRUPO[g.clave]} titulo={g.titulo}>{g.total.toLocaleString("es-CR")}</TarjetaDeEstado>
         ))}
-      </ul>
+      </section>
 
       {datos.total === 0 && (
         <p className="mt-8 text-suave" role="status">{datos.alcance.tipo === "mio" ? "Nada por atender con tus días de aviso" : "Nada por atender."}</p>
@@ -47,7 +48,12 @@ export function PanelAvisos() {
 
       {datos.grupos.filter((g) => g.total > 0).map((g) => (
         <section key={g.clave} className="mt-8" aria-labelledby={`aviso-${g.clave}`}>
-          <h2 id={`aviso-${g.clave}`} className="text-xl font-bold">{g.titulo} <span className="font-normal text-suave">({g.total.toLocaleString("es-CR")})</span></h2>
+          <h2 id={`aviso-${g.clave}`} className="flex items-center gap-2.5 text-xl font-bold">
+            <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${ACENTO_ESTADO[ESTADO_DEL_GRUPO[g.clave]]} ${["vencido", "sin_informacion"].includes(ESTADO_DEL_GRUPO[g.clave]) ? "text-fondo" : "text-texto"}`}>
+              <IconoEstado estado={ESTADO_DEL_GRUPO[g.clave]} />
+            </span>
+            {g.titulo} <span className="font-normal text-suave">({g.total.toLocaleString("es-CR")})</span>
+          </h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[1000px] border-collapse text-sm">
               <caption className="sr-only">{g.titulo}</caption>

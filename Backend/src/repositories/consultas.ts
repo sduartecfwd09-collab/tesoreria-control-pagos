@@ -103,3 +103,15 @@ export async function fechasPorSociedadYMes(): Promise<FechasPorSociedadMes[]> {
     fueraDeTolerancia: Number(f.fuera ?? 0), desvioMaximoDias: Number(f.desvio ?? 0),
   }));
 }
+
+/** Un archivo registrado con lo que muestra su panel de información (nunca el contenido del archivo). */
+export async function obtenerArchivoRegistrado(id: number) {
+  return prisma.archivoImportado.findUnique({
+    where: { id },
+    select: {
+      id: true, ruta: true, sociedadId: true, mes: true, estado: true, motivo: true, error: true, formato: true, numMovimientos: true, numDuplicados: true, detalle: true, retiradoEn: true,
+      sociedad: { select: { codigo: true, nombreLargo: true } },
+      cuenta: { select: { numero: true, banco: true, moneda: true } },
+    },
+  });
+}

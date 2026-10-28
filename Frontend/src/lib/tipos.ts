@@ -90,11 +90,20 @@ export interface ArchivoImportado {
   discrepancias: { tipo: string; mensaje: string }[];
   continuidad: { estado: string; verificados: number; fallos: number; filasConFallo: number[] } | null;
   /** Cuadra, No cuadra o No verificable, con su motivo en lenguaje claro; null si el archivo no trae la comprobación */
-  saldo: { resultado: "cuadra" | "no_cuadra" | "no_verificable"; motivo: string } | null;
+  saldo: TextoSaldo | null;
   /** primera y última fecha con movimientos del archivo */
   fechas: { del: string; al: string } | null;
   monedaOrigen: string | null;
   leidoEn: string | null;
+}
+
+/** El resultado del saldo en tres partes, más las tres juntas (motivo) para el texto emergente. */
+export interface TextoSaldo {
+  resultado: "cuadra" | "no_cuadra" | "no_verificable";
+  queSePaso: string;
+  queSignifica: string;
+  queHacer: string;
+  motivo: string;
 }
 
 export interface Importaciones {
@@ -381,6 +390,8 @@ export interface Avisos {
 }
 
 export interface MovimientoSinObligacion {
+  /** identifica el grupo para pedir su detalle */
+  clave: string;
   proveedor: string;
   identificador: string;
   pagos: number;
@@ -395,4 +406,50 @@ export interface MovimientosSinObligacion {
   totalGrupos: number;
   totalPagos: number;
   alcance: Alcance;
+}
+
+export interface PagoSinObligacion {
+  fecha: string;
+  banco: string | null;
+  cuenta: string;
+  sociedad: string;
+  descripcion: string | null;
+  referencia: string | null;
+  /** débito en centavos */
+  monto: number;
+  moneda: string | null;
+  identificador: string;
+  comoSeExtrajo: string;
+  archivo: { id: number; nombre: string; rutaRelativa: string } | null;
+  hoja: string | null;
+  fila: number | null;
+}
+
+export interface DetalleMovimientoSinObligacion {
+  proveedor: string;
+  pagos: PagoSinObligacion[];
+}
+
+export interface InfoArchivo {
+  id: number;
+  nombre: string;
+  rutaRelativa: string;
+  estado: string;
+  motivoArchivo: string | null;
+  sociedad: string | null;
+  cuenta: string | null;
+  banco: string | null;
+  moneda: string | null;
+  formato: string | null;
+  mes: string | null;
+  hoja: string | null;
+  periodoDeclarado: { del: string | null; al: string | null } | null;
+  fechas: { del: string; al: string } | null;
+  filasLeidas: number;
+  movimientos: number;
+  duplicados: number;
+  /** centavos; null = no detectado */
+  saldoInicial: number | null;
+  saldoFinal: number | null;
+  saldo: TextoSaldo | null;
 }

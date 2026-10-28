@@ -5,7 +5,10 @@ import { api } from "@/lib/api";
 import { compararSociedades } from "@/lib/formato";
 import { SelectorSociedad } from "./SelectorSociedad";
 import { NombreSociedad } from "./ui";
-import type { ArchivoImportado, CeldaCobertura, Cobertura, Importaciones } from "@/lib/tipos";
+import { EtiquetaEstado } from "./pagos/EstadoPago";
+import { FichaArchivo } from "./archivos/FichaArchivo";
+import { TextoSaldoTres } from "./archivos/TextoSaldo";
+import type { ArchivoImportado, CeldaCobertura, Cobertura, EstadoVencimiento, Importaciones, TextoSaldo } from "@/lib/tipos";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const etiquetaMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1] ?? m.slice(5)} ${m.slice(0, 4)}`;
@@ -87,11 +90,23 @@ function Resumen({ r }: { r: Importaciones["resumen"] }) {
   );
 }
 
-function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda: string; vacio: string; filas: { ruta: string; texto: string; id?: number }[] }) {
+interface FilaAtencion {
+  ruta: string;
+  texto?: string;
+  /** el saldo en tres partes (qué pasó, qué significa, qué hacer) */
+  saldo?: TextoSaldo;
+  id?: number;
+  /** muestra «Ver información completa» */
+  verInfo?: boolean;
+}
+
+/** Cada grupo toma el estado visual que ya existe (ícono, color y borde) con un texto propio; los estados de vencimiento no se reescriben. */
+function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer }: { titulo: string; ayuda: string; vacio: string; filas: FilaAtencion[]; estado: EstadoVencimiento; etiqueta: string; alVer: (id: number) => void }) {
   return (
     <section className="mt-8" aria-label={titulo}>
-      <h3 className="font-bold">
-        {titulo} <span className="font-normal text-suave">({filas.length})</span>
+      <h3 className="flex flex-wrap items-center gap-2.5 font-bold">
+        <EtiquetaEstado estado={estado} texto={etiqueta} />
+        <span>{titulo} <span className="font-normal text-suave">({filas.length})</span></span>
       </h3>
       <p className="mt-1 text-sm text-suave max-w-2xl">{ayuda}</p>
       {filas.length === 0 ? (
@@ -99,9 +114,16 @@ function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda:
       ) : (
         <ul className="mt-3 divide-y divide-divisor border border-divisor rounded">
           {filas.map((f, i) => (
-            <li key={f.ruta + i} id={f.id !== undefined ? `archivo-${f.id}` : undefined} className="px-3 py-2 text-sm scroll-mt-4 target:bg-fondo-suave">
-              <span className="font-medium break-all">{f.ruta}</span>
-              <span className="block text-suave">{f.texto}</span>
+            <li key={f.ruta + i} id={f.id !== undefined ? `archivo-${f.id}` : undefined} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-sm scroll-mt-4 target:bg-fondo-suave">
+              <div className="min-w-0 flex-1">
+                <span className="font-medium break-all">{f.ruta}</span>
+                {f.saldo ? <TextoSaldoTres saldo={f.saldo} /> : f.texto && <span className="block text-suave">{f.texto}</span>}
+              </div>
+              {f.verInfo && f.id !== undefined && (
+                <button type="button" onClick={() => alVer(f.id!)} aria-label={`Ver información completa de ${f.ruta}`} className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave">
+                  Ver información completa
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -111,6 +133,7 @@ function ListaAtencion({ titulo, ayuda, vacio, filas }: { titulo: string; ayuda:
 }
 
 function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
+  const [verId, setVerId] = useState<number | null>(null);
   const errores = archivos.filter((a) => a.estado === "con_error");
   const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
   const retirados = archivos.filter((a) => a.estado === "retirado");
@@ -126,18 +149,27 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         titulo="Archivos con error"
         ayuda="No se pudieron leer. El resto de la importación continuó con normalidad."
         vacio="Todos los archivos se leyeron."
+        estado="vencido"
+        etiqueta="Con error"
+        alVer={setVerId}
         filas={errores.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "Sin motivo registrado" }))}
       />
       <ListaAtencion
         titulo="Archivos sin sociedad"
         ayuda="La carpeta del archivo no tiene una sociedad asignada, así que no se leyó. Se lee cuando la carpeta tenga sociedad."
         vacio="Todas las carpetas tienen sociedad."
+        estado="por_revisar"
+        etiqueta="Requiere decisión"
+        alVer={setVerId}
         filas={sinSociedad.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "La carpeta no tiene una sociedad asignada" }))}
       />
       <ListaAtencion
         titulo="Archivos retirados de la carpeta"
         ayuda="Ya no están en la carpeta. Se conservan con su historial, pero no cuentan en totales ni cobertura. Si vuelven a aparecer, se reactivan."
         vacio="Todos los archivos registrados siguen en la carpeta."
+        estado="proyectado"
+        etiqueta="Retirados"
+        alVer={setVerId}
         filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
       />
       <p className="mt-8 text-sm" aria-label="Resultado del saldo">
@@ -147,23 +179,34 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         titulo="Archivos donde el saldo no cuadra"
         ayuda="El saldo anterior más créditos y menos débitos no coincide con el saldo siguiente. Un archivo así no cuenta como estado de cuenta completo: los pagos de esa sociedad quedan en «Sin información» hasta revisarlo."
         vacio="El saldo cuadra en todos los archivos que se pueden verificar."
+        estado="sin_informacion"
+        etiqueta="Sin información"
+        alVer={setVerId}
         filas={saldo.map((a) => ({
+          id: a.id,
           ruta: a.archivo,
-          texto: `${a.saldo!.motivo}${a.continuidad && a.continuidad.filasConFallo.length > 0 ? ` Filas: ${a.continuidad.filasConFallo.join(", ")}.` : ""}`,
+          saldo: a.saldo!,
         }))}
       />
       <ListaAtencion
         titulo="Archivos con saldo no verificable"
         ayuda="No se puede comprobar el saldo de estos archivos. No cambia la cobertura: sigue por fechas."
         vacio="El saldo se pudo comprobar en todos los archivos."
-        filas={noVerificable.map((a) => ({ ruta: a.archivo, texto: a.saldo!.motivo }))}
+        estado="proyectado"
+        etiqueta="Sin cambio en la cobertura"
+        alVer={setVerId}
+        filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
       <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"
         ayuda="La cuenta, el mes o la sociedad del nombre no coinciden con lo que trae el archivo."
         vacio="Los nombres coinciden con el contenido."
+        estado="por_revisar"
+        etiqueta="Por revisar"
+        alVer={setVerId}
         filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ ruta: a.archivo, texto: d.mensaje })))}
       />
+      {verId !== null && <FichaArchivo id={verId} alCerrar={() => setVerId(null)} />}
     </>
   );
 }

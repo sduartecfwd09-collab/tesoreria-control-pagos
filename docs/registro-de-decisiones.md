@@ -60,6 +60,9 @@ Sin datos reales: no se anotan identificadores, montos ni descripciones de movim
 | 2026-10-28 | «Próximo pago» es el próximo vencimiento con fecha igual o posterior a hoy según la frecuencia (ya no «el siguiente al último generado»). | Con el calendario generado hasta el 1 de noviembre, las obligaciones del día 1 mostraban diciembre. |
 | 2026-10-28 | Avisos sin el grupo Programados; frecuencia solo en «Editar» (sin cambio masivo ni casillas); Movimientos sin obligación con una sola línea descriptiva; la tarjeta Por vencer dice «Dentro de los días de aviso». | Menos ruido y textos que no fijan números que dependen de cada persona. |
 | 2026-10-28 | `npm run cruzar:simular -- AAAA-MM-DD`: cifras por estado con un «hoy» elegido, solo lectura y sin pantalla. | Ver Por vencer y Programado en otras fechas sin tocar la base. |
+| 2026-10-28 | Los mensajes de saldo se escriben en tres partes (qué pasó, qué significa, qué hacer), sin paréntesis técnicos. El lector guarda además el saldo inicial y el final detectados de cada archivo. La regla del saldo no cambia hasta ver el resultado de `archivos:inspeccionar-saldo` en dos archivos reales. | Entender por qué hay archivos «no verificables» antes de tocar la regla. |
+| 2026-10-28 | «Ver información completa» en archivos con saldo no verificable y en Movimientos sin obligación, con «Abrir archivo» (copia del .xlsx en solo lectura, solo archivos registrados y dentro del alcance) y «Copiar ruta» (relativa a la carpeta de fuentes). «Abrir en OneDrive» queda para cuando exista el inicio de sesión y TI lo habilite. | Reconocer un archivo o un pago sin salir de la aplicación. |
+| 2026-10-28 | Los grupos de Archivos que requieren atención y las tarjetas de Avisos reutilizan los colores de estado existentes, siempre con texto e ícono. | Coherencia con Pagos del mes, sin colores nuevos. |
 
 ## Pendientes con Tesorería
 

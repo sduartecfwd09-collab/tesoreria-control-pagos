@@ -1,5 +1,6 @@
 // Resultado de la comprobación del saldo de un estado de cuenta (lo calcula el lector al importar) y su texto en
-// lenguaje claro. Puro. Un archivo que «no cuadra» no cuenta como cobertura; uno «no verificable» no cambia la cobertura.
+// lenguaje claro: qué pasó, qué significa y qué hacer. Puro. Un archivo que «no cuadra» no cuenta como cobertura;
+// uno «no verificable» no cambia la cobertura.
 import type { RazonNoVerificable } from "../ingest/tipos.js";
 
 export type ResultadoSaldo = "cuadra" | "no_cuadra" | "no_verificable";
@@ -10,9 +11,11 @@ export interface ContinuidadGuardada {
   fallos?: number;
   motivo?: string;
   razon?: RazonNoVerificable;
+  movimientos?: number;
+  filasSinSaldo?: number;
 }
 
-/** Razón por la que no se pudo verificar; los archivos leídos antes de guardarla se reconocen por su texto fijo. */
+/** Razón por la que no se pudo verificar; los archivos guardados antes de registrarla se reconocen por su texto fijo. */
 export function razonDeContinuidad(c: ContinuidadGuardada | null | undefined): RazonNoVerificable | null {
   if (!c || c.estado !== "no_verificable") return null;
   if (c.razon) return c.razon;
@@ -22,6 +25,7 @@ export function razonDeContinuidad(c: ContinuidadGuardada | null | undefined): R
   return "otro";
 }
 
+/** Frase corta de la razón, para el diagnóstico. */
 export const TEXTO_RAZON: Record<RazonNoVerificable, string> = {
   sin_movimientos: "el archivo no trae movimientos",
   saldo_vacio_todas: "ninguna fila trae saldo",
@@ -30,13 +34,49 @@ export const TEXTO_RAZON: Record<RazonNoVerificable, string> = {
   otro: "el archivo no permite comprobarlo",
 };
 
-/** Resultado y motivo para mostrar en Estados de cuenta; null si el archivo no tiene la comprobación guardada. */
-export function textoSaldo(c: ContinuidadGuardada | null | undefined): { resultado: ResultadoSaldo; motivo: string } | null {
+export interface TextoSaldo {
+  resultado: ResultadoSaldo;
+  queSePaso: string;
+  queSignifica: string;
+  queHacer: string;
+  /** las tres partes juntas, para mostrar en una sola línea */
+  motivo: string;
+}
+
+const armar = (resultado: ResultadoSaldo, queSePaso: string, queSignifica: string, queHacer: string): TextoSaldo => ({
+  resultado, queSePaso, queSignifica, queHacer, motivo: `${queSePaso} ${queSignifica} ${queHacer}`,
+});
+
+const NO_CAMBIA_COBERTURA = "La cobertura sigue por fechas.";
+
+/** Resultado y texto en tres partes para mostrar en Estados de cuenta; null si el archivo no tiene la comprobación guardada. */
+export function textoSaldo(c: ContinuidadGuardada | null | undefined): TextoSaldo | null {
   if (!c || (c.estado !== "cuadra" && c.estado !== "no_cuadra" && c.estado !== "no_verificable")) return null;
-  if (c.estado === "cuadra") return { resultado: "cuadra", motivo: "El saldo cuadra: el saldo anterior más los créditos menos los débitos da el saldo siguiente en todas las filas." };
-  if (c.estado === "no_cuadra") {
-    const cuantas = c.fallos !== undefined && c.verificados !== undefined ? `En ${c.fallos} de ${c.verificados} comparaciones el saldo no cuadra. ` : "El saldo no cuadra. ";
-    return { resultado: "no_cuadra", motivo: `${cuantas}Este archivo no cuenta como estado de cuenta completo: los pagos de esa sociedad quedan en «Sin información» hasta revisarlo.` };
+  if (c.estado === "cuadra") {
+    return armar("cuadra", "El saldo cuadra en todas las filas.", "El estado de cuenta está completo y sirve para confirmar pagos.", "No hay nada que hacer.");
   }
-  return { resultado: "no_verificable", motivo: `No se puede comprobar el saldo: ${TEXTO_RAZON[razonDeContinuidad(c) ?? "otro"]}. La cobertura sigue por fechas.` };
+  if (c.estado === "no_cuadra") {
+    const pasó = c.fallos !== undefined && c.verificados !== undefined
+      ? `En ${c.fallos} de ${c.verificados} comparaciones el saldo no coincide.`
+      : "El saldo no coincide en algunas filas.";
+    return armar("no_cuadra", pasó, "Puede faltar un movimiento o haber un error en el archivo, así que no se usa para confirmar pagos: los pagos de esa sociedad quedan en «Sin información».", "Revise el archivo con el banco o cargue uno corregido.");
+  }
+  switch (razonDeContinuidad(c) ?? "otro") {
+    case "sin_movimientos":
+      return armar("no_verificable", "Este archivo no trae movimientos del mes.", `No hay saldos que revisar. ${NO_CAMBIA_COBERTURA}`, "Si el mes tuvo movimientos, pida el estado de cuenta completo al banco; si no tuvo, no hay nada que hacer.");
+    case "saldo_vacio_todas":
+      return armar("no_verificable", "Este archivo no trae saldo en ninguna fila.", `No se puede revisar que los movimientos estén completos. ${NO_CAMBIA_COBERTURA}`, "Si el banco ofrece una versión con el saldo, descargue esa.");
+    case "saldo_vacio_algunas": {
+      const donde = c.filasSinSaldo !== undefined && c.movimientos !== undefined ? `en ${c.filasSinSaldo} de ${c.movimientos} filas` : "en algunas filas";
+      return armar("no_verificable", `Este archivo no trae saldo ${donde}.`, `No se puede revisar que los movimientos estén completos. ${NO_CAMBIA_COBERTURA}`, "Revise el archivo o pida al banco una versión con el saldo en todas las filas.");
+    }
+    case "un_solo_saldo": {
+      const pasó = c.movimientos === 1
+        ? "Este archivo trae un solo movimiento, así que no hay un saldo anterior para revisar."
+        : "Este archivo trae movimientos de un solo día, así que no hay un saldo anterior para revisar.";
+      return armar("no_verificable", pasó, `El saldo no se puede revisar con tan poca información. ${NO_CAMBIA_COBERTURA}`, "Si el mes tuvo más movimientos, pida el estado de cuenta completo al banco; si no, no hay nada que hacer.");
+    }
+    default:
+      return armar("no_verificable", "No se pudo revisar el saldo de este archivo.", `El archivo no trae lo necesario para hacerlo. ${NO_CAMBIA_COBERTURA}`, "Revise el archivo con el banco si le parece incompleto.");
+  }
 }

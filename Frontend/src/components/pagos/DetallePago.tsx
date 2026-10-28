@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
 import type { DetalleVencimiento, EstadoVencimiento, MovimientoDetalle } from "@/lib/tipos";
+import { Ficha } from "../Ficha";
 import { ESTADO, EstadoPago } from "./EstadoPago";
 
 const ESTADOS: EstadoVencimiento[] = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"];
@@ -86,13 +87,9 @@ function Seccion({ titulo, children }: { titulo: string; children: ReactNode }) 
  * qué hacer con los datos reales. Los textos los arma el servidor. Cierra con Escape, con el botón o al pulsar fuera.
  */
 export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void }) {
-  const dialogo = useRef<HTMLDialogElement>(null);
   const [d, setD] = useState<DetalleVencimiento | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    dialogo.current?.showModal();
-  }, []);
   useEffect(() => {
     let vigente = true;
     api.detalleVencimiento(id).then((r) => vigente && setD(r)).catch((e) => vigente && setError(e instanceof Error ? e.message : "No se pudo cargar el detalle"));
@@ -109,25 +106,7 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
   );
 
   return (
-    <dialog
-      ref={dialogo}
-      onClose={alCerrar}
-      onClick={(e) => e.target === dialogo.current && dialogo.current?.close()}
-      aria-labelledby="titulo-detalle"
-      className="m-auto w-[min(680px,calc(100%-32px))] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl border-0 p-0 text-texto shadow-2xl backdrop:bg-black/45"
-    >
-      <div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-cabecera px-6 py-5 text-sobre-cabecera">
-        <div>
-          <span className="text-xs font-light uppercase tracking-[0.2em]">Detalle del pago</span>
-          <h2 id="titulo-detalle" className="mt-1 text-xl font-extrabold">{d ? `${d.proveedor} · ${d.categoria}` : "Cargando…"}</h2>
-        </div>
-        <button type="button" onClick={() => dialogo.current?.close()} aria-label="Cerrar" className="flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-suave focus-visible:outline-acento">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M6 6l12 12M18 6 6 18" />
-          </svg>
-        </button>
-      </div>
-      <div className="px-6 pb-6 pt-5">
+    <Ficha etiqueta="Detalle del pago" titulo={d ? `${d.proveedor} · ${d.categoria}` : "Cargando…"} idTitulo="titulo-detalle" alCerrar={alCerrar}>
         {error && <p role="alert" className="font-semibold text-rojo">{error}</p>}
         {!d && !error && <p role="status" className="text-suave">Cargando el detalle…</p>}
         {d && (
@@ -166,12 +145,6 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
             </Seccion>
           </>
         )}
-        <div className="mt-6 flex justify-end">
-          <button type="button" onClick={() => dialogo.current?.close()} className="rounded-lg border border-texto bg-fondo px-4 py-2 text-sm font-semibold hover:bg-fondo-suave">
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </dialog>
+    </Ficha>
   );
 }

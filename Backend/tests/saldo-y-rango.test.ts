@@ -142,7 +142,7 @@ describe("Estados de cuenta muestra los tres resultados del saldo", () => {
       expect(oct.fechas?.del).toBe("2026-10-01");
       const sep = imp.find((a) => a.mes === "2026-09")!;
       expect(sep.saldo).toMatchObject({ resultado: "no_verificable" });
-      expect(sep.saldo!.motivo).toContain("ninguna fila trae saldo");
+      expect(sep.saldo!.motivo).toContain("no trae saldo en ninguna fila");
       const cob = (await app.inject("/api/cobertura")).json().datos as { filas: { celdas: Record<string, { saldo?: string; saldoMotivo?: string }> }[] };
       expect(cob.filas[0]!.celdas["2026-10"]).toMatchObject({ saldo: "no_cuadra" });
       expect(cob.filas[0]!.celdas["2026-10"]!.saldoMotivo).toContain("Sin información");
@@ -181,11 +181,19 @@ describe("saldo del estado de cuenta: lector y textos", () => {
   it("textos de los tres resultados en lenguaje claro", () => {
     expect(textoSaldo({ estado: "cuadra" })).toMatchObject({ resultado: "cuadra" });
     const no = textoSaldo({ estado: "no_cuadra", verificados: 10, fallos: 2 })!;
-    expect(no.motivo).toContain("En 2 de 10 comparaciones el saldo no cuadra");
-    expect(no.motivo).toContain("Sin información");
-    const nv = textoSaldo({ estado: "no_verificable", razon: "un_solo_saldo" })!;
-    expect(nv).toMatchObject({ resultado: "no_verificable" });
-    expect(nv.motivo).toContain("La cobertura sigue por fechas");
+    expect(no.queSePaso).toBe("En 2 de 10 comparaciones el saldo no coincide.");
+    expect(no.queSignifica).toContain("Sin información");
+    expect(no.queHacer).toContain("Revise el archivo");
+    const nv = textoSaldo({ estado: "no_verificable", razon: "un_solo_saldo", movimientos: 1 })!;
+    expect(nv).toMatchObject({ resultado: "no_verificable", queSePaso: "Este archivo trae un solo movimiento, así que no hay un saldo anterior para revisar." });
+    expect(nv.queSignifica).toContain("La cobertura sigue por fechas");
+    expect(textoSaldo({ estado: "no_verificable", razon: "sin_movimientos" })!.queSePaso).toBe("Este archivo no trae movimientos del mes.");
+    expect(textoSaldo({ estado: "no_verificable", razon: "un_solo_saldo", movimientos: 3 })!.queSePaso).toContain("movimientos de un solo día");
+    // lenguaje claro: tres partes, sin paréntesis técnicos ni «con qué comparar»
+    for (const t of [no, nv, textoSaldo({ estado: "cuadra" })!, textoSaldo({ estado: "no_verificable", razon: "saldo_vacio_algunas", filasSinSaldo: 2, movimientos: 9 })!]) {
+      expect(t.motivo).toBe(`${t.queSePaso} ${t.queSignifica} ${t.queHacer}`);
+      expect(t.motivo).not.toMatch(/[()]|con qué comparar/);
+    }
     expect(textoSaldo(null)).toBeNull();
   });
 

@@ -90,3 +90,18 @@ export function EstadoPago({ estado }: { estado: EstadoVencimiento }) {
     </span>
   );
 }
+
+/** Solo el ícono del estado (para tarjetas y encabezados). */
+export function IconoEstado({ estado }: { estado: EstadoVencimiento }) {
+  return <>{ICONOS[estado]}</>;
+}
+
+/** Etiqueta con el color, el ícono y el borde de un estado, pero con un texto propio (para grupos que no son un vencimiento). */
+export function EtiquetaEstado({ estado, texto, ayuda }: { estado: EstadoVencimiento; texto: string; ayuda?: string }) {
+  return (
+    <span title={ayuda} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${ESTADO[estado].clase}`}>
+      {ICONOS[estado]}
+      {texto}
+    </span>
+  );
+}

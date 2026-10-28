@@ -49,6 +49,10 @@ export interface ResultadoLectura {
   bancoArchivo: string | null;
   movimientos: MovimientoLeido[];
   continuidad: Continuidad;
+  /** saldo inicial («Saldo inicial» o «Saldo anterior» del encabezado), en centavos; null si el archivo no lo trae */
+  saldoInicial: number | null;
+  /** saldo de la última fila de la tabla, en centavos; null si no hay o está vacío */
+  saldoFinal: number | null;
   /** primera y última fecha con movimientos del archivo (AAAA-MM-DD); null si no tiene movimientos */
   fechas: { del: string; al: string } | null;
   /** período declarado en el encabezado; null si el formato no lo declara */

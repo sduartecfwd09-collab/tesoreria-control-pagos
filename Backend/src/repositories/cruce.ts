@@ -229,7 +229,11 @@ export async function debitosConPagoDelBanco() {
       descripcion: { contains: "pago" },
       cuenta: { OR: [{ formato: "E1" }, { codigoBanco: "0107" }] },
     },
-    select: { fecha: true, descripcion: true, cuenta: { select: { numero: true, sociedadId: true, sociedad: { select: { codigo: true, nombreLargo: true } } } } },
+    select: {
+      fecha: true, descripcion: true, referencia: true, debito: true, hoja: true, fila: true,
+      archivo: { select: { id: true, ruta: true } },
+      cuenta: { select: { numero: true, banco: true, moneda: true, sociedadId: true, sociedad: { select: { codigo: true, nombreLargo: true } } } },
+    },
   });
 }
 
