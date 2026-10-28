@@ -4,6 +4,8 @@ import { api, ErrorApi } from "@/lib/api";
 import type { MiConfiguracion } from "@/lib/tipos";
 import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
 import { CajaError } from "./ui";
+import { EtiquetaEstado } from "./pagos/EstadoPago";
+import type { EstadoVencimiento } from "@/lib/tipos";
 
 const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
 const fecha = (d: Date) => d.toLocaleDateString("es-CR", { day: "numeric", month: "long" });
@@ -46,6 +48,92 @@ function CampoDias({
         <strong>Ejemplo:</strong> {ejemplo}
       </p>
     </div>
+  );
+}
+
+interface Hito {
+  titulo: string;
+  fecha: Date;
+  estado: EstadoVencimiento;
+  etiqueta: string;
+  frase: string;
+}
+
+/** Un pago de ejemplo, con los dos valores escritos en los campos (no los guardados), en orden cronológico. */
+function PanelEjemplo({ pago, aviso, espera }: { pago: Date; aviso: number | null; espera: number | null }) {
+  const invalidos = [aviso === null && "los días de aviso (de 0 a 60)", espera === null && "los días de espera (de 0 a 15)"].filter(Boolean);
+  let contenido: React.ReactNode;
+  if (aviso === null || espera === null) {
+    contenido = (
+      <p role="status" className="mt-4 rounded border border-divisor bg-fondo-suave px-3 py-2 text-sm">
+        Escriba un número entero válido en {invalidos.join(" y en ")} para ver cómo se comportaría un pago.
+      </p>
+    );
+  } else {
+    const inicio = sumarDias(pago, -aviso);
+    const finEspera = sumarDias(pago, espera);
+    const vence = sumarDias(pago, espera + 1);
+    const hitos: Hito[] = [
+      {
+        titulo: "Empieza el aviso",
+        fecha: inicio,
+        estado: "por_vencer",
+        etiqueta: "Por vencer",
+        frase:
+          aviso === 0
+            ? "No hay días de aviso: el pago sigue Programado hasta el mismo día de pago."
+            : `Del ${fecha(inicio)} al ${fecha(pago)}: Por vencer. Antes del ${fecha(inicio)} el pago sigue Programado.`,
+      },
+      {
+        titulo: "Día de pago",
+        fecha: pago,
+        estado: "por_vencer",
+        etiqueta: "Día de pago",
+        frase: "Es la fecha habitual de pago. Si el pago aparece en el estado de cuenta, pasa a Pagado.",
+      },
+      {
+        titulo: "Fin de la espera",
+        fecha: finEspera,
+        estado: "por_vencer",
+        etiqueta: "En espera",
+        frase:
+          espera === 0
+            ? "No hay días de espera: si el pago no aparece el día de pago, se marca Vencido al día siguiente."
+            : `Del ${fecha(sumarDias(pago, 1))} al ${fecha(finEspera)}: se espera el pago, sigue Por vencer.`,
+      },
+      {
+        titulo: "Pasa a Vencido",
+        fecha: vence,
+        estado: "vencido",
+        etiqueta: "Vencido",
+        frase: `Desde el ${fecha(vence)}: Vencido, si el pago no aparece.`,
+      },
+    ];
+    contenido = (
+      <ol className="mt-4">
+        {hitos.map((h, i) => (
+          <li key={h.titulo} className={`border-l-2 border-divisor pb-5 pl-4 ${i === hitos.length - 1 ? "!border-transparent pb-0" : ""}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{h.titulo}</span>
+              <span className="text-sm text-suave">{fecha(h.fecha)}</span>
+              <EtiquetaEstado estado={h.estado} texto={h.etiqueta} />
+            </div>
+            <p className="mt-1 text-sm">{h.frase}</p>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  return (
+    <aside aria-labelledby="h-ejemplo" className="rounded-[14px] border border-divisor bg-fondo p-5">
+      <h2 id="h-ejemplo" className="text-lg font-bold border-b-2 border-acento pb-1">
+        Así funcionará con sus valores
+      </h2>
+      <p className="mt-2 text-sm text-suave">
+        Ejemplo con un pago cuyo día de pago es el {fecha(pago)}. Se actualiza mientras escribe, antes de guardar.
+      </p>
+      {contenido}
+    </aside>
   );
 }
 
@@ -155,7 +243,8 @@ export function PanelConfiguracion() {
   }
 
   return (
-    <form onSubmit={guardar} noValidate className="mt-8 max-w-[640px]">
+    <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,640px)_minmax(0,480px)]">
+    <form onSubmit={guardar} noValidate>
       <section aria-labelledby="h-mis-reglas">
         <h2 id="h-mis-reglas" className="text-lg font-bold border-b-2 border-acento pb-1">
           Sus avisos y sus plazos
@@ -195,5 +284,7 @@ export function PanelConfiguracion() {
       </div>
       {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
     </form>
+    <PanelEjemplo pago={pago} aviso={nAviso} espera={nEspera} />
+    </div>
   );
 }

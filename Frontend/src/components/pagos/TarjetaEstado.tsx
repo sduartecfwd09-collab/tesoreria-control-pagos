@@ -9,7 +9,7 @@ export const Icono = ({ children }: { children: ReactNode }) => (
   </svg>
 );
 
-export function Tarjeta({ titulo, icono, insignia, detalle, acento, barra, children }: { titulo: string; icono: ReactNode; insignia?: ReactNode; detalle?: string; acento: string; barra?: number; children: ReactNode }) {
+export function Tarjeta({ titulo, icono, insignia, detalle, acento, barra, pie, children }: { titulo: string; icono: ReactNode; insignia?: ReactNode; detalle?: string; acento: string; barra?: number; pie?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2.5 rounded-[14px] border border-divisor bg-fondo p-5 text-left">
       <span className="flex items-center gap-2 text-[13px] font-semibold text-suave">
@@ -21,6 +21,7 @@ export function Tarjeta({ titulo, icono, insignia, detalle, acento, barra, child
         {insignia}
       </span>
       {detalle && <span className="text-[13px] text-suave">{detalle}</span>}
+      {pie}
       {barra !== undefined && (
         <div className="h-2 overflow-hidden rounded-full bg-[#eeeeee]" role="img" aria-label={`${barra} % pagado`}>
           <div className="h-2 rounded-full bg-acento" style={{ width: `${barra}%` }} />

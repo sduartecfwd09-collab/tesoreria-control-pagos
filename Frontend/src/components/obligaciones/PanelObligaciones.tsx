@@ -15,6 +15,7 @@ import { ResumenCalidad } from "./ResumenCalidad";
 import { TablaObligaciones } from "./TablaObligaciones";
 
 const POR_PAGINA = 100;
+const TEXTO_FALTA = { monto: "falta monto", cuenta: "falta cuenta de pago", responsable: "sin responsable", dia: "falta día" } as const;
 type Filtro = Omit<FiltroObligaciones, "porPagina" | "pagina">;
 const FILTRO_INICIAL: Filtro = { activa: true };
 
@@ -109,7 +110,9 @@ export function PanelObligaciones() {
       </p>
     );
 
-  const hayFiltros = filtro.sociedadId || filtro.categoria || filtro.activa !== true || filtro.q || filtro.falta;
+  const hayOtrosFiltros = filtro.sociedadId || filtro.categoria || filtro.activa !== true || filtro.q;
+  // M: el total del catálogo en el alcance, según se muestren activas, inactivas o ambas
+  const totalCatalogo = filtro.activa === true ? resumen.activas : filtro.activa === false ? resumen.inactivas : resumen.total;
 
   return (
     <>
@@ -139,7 +142,8 @@ export function PanelObligaciones() {
         <ResumenCalidad
           r={resumen}
           faltaActiva={filtro.falta}
-          alFiltrarFalta={(falta) => cambiarFiltro({ falta: filtro.falta === falta ? undefined : falta })}
+          // los contadores de las tarjetas cuentan solo obligaciones activas: el filtro también, para que N coincida con la tarjeta
+          alFiltrarFalta={(falta) => cambiarFiltro(filtro.falta === falta ? { falta: undefined } : { falta, activa: true })}
           alBuscar={(sociedad, q) => {
             setTexto(q);
             // El aviso de calidad trae la sociedad como texto (abreviatura o nombre largo): se busca su identificador.
@@ -214,10 +218,18 @@ export function PanelObligaciones() {
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span aria-live="polite">
-            {lista.total === 0 ? "Ninguna obligación coincide con los filtros." : `${lista.total.toLocaleString("es-CR")} obligaciones`}
-            {filtro.falta && ` · filtrando: ${{ monto: "falta monto", responsable: "sin responsable", dia: "falta día" }[filtro.falta]}`}
+            {lista.total === 0
+              ? "Ninguna obligación coincide con los filtros."
+              : filtro.falta
+                ? `Mostrando ${lista.total.toLocaleString("es-CR")} de ${totalCatalogo.toLocaleString("es-CR")} obligaciones: ${TEXTO_FALTA[filtro.falta]}`
+                : `${lista.total.toLocaleString("es-CR")} obligaciones`}
           </span>
-          {hayFiltros && (
+          {filtro.falta && (
+            <button type="button" className={`${claseBotonSecundario} py-1 text-sm`} onClick={() => cambiarFiltro({ falta: undefined })}>
+              Quitar filtro
+            </button>
+          )}
+          {hayOtrosFiltros && (
             <button
               type="button"
               className={`${claseBotonSecundario} py-1 text-sm`}

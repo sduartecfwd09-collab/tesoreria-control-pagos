@@ -211,7 +211,7 @@ export interface FiltroObligaciones {
   categoria?: number;
   activa?: boolean;
   q?: string;
-  falta?: "monto" | "responsable" | "dia";
+  falta?: "monto" | "cuenta" | "responsable" | "dia";
   pagina: number;
   porPagina: number;
 }
@@ -222,6 +222,7 @@ export interface ResumenCatalogo {
   inactivas: number;
   sinDia: number;
   sinMonto: number;
+  sinCuenta: number;
   sinResponsable: number;
   sinMesArranque: number;
   frecuenciaPorConfirmar: number;

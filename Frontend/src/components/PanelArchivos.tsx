@@ -5,7 +5,8 @@ import { api } from "@/lib/api";
 import { compararSociedades } from "@/lib/formato";
 import { SelectorSociedad } from "./SelectorSociedad";
 import { NombreSociedad } from "./ui";
-import { EtiquetaEstado } from "./pagos/EstadoPago";
+import { EtiquetaEstado, IconoEstado } from "./pagos/EstadoPago";
+import { ACENTO_ESTADO, Tarjeta } from "./pagos/TarjetaEstado";
 import { FichaArchivo } from "./archivos/FichaArchivo";
 import { TextoSaldoTres } from "./archivos/TextoSaldo";
 import type { ArchivoImportado, CeldaCobertura, Cobertura, EstadoVencimiento, Importaciones, TextoSaldo } from "@/lib/tipos";
@@ -14,43 +15,35 @@ const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "o
 const etiquetaMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1] ?? m.slice(5)} ${m.slice(0, 4)}`;
 const numero = (n: number) => n.toLocaleString("es-CR");
 
-function Etiqueta({ children, tono }: { children: React.ReactNode; tono: "ambar" | "rojo" | "suave" }) {
-  const clases = {
-    ambar: "bg-ambar-fondo text-ambar-texto",
-    rojo: "bg-rojo-fondo text-rojo",
-    suave: "bg-fondo-suave text-suave border border-divisor",
-  }[tono];
-  return <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${clases}`}>{children}</span>;
-}
-
 const TEXTO_SALDO: Record<string, string> = { cuadra: "Saldo cuadra", no_cuadra: "Saldo no cuadra", no_verificable: "Saldo no verificable" };
+/** Estado existente que toma cada resultado del saldo (con su texto propio): cuadra = Pagado, no verificable = Programado (neutral), no cuadra = Sin información. */
+const ESTADO_SALDO: Record<string, EstadoVencimiento> = { cuadra: "pagado", no_cuadra: "sin_informacion", no_verificable: "proyectado" };
 
 function Celda({ c }: { c: CeldaCobertura }) {
   if (c.estado === "falta") {
     return (
-      <div title="No hay archivo de esta cuenta para este mes" className="rounded border border-dashed border-control px-2 py-1.5 text-suave">
-        <span className="font-semibold">Falta</span>
-        <span className="block text-xs">sin archivo</span>
+      <div title="No hay archivo de esta cuenta para este mes" className="rounded border border-divisor px-2 py-1.5">
+        <EtiquetaEstado estado="sin_informacion" texto="Falta" />
+        <span className="mt-1 block text-xs text-suave">sin archivo</span>
       </div>
     );
   }
   if (c.estado === "error" || c.estado === "sin_sociedad") {
     const motivo = c.error ?? "Sin motivo registrado";
-    const clases = c.estado === "error" ? "border-2 border-rojo bg-rojo-fondo text-rojo" : "border-2 border-ambar-texto bg-ambar-fondo text-ambar-texto";
     const contenido = (
       <>
-        <span className="font-semibold">{c.estado === "error" ? "Error" : "Sin sociedad"}</span>
-        <span className="block text-xs line-clamp-2">{motivo}</span>
+        <EtiquetaEstado estado={c.estado === "error" ? "vencido" : "por_revisar"} texto={c.estado === "error" ? "Error" : "Sin sociedad"} />
+        <span className="mt-1 block text-xs line-clamp-2">{motivo}</span>
       </>
     );
     // Cada celda con problema enlaza a su motivo en el detalle de abajo (ahí está el mismo archivo).
     return c.archivoId !== undefined ? (
-      <a href={`#archivo-${c.archivoId}`} title={motivo} className={`block rounded px-2 py-1.5 ${clases}`}>
+      <a href={`#archivo-${c.archivoId}`} title={motivo} className="block rounded border border-control px-2 py-1.5">
         {contenido}
         <span className="block text-xs underline">Ver motivo</span>
       </a>
     ) : (
-      <div title={motivo} className={`rounded px-2 py-1.5 ${clases}`}>
+      <div title={motivo} className="rounded border border-control px-2 py-1.5">
         {contenido}
       </div>
     );
@@ -60,7 +53,7 @@ function Celda({ c }: { c: CeldaCobertura }) {
       <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
       {c.saldo !== undefined && (
         <span className="mt-1 block">
-          <Etiqueta tono={c.saldo === "no_cuadra" ? "ambar" : "suave"}>{TEXTO_SALDO[c.saldo] ?? "Saldo sin comprobar"}</Etiqueta>
+          <EtiquetaEstado estado={ESTADO_SALDO[c.saldo] ?? "proyectado"} texto={TEXTO_SALDO[c.saldo] ?? "Saldo sin comprobar"} />
         </span>
       )}
     </div>
@@ -69,24 +62,25 @@ function Celda({ c }: { c: CeldaCobertura }) {
 
 function Resumen({ r }: { r: Importaciones["resumen"] }) {
   // Archivos = Leídos + Con error + Sin sociedad. Los retirados de la carpeta no cuentan y tienen su propia tarjeta.
-  const items: [string, number, string?][] = [
-    ["Archivos", r.archivos, "leídos + con error + sin sociedad"],
-    ["Leídos", r.leidos],
-    ["Con error", r.conError],
-    ["Sin sociedad", r.sinSociedad],
-    ...(r.retirados > 0 ? [["Retirados de la carpeta", r.retirados, "no cuentan en los totales"] as [string, number, string]] : []),
-    ["Movimientos", r.movimientos],
+  // Cada tarjeta toma un estado que ya existe con su texto propio; los totales son neutrales (Programado) y lo que está en cero no alerta.
+  const items: { titulo: string; n: number; nota?: string; estado: EstadoVencimiento; texto: string }[] = [
+    { titulo: "Archivos", n: r.archivos, nota: "leídos + con error + sin sociedad", estado: "proyectado", texto: "Total" },
+    { titulo: "Leídos", n: r.leidos, estado: "pagado", texto: "Leídos" },
+    { titulo: "Con error", n: r.conError, ...(r.conError > 0 ? { estado: "vencido" as const, texto: "Con error" } : { estado: "proyectado" as const, texto: "Sin errores" }) },
+    { titulo: "Sin sociedad", n: r.sinSociedad, ...(r.sinSociedad > 0 ? { estado: "por_revisar" as const, texto: "Requiere decisión" } : { estado: "proyectado" as const, texto: "Completo" }) },
+    ...(r.retirados > 0 ? [{ titulo: "Retirados de la carpeta", n: r.retirados, nota: "no cuentan en los totales", estado: "proyectado" as const, texto: "Informativo" }] : []),
+    { titulo: "Movimientos", n: r.movimientos, estado: "proyectado", texto: "Total" },
   ];
   return (
-    <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {items.map(([t, n, nota]) => (
-        <div key={t} className="rounded border border-divisor bg-fondo-suave px-4 py-3">
-          <dt className="text-sm text-suave">{t}</dt>
-          <dd className={`text-2xl font-bold ${t === "Con error" && n > 0 ? "text-rojo" : ""}`}>{numero(n)}</dd>
-          {nota && <dd className="text-xs text-suave">{nota}</dd>}
-        </div>
+    <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {items.map((t) => (
+        <li key={t.titulo}>
+          <Tarjeta titulo={t.titulo} acento={ACENTO_ESTADO[t.estado]} icono={<IconoEstado estado={t.estado} />} insignia={<EtiquetaEstado estado={t.estado} texto={t.texto} />} detalle={t.nota}>
+            {numero(t.n)}
+          </Tarjeta>
+        </li>
       ))}
-    </dl>
+    </ul>
   );
 }
 
@@ -112,25 +106,54 @@ function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer }:
       {filas.length === 0 ? (
         <p className="mt-2 text-sm">{vacio}</p>
       ) : (
-        <ul className="mt-3 divide-y divide-divisor border border-divisor rounded">
-          {filas.map((f, i) => (
-            <li key={f.ruta + i} id={f.id !== undefined ? `archivo-${f.id}` : undefined} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-sm scroll-mt-4 target:bg-fondo-suave">
-              <div className="min-w-0 flex-1">
-                <span className="font-medium break-all">{f.ruta}</span>
-                {f.saldo ? <TextoSaldoTres saldo={f.saldo} /> : f.texto && <span className="block text-suave">{f.texto}</span>}
-              </div>
-              {f.verInfo && f.id !== undefined && (
-                <button type="button" onClick={() => alVer(f.id!)} aria-label={`Ver información completa de ${f.ruta}`} className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave">
-                  Ver información completa
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <FilasArchivos filas={filas} alVer={alVer} />
       )}
     </section>
   );
 }
+function FilasArchivos({ filas, alVer }: { filas: FilaAtencion[]; alVer: (id: number) => void }) {
+  return (
+    <ul className="mt-3 divide-y divide-divisor border border-divisor rounded">
+      {filas.map((f, i) => (
+        <li key={f.ruta + i} id={f.id !== undefined ? `archivo-${f.id}` : undefined} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-sm scroll-mt-4 target:bg-fondo-suave">
+          <div className="min-w-0 flex-1">
+            <span className="font-medium break-all">{f.ruta}</span>
+            {f.saldo ? <TextoSaldoTres saldo={f.saldo} /> : f.texto && <span className="block text-suave">{f.texto}</span>}
+          </div>
+          {f.verInfo && f.id !== undefined && (
+            <button type="button" onClick={() => alVer(f.id!)} aria-label={`Ver información completa de ${f.ruta}`} className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave">
+              Ver información completa
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Una línea informativa (estado neutral Programado, con su texto propio) con el detalle plegado: lo que no pide acción no ocupa la pantalla. */
+function LineaInformativa({ texto, ayuda, vacio, filas, etiqueta, alVer }: { texto: string; ayuda: string; vacio: string; filas: FilaAtencion[]; etiqueta: string; alVer: (id: number) => void }) {
+  return (
+    <div className="mt-3 max-w-3xl">
+      <p className="flex flex-wrap items-center gap-2.5 text-sm">
+        <EtiquetaEstado estado="proyectado" texto={etiqueta} />
+        <span>
+          <strong>{texto}</strong> <span className="text-suave">({numero(filas.length)})</span>
+        </span>
+      </p>
+      {filas.length === 0 ? (
+        <p className="mt-1 text-sm text-suave">{vacio}</p>
+      ) : (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-sm underline">Ver el detalle</summary>
+          <p className="mt-2 text-sm text-suave">{ayuda}</p>
+          <FilasArchivos filas={filas} alVer={alVer} />
+        </details>
+      )}
+    </div>
+  );
+}
+
 
 function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
   const [verId, setVerId] = useState<number | null>(null);
@@ -163,16 +186,9 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         alVer={setVerId}
         filas={sinSociedad.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "La carpeta no tiene una sociedad asignada" }))}
       />
-      <ListaAtencion
-        titulo="Archivos retirados de la carpeta"
-        ayuda="Ya no están en la carpeta. Se conservan con su historial, pero no cuentan en totales ni cobertura. Si vuelven a aparecer, se reactivan."
-        vacio="Todos los archivos registrados siguen en la carpeta."
-        estado="proyectado"
-        etiqueta="Retirados"
-        alVer={setVerId}
-        filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
-      />
-      <p className="mt-8 text-sm" aria-label="Resultado del saldo">
+      <h3 className="mt-8 font-bold">Comprobación del saldo</h3>
+      <p className="mt-1 text-sm text-suave max-w-2xl">{'El saldo comprueba que el estado de cuenta está completo. Si no cuadra, la sociedad queda en "Sin información" en lugar de "Vencido".'}</p>
+      <p className="mt-2 text-sm" aria-label="Resultado del saldo">
         <span className="font-bold">Resultado del saldo de los archivos leídos:</span> {numero(cuadran.length)} cuadran · {numero(saldo.length)} no cuadran · {numero(noVerificable.length)} no se pueden verificar
       </p>
       <ListaAtencion
@@ -189,15 +205,6 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         }))}
       />
       <ListaAtencion
-        titulo="Archivos con saldo no verificable"
-        ayuda="No se puede comprobar el saldo de estos archivos. No cambia la cobertura: sigue por fechas."
-        vacio="El saldo se pudo comprobar en todos los archivos."
-        estado="proyectado"
-        etiqueta="Sin cambio en la cobertura"
-        alVer={setVerId}
-        filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
-      />
-      <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"
         ayuda="La cuenta, el mes o la sociedad del nombre no coinciden con lo que trae el archivo."
         vacio="Los nombres coinciden con el contenido."
@@ -205,6 +212,24 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         etiqueta="Por revisar"
         alVer={setVerId}
         filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ ruta: a.archivo, texto: d.mensaje })))}
+      />
+      <h3 className="mt-10 font-bold">Para su información</h3>
+      <p className="mt-1 text-sm text-suave max-w-2xl">No piden ninguna acción. Despliegue cada línea para ver los archivos.</p>
+      <LineaInformativa
+        texto="Archivos retirados de la carpeta"
+        ayuda="Ya no están en la carpeta. Se conservan con su historial, pero no cuentan en totales ni cobertura. Si vuelven a aparecer, se reactivan."
+        vacio="Todos los archivos registrados siguen en la carpeta."
+        etiqueta="Retirados"
+        alVer={setVerId}
+        filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
+      />
+      <LineaInformativa
+        texto="Archivos con saldo no verificable"
+        ayuda="No se puede comprobar el saldo de estos archivos. No cambia la cobertura: sigue por fechas."
+        vacio="El saldo se pudo comprobar en todos los archivos."
+        etiqueta="Sin cambio en la cobertura"
+        alVer={setVerId}
+        filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
       {verId !== null && <FichaArchivo id={verId} alCerrar={() => setVerId(null)} />}
     </>
@@ -331,7 +356,7 @@ export function PanelArchivos() {
                     {f.moneda ?? <span className="text-suave">Sin dato</span>}
                   </td>
                   {cob.meses.map((m) => (
-                    <td key={m} className="px-2 py-2 min-w-36">
+                    <td key={m} className="px-2 py-2 min-w-44">
                       <Celda c={f.celdas[m]!} />
                     </td>
                   ))}
