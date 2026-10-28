@@ -19,7 +19,7 @@ const TEXTO_SALDO: Record<string, string> = { cuadra: "Saldo cuadra", no_cuadra:
 /** Estado existente que toma cada resultado del saldo (con su texto propio): cuadra = Pagado, no verificable = Programado (neutral), no cuadra = Sin información. */
 const ESTADO_SALDO: Record<string, EstadoVencimiento> = { cuadra: "pagado", no_cuadra: "sin_informacion", no_verificable: "proyectado" };
 
-function Celda({ c }: { c: CeldaCobertura }) {
+function Celda({ c, soloImagen }: { c: CeldaCobertura; soloImagen: boolean }) {
   if (c.estado === "falta") {
     return (
       <div title="No hay archivo de esta cuenta para este mes" className="rounded border border-divisor px-2 py-1.5">
@@ -51,10 +51,16 @@ function Celda({ c }: { c: CeldaCobertura }) {
   return (
     <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}${c.saldoMotivo ? ` · ${c.saldoMotivo}` : ""}`} className="rounded border border-control px-2 py-1.5">
       <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
-      {c.saldo !== undefined && (
+      {soloImagen ? (
+        <span className="mt-1 block">
+          <EtiquetaEstado estado="sin_informacion" texto="Solo imagen" />
+        </span>
+      ) : (
+        c.saldo !== undefined && (
         <span className="mt-1 block">
           <EtiquetaEstado estado={ESTADO_SALDO[c.saldo] ?? "proyectado"} texto={TEXTO_SALDO[c.saldo] ?? "Saldo sin comprobar"} />
         </span>
+        )
       )}
     </div>
   );
@@ -161,9 +167,12 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
   const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
   const retirados = archivos.filter((a) => a.estado === "retirado");
   const vigentes = archivos.filter((a) => a.estado === "leido" && a.saldo !== null);
-  const saldo = vigentes.filter((a) => a.saldo!.resultado === "no_cuadra");
-  const noVerificable = vigentes.filter((a) => a.saldo!.resultado === "no_verificable");
-  const cuadran = vigentes.filter((a) => a.saldo!.resultado === "cuadra");
+  // Los archivos solo con imagen tienen su propio grupo: no se cuentan además como saldo no verificable.
+  const soloImagen = vigentes.filter((a) => a.soloImagen);
+  const sinImagen = vigentes.filter((a) => !a.soloImagen);
+  const saldo = sinImagen.filter((a) => a.saldo!.resultado === "no_cuadra");
+  const noVerificable = sinImagen.filter((a) => a.saldo!.resultado === "no_verificable");
+  const cuadran = sinImagen.filter((a) => a.saldo!.resultado === "cuadra");
   const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0);
   return (
     <>
@@ -204,6 +213,17 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
           saldo: a.saldo!,
         }))}
       />
+      {soloImagen.length > 0 && (
+        <ListaAtencion
+          titulo="Archivo solo con imagen"
+          ayuda="Este archivo solo trae una captura del estado de cuenta; el sistema no lee imágenes. Pida al banco el estado en Excel o CSV."
+          vacio=""
+          estado="sin_informacion"
+          etiqueta="Solo imagen"
+          alVer={setVerId}
+          filas={soloImagen.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
+        />
+      )}
       <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"
         ayuda="La cuenta, el mes o la sociedad del nombre no coinciden con lo que trae el archivo."
@@ -260,6 +280,7 @@ export function PanelArchivos() {
 
   // alfabético por nombre largo (el orden es estable: las cuentas de una sociedad conservan su orden)
   const sociedades = useMemo(() => [...new Set((cob?.filas ?? []).map((f) => f.sociedad))].sort(compararSociedades), [cob]);
+  const idsSoloImagen = useMemo(() => new Set((imp?.datos ?? []).filter((a) => a.soloImagen).map((a) => a.id)), [imp]);
   const filas = useMemo(
     () => (cob?.filas ?? []).filter((f) => !sociedad || f.sociedad === sociedad).sort((a, b) => compararSociedades(a.sociedad, b.sociedad)),
     [cob, sociedad],
@@ -357,7 +378,7 @@ export function PanelArchivos() {
                   </td>
                   {cob.meses.map((m) => (
                     <td key={m} className="px-2 py-2 min-w-44">
-                      <Celda c={f.celdas[m]!} />
+                      <Celda c={f.celdas[m]!} soloImagen={idsSoloImagen.has(f.celdas[m]!.archivoId ?? -1)} />
                     </td>
                   ))}
                 </tr>

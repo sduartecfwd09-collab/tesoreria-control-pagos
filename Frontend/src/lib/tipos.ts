@@ -91,6 +91,8 @@ export interface ArchivoImportado {
   advertencias: string[];
   discrepancias: { tipo: string; mensaje: string }[];
   continuidad: { estado: string; verificados: number; fallos: number; filasConFallo: number[] } | null;
+  /** archivo leído sin movimientos y con una imagen pegada: el sistema no lee imágenes */
+  soloImagen: boolean;
   /** Cuadra, No cuadra o No verificable, con su motivo en lenguaje claro; null si el archivo no trae la comprobación */
   saldo: TextoSaldo | null;
   /** primera y última fecha con movimientos del archivo */

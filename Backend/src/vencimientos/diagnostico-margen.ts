@@ -9,7 +9,7 @@ import { cruzar, MOTIVOS, type ResultadoCruce } from "../domain/cruce.js";
 import { NOMBRE_ESTADO } from "../domain/textos-pago.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { estadoDeArchivo } from "../domain/estado-archivo.js";
-import { razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
+import { esSoloImagen, razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
 import { FORMATOS } from "../ingest/formatos.js";
 import { normalizar } from "../ingest/utiles.js";
 import type { CreditoParaDiagnostico, DebitoParaFormato } from "../repositories/cruce.js";
@@ -39,7 +39,16 @@ const NOMBRE_CATEGORIA = (lejos: number) => ({
 type Categoria = keyof ReturnType<typeof NOMBRE_CATEGORIA>;
 const ORDEN_CATEGORIAS: Categoria[] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-export interface ArchivoMargen { cuentaId: number | null; mes: string | null; formato: string | null; estado: string; detalle: unknown; retiradoEn: Date | null }
+export interface ArchivoMargen {
+  cuentaId: number | null;
+  mes: string | null;
+  formato: string | null;
+  estado: string;
+  detalle: unknown;
+  retiradoEn: Date | null;
+  numMovimientos?: number;
+  numDuplicados?: number;
+}
 
 export interface ExtrasMargen {
   /** nombre de la categoría de cada obligación activa */
@@ -464,6 +473,41 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
     const o = obl.get(v.obligacionId)!;
     L.push(`  ${nombre(v.sociedadId)} | ${o.proveedor} | ${mesDe(v.fecha)} | ${ultimos4(o.identificador)} | ${nombreEstado(estadoAntes.get(q.vencimientoId))} -> ${nombreEstado(q.estado)} | cobertura ${grupoVenc(q.vencimientoId)}`);
   }
+
+  // 11. Si los archivos que solo traen una imagen (sin movimientos) NO dieran cobertura. Solo en memoria: la regla no cambia.
+  const soloImagen = x.archivos.filter((a) =>
+    a.retiradoEn === null && estadoDeArchivo(a) === "leido" && a.cuentaId !== null && a.mes !== null &&
+    esSoloImagen((a.detalle as { conImagenes?: unknown } | null)?.conImagenes, (a.numMovimientos ?? 0) + (a.numDuplicados ?? 0)));
+  L.push("", "11. Archivos que solo traen una imagen (el lector no lee imágenes) y no tienen movimientos: vencimientos que cambiarían de estado si NO dieran cobertura (la regla actual los cuenta como cobertura; no se cambió):");
+  const porFormatoImagen = new Map<string, number>();
+  for (const a of soloImagen) porFormatoImagen.set(a.formato ?? "sin formato", (porFormatoImagen.get(a.formato ?? "sin formato") ?? 0) + 1);
+  L.push(`  archivos: ${soloImagen.length}${soloImagen.length ? ` (${[...porFormatoImagen].sort().map(([f, n]) => `${f}: ${n}`).join(" · ")})` : ""}`);
+  const quitar = new Set(soloImagen.map((a) => `${a.cuentaId}|${a.mes}`));
+  const cuentasSin = new Map([...r.datos.cuentas].map(([s, cs]) => [s, cs.map((c) => {
+    const meses = new Map([...c.meses].filter(([m]) => !quitar.has(`${c.cuentaId}|${m}`)));
+    const primero = [...c.meses.keys()].sort()[0];
+    // si el primer archivo de la cuenta era una imagen, la cobertura de la cuenta empieza en su primer movimiento real
+    const inicioCobertura = primero !== undefined && quitar.has(`${c.cuentaId}|${primero}`) ? (c.primeraFecha ?? null) : c.inicioCobertura;
+    return { ...c, meses, inicioCobertura };
+  })]));
+  const sinImagen = new Map(cruzar({ ...r.datos, ...r.parametros, cuentas: cuentasSin }).resultados.map((q) => [q.vencimientoId, q.estado]));
+  const cambiarian = r.resultados.filter((q) => sinImagen.get(q.vencimientoId) !== q.estado);
+  const totalCambiarian = new Conteo();
+  const transiciones = new Map<string, number>();
+  const porSociedadMes = new Map<string, number>();
+  for (const q of cambiarian) {
+    const v = venc.get(q.vencimientoId)!;
+    totalCambiarian.add(grupoVenc(q.vencimientoId));
+    const t = `${NOMBRE_ESTADO[q.estado] ?? q.estado} -> ${NOMBRE_ESTADO[sinImagen.get(q.vencimientoId) ?? ""] ?? "sin estado"}`;
+    transiciones.set(t, (transiciones.get(t) ?? 0) + 1);
+    const k = etiqueta(v.sociedadId, mesDe(v.fecha));
+    porSociedadMes.set(k, (porSociedadMes.get(k) ?? 0) + 1);
+  }
+  L.push(`  vencimientos que cambiarían de estado: ${totalCambiarian.texto()}`);
+  for (const [t, n] of [...transiciones].sort((a, b) => b[1] - a[1])) L.push(`    ${t}: ${n}`);
+  L.push("  por sociedad y mes:");
+  for (const [k, n] of [...porSociedadMes].sort(([a], [b]) => a.localeCompare(b))) L.push(`    ${k}: ${n}`);
+  if (porSociedadMes.size === 0) L.push("    ninguno");
   return L.join("\n");
 }
 

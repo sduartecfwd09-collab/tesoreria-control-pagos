@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, ErrorApi } from "@/lib/api";
+import { avisar, cerrar, reemplazar } from "@/lib/avisos";
 import type { MiConfiguracion } from "@/lib/tipos";
 import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
 import { CajaError } from "./ui";
@@ -239,6 +240,7 @@ export function PanelConfiguracion() {
       // Se cierra la confirmación de inmediato: guardar recalcula los estados y puede tardar unos segundos; el avance se ve en el panel.
       ejecutar: async () => {
         setActualizando(true);
+        const idAviso = avisar.informacion("Actualizando…", { fijo: true });
         api
           .guardarMiConfiguracion(nAviso, nEspera)
           .then((nuevo) => {
@@ -246,10 +248,19 @@ export function PanelConfiguracion() {
             setAviso(String(nuevo.diasAviso));
             setEspera(String(nuevo.diasEspera));
             const f = nuevo.estadosCalculadosEn ? fechaHoraCR(nuevo.estadosCalculadosEn) : null;
-            setOk(f ? `Listo: los estados se calcularon el ${f}` : "Listo: sus cambios quedaron guardados.");
+            const texto = f ? `Listo: los estados se calcularon el ${f}` : "Listo: sus cambios quedaron guardados.";
+            setOk(texto);
+            reemplazar(idAviso, "exito", texto);
           })
-          .catch((e) => setErrorGuardado(e instanceof Error ? e.message : "No se pudo guardar. Sus valores anteriores siguen vigentes."))
-          .finally(() => setActualizando(false));
+          .catch((e) => {
+            const mensaje = e instanceof Error && e.message ? e.message : "No se pudo guardar.";
+            setErrorGuardado(mensaje);
+            reemplazar(idAviso, "error", `${mensaje} Sus valores anteriores siguen vigentes.`);
+          })
+          .finally(() => {
+            setActualizando(false);
+            cerrar(idAviso);
+          });
       },
     });
   }

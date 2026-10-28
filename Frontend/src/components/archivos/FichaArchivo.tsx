@@ -10,7 +10,7 @@ import { TextoSaldoTres } from "./TextoSaldo";
 const ESTADO_ARCHIVO: Record<string, string> = { leido: "Leído", con_error: "Con error", sin_sociedad: "Sin sociedad", retirado: "Retirado de la carpeta" };
 const RESULTADO_SALDO = { cuadra: "cuadra", no_cuadra: "no cuadra", no_verificable: "no verificable" } as const;
 
-/** Información completa de un archivo de estado de cuenta (solo lectura), con «Abrir archivo» y «Copiar ruta». */
+/** Información completa de un archivo de estado de cuenta (solo lectura), con «Copiar ruta». */
 export function FichaArchivo({ id, alCerrar }: { id: number; alCerrar: () => void }) {
   const [a, setA] = useState<InfoArchivo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export function FichaArchivo({ id, alCerrar }: { id: number; alCerrar: () => voi
           <section className="mt-5 border-t border-linea pt-4">
             <h3 className="text-sm font-bold">Archivo</h3>
             <p className="mt-1 break-all font-mono text-xs text-suave">{a.rutaRelativa}</p>
-            <AccionesArchivo id={a.id} nombre={a.nombre} rutaRelativa={a.rutaRelativa} />
+            <AccionesArchivo rutaRelativa={a.rutaRelativa} />
           </section>
         </>
       )}

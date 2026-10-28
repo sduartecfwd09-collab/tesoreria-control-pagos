@@ -1,21 +1,16 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { inspeccionarSaldo } from "../src/ingest/inspeccionar-saldo.js";
-import { rutaRelativaSegura } from "../src/routes/archivos.js";
 import { asegurarRoles, mapaDeRoles } from "../src/repositories/usuarios.js";
 import { vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
-// Panel «Ver información completa», descarga de una copia del archivo e inspección del saldo, con datos inventados.
+// Panel «Ver información completa» e inspección del saldo, con datos inventados.
 const reloj = () => new Date(2026, 9, 27, 10, 0);
 const dia = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 const encabezado = (id: number) => ({ "x-usuario-actual": String(id) });
 
-let raiz: string;
 let ana: number;
 let beto: number;
 let jefa: number;
@@ -29,12 +24,6 @@ let n = 0;
 const NOMBRE_A = "CR91010710102200000001 1026 AAA.xlsx";
 const NOMBRE_B = "CR91010710102200000002 1026 BBB.xlsx";
 
-function listado(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
-    const p = path.join(dir, d.name);
-    return d.isDirectory() ? listado(p) : [`${path.relative(dir, p)}|${statSync(p).size}|${statSync(p).mtimeMs}`];
-  });
-}
 
 beforeEach(async () => {
   await vaciarImportaciones();
@@ -51,21 +40,15 @@ beforeEach(async () => {
   const detalle = JSON.stringify({ hojaLeida: "Movimientos", continuidad: { estado: "no_verificable", razon: "un_solo_saldo", movimientos: 1 }, saldoInicial: null, saldoFinal: 123456, periodoDeclarado: { del: "2026-10-01", al: "2026-10-31" }, fechas: { del: "2026-10-05", al: "2026-10-05" } });
   archivoA = (await prisma.archivoImportado.create({ data: { ruta: `AAA/${NOMBRE_A}`, hash: "a", sociedadId: sociedadA, cuentaId: cuentaA, mes: "2026-10", estado: "leido", formato: "E1", numMovimientos: 1, detalle } })).id;
   archivoB = (await prisma.archivoImportado.create({ data: { ruta: `BBB/${NOMBRE_B}`, hash: "b", sociedadId: sociedadB, cuentaId: cuentaB, mes: "2026-10", estado: "leido", formato: "E1", numMovimientos: 1, detalle } })).id;
-  raiz = mkdtempSync(path.join(tmpdir(), "fuentes-"));
   contenidoA = await M.e1();
-  for (const [carpeta, nombre] of [["AAA", NOMBRE_A], ["BBB", NOMBRE_B]] as const) {
-    mkdirSync(path.join(raiz, carpeta), { recursive: true });
-    writeFileSync(path.join(raiz, carpeta, nombre), contenidoA);
-  }
 });
 afterAll(async () => {
-  if (raiz) rmSync(raiz, { recursive: true, force: true });
   await vaciarUsuarios();
   await vaciarImportaciones();
 });
 
-const pedir = async (url: string, cabeceras: Record<string, string> = {}, raizFuentes: string | undefined = raiz) => {
-  const app = await crearApp({ reloj, modoPruebas: true, raizFuentes });
+const pedir = async (url: string, cabeceras: Record<string, string> = {}) => {
+  const app = await crearApp({ reloj, modoPruebas: true });
   try {
     return await app.inject({ method: "GET", url, headers: cabeceras });
   } finally {
@@ -90,49 +73,6 @@ describe("información completa de un archivo", () => {
     expect((await pedir(`/api/archivos/${archivoB}`, encabezado(jefa))).statusCode).toBe(200);
     expect((await pedir("/api/archivos/999999", encabezado(jefa))).statusCode).toBe(404);
     expect((await pedir("/api/archivos/abc", encabezado(jefa))).statusCode).toBe(404);
-  });
-});
-
-describe("descargar una copia del archivo", () => {
-  it("entrega una copia idéntica como adjunto, sin caché, y no cambia nada en la carpeta de fuentes", async () => {
-    const antes = listado(raiz);
-    const r = await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(ana));
-    expect(r.statusCode).toBe(200);
-    expect(r.headers["content-disposition"]).toContain("attachment");
-    expect(r.headers["content-disposition"]).toContain(NOMBRE_A);
-    expect(r.headers["cache-control"]).toBe("no-store");
-    expect(r.headers["content-type"]).toContain("spreadsheetml");
-    expect(Buffer.compare(r.rawPayload, contenidoA)).toBe(0);
-    expect(listado(raiz)).toEqual(antes);
-    expect(readFileSync(path.join(raiz, "AAA", NOMBRE_A)).equals(contenidoA)).toBe(true);
-  });
-
-  it("un tesorero de otra sociedad recibe «no encontrado»; Jefatura sí puede", async () => {
-    const ajeno = await pedir(`/api/archivos/${archivoB}/descargar`, encabezado(ana));
-    expect(ajeno.statusCode).toBe(404);
-    expect(ajeno.json().error).toBe("No se pudo abrir el archivo");
-    expect((await pedir(`/api/archivos/${archivoB}/descargar`, encabezado(jefa))).statusCode).toBe(200);
-  });
-
-  it("solo entrega archivos registrados: un identificador que no existe, una ruta con «..», una absoluta o un archivo retirado se rechazan", async () => {
-    expect((await pedir("/api/archivos/999999/descargar", encabezado(jefa))).statusCode).toBe(404);
-    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { ruta: "../fuera.xlsx" } });
-    expect((await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(jefa))).statusCode).toBe(404);
-    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { ruta: path.join(raiz, "AAA", NOMBRE_A).replace(/\\/g, "/") } });
-    expect((await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(jefa))).statusCode).toBe(404);
-    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { ruta: `AAA/${NOMBRE_A}`, retiradoEn: new Date() } });
-    expect((await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(jefa))).statusCode).toBe(404);
-  });
-
-  it("registrado pero que ya no está en la carpeta, o sin carpeta de fuentes configurada: «no se pudo abrir»", async () => {
-    rmSync(path.join(raiz, "AAA", NOMBRE_A));
-    expect((await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(jefa))).statusCode).toBe(404);
-    expect((await pedir(`/api/archivos/${archivoB}/descargar`, encabezado(jefa), "")).statusCode).toBe(404);
-  });
-
-  it("la ruta relativa segura: sin «..», sin barra invertida, sin unidad ni ruta absoluta y solo .xlsx", () => {
-    expect(rutaRelativaSegura("AAA/archivo.xlsx")).toBe(true);
-    for (const mala of ["../a.xlsx", "AAA/../a.xlsx", "/etc/a.xlsx", "C:/a.xlsx", "AAA\\a.xlsx", "AAA//a.xlsx", "AAA/a.csv", "", "AAA/a.xlsx\0.txt"]) expect(rutaRelativaSegura(mala)).toBe(false);
   });
 });
 
@@ -228,5 +168,29 @@ describe("inspeccionar el saldo: segunda pasada sobre toda la hoja", () => {
     expect(texto).toContain("movimientos leídos: 0");
     expect(texto).toMatch(/«Sin movimientos en el período»/);
     expect(texto).toContain("filas con forma de movimiento: 0");
+  });
+});
+
+describe("sin descarga y con archivos solo imagen", () => {
+  it("la ruta de descarga ya no existe", async () => {
+    expect((await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(jefa))).statusCode).toBe(404);
+  });
+
+  it("un archivo leído sin movimientos y con una imagen se reconoce y usa el texto de la captura, no «no trae movimientos del mes»", async () => {
+    const detalle = JSON.stringify({ conImagenes: true, continuidad: { estado: "no_verificable", razon: "sin_movimientos", movimientos: 0 } });
+    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 0, numDuplicados: 0, detalle } });
+    const ficha = (await pedir(`/api/archivos/${archivoA}`, encabezado(ana))).json().datos;
+    expect(ficha.saldo.queSePaso).toBe("Este archivo solo trae una captura del estado de cuenta; el sistema no lee imágenes.");
+    expect(ficha.saldo.queHacer).toBe("Pida al banco el estado en Excel o CSV.");
+    expect(ficha.saldo.motivo).not.toContain("no trae movimientos del mes");
+    const lista = (await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean; saldo: { motivo: string } }[];
+    expect(lista.find((a) => a.id === archivoA)).toMatchObject({ soloImagen: true });
+    // con imagen pero con movimientos, o sin imagen y sin movimientos, no es «solo imagen»
+    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 3 } });
+    expect(((await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean }[]).find((a) => a.id === archivoA)?.soloImagen).toBe(false);
+    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 0, detalle: JSON.stringify({ conImagenes: false, continuidad: { estado: "no_verificable", razon: "sin_movimientos" } }) } });
+    const sinImagen = ((await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean; saldo: { queSePaso: string } }[]).find((a) => a.id === archivoA)!;
+    expect(sinImagen.soloImagen).toBe(false);
+    expect(sinImagen.saldo.queSePaso).toBe("Este archivo no trae movimientos del mes.");
   });
 });

@@ -9,7 +9,7 @@ import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 8; // 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
+export const LECTOR_VERSION = 9; // 9: avisa de las filas con importe sin fecha legible aunque no se lea ningún movimiento; 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
 
 export class ErrorLectura extends Error {}
 
@@ -108,8 +108,10 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
 
   const ultima = movimientos.length ? movimientos[movimientos.length - 1]!.fila : filaEncabezado;
   const filasPieIgnoradas = sinFecha.filter((f) => f.fila > ultima).length;
-  const huecos = sinFecha.filter((f) => f.fila < ultima && f.conImporte).length;
-  if (huecos > 0) advertencias.push(`${huecos} fila(s) con importe pero sin fecha legible entre movimientos: no se importaron`);
+  // con movimientos leídos: las filas con importe y sin fecha entre ellos; sin ninguno: todas las filas con importe y sin fecha
+  // (antes se descartaban en silencio como si fueran el pie del archivo)
+  const huecos = sinFecha.filter((f) => (movimientos.length === 0 || f.fila < ultima) && f.conImporte).length;
+  if (huecos > 0) advertencias.push(`${huecos} fila(s) con importe pero sin fecha legible: no se importaron`);
   if (negativos > 0) advertencias.push(`${negativos} importe(s) negativos en columnas de débito/crédito: se tomó el valor absoluto`);
   if (ambos > 0) advertencias.push(`${ambos} fila(s) con débito y crédito a la vez`);
   if (importeNoLegible > 0) advertencias.push(`${importeNoLegible} fila(s) con monto no legible: se importaron con importe 0`);

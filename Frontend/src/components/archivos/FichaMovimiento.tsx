@@ -49,7 +49,7 @@ export function FichaMovimiento({ clave, proveedor, alCerrar }: { clave: string;
                 {fila("Hoja", p.hoja ?? "Sin dato")}
                 {fila("Fila", p.fila === null ? "Sin dato" : p.fila.toLocaleString("es-CR"))}
               </dl>
-              {p.archivo && <AccionesArchivo id={p.archivo.id} nombre={p.archivo.nombre} rutaRelativa={p.archivo.rutaRelativa} />}
+              {p.archivo && <AccionesArchivo rutaRelativa={p.archivo.rutaRelativa} />}
             </li>
           ))}
         </ol>

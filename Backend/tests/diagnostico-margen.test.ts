@@ -182,3 +182,23 @@ describe("diagnóstico del margen del cruce", () => {
     for (const prohibido of ["SECRETOXYZ", "7771234", "12345678", "CR0000"]) expect(t).not.toContain(prohibido);
   });
 });
+
+describe("sección 11: archivos que solo traen una imagen", () => {
+  it("cuenta cuántos vencimientos cambiarían de estado si esos archivos no dieran cobertura, sin cambiar la regla", async () => {
+    await prisma.archivoImportado.updateMany({ where: { cuentaId, mes: "2026-10" }, data: { numMovimientos: 0, detalle: JSON.stringify({ conImagenes: true, continuidad: { estado: "no_verificable", razon: "sin_movimientos" } }), formato: "E3" } });
+    await obligacion("Luz Uno", "7771234"); // sin pago: con la imagen como cobertura es Vencido
+    const t = await informe();
+    expect(t).toContain("11. Archivos que solo traen una imagen");
+    expect(t).toContain("archivos: 1 (E3: 1)");
+    expect(t).toMatch(/vencimientos que cambiarían de estado: 1 \(cobertura completa 1 · parcial 0\)\n\s+Vencido -> Sin información: 1/);
+    expect(t).toMatch(/por sociedad y mes:\n\s+AAA \| 2026-10: 1/);
+    expect(t).toContain("Vencido: 1 -> 1"); // la regla actual no cambió: sigue siendo Vencido
+  });
+
+  it("sin archivos de solo imagen no cambia nada", async () => {
+    await obligacion("Luz Uno", "7771234");
+    const t = await informe();
+    expect(t).toContain("archivos: 0");
+    expect(t).toMatch(/vencimientos que cambiarían de estado: 0 /);
+  });
+});

@@ -49,6 +49,25 @@ const armar = (resultado: ResultadoSaldo, queSePaso: string, queSignifica: strin
 
 const NO_CAMBIA_COBERTURA = "La cobertura sigue por fechas.";
 
+/** Un archivo leído sin ningún movimiento y con una imagen pegada (la captura de la pantalla del banco): el lector no lee imágenes. */
+export const esSoloImagen = (conImagenes: unknown, filasLeidas: number): boolean => conImagenes === true && filasLeidas === 0;
+
+/** Texto de un archivo que solo trae una captura del estado de cuenta. */
+export function textoSoloImagen(): TextoSaldo {
+  return armar(
+    "no_verificable",
+    "Este archivo solo trae una captura del estado de cuenta; el sistema no lee imágenes.",
+    "No se pudieron revisar ni los movimientos ni el saldo.",
+    "Pida al banco el estado en Excel o CSV.",
+  );
+}
+
+/** El texto del saldo de un archivo según lo guardado en su detalle; los archivos solo con imagen usan su propio texto. */
+export function textoSaldoDeDetalle(detalle: { continuidad?: ContinuidadGuardada; conImagenes?: boolean } | null | undefined, filasLeidas: number): TextoSaldo | null {
+  if (esSoloImagen(detalle?.conImagenes, filasLeidas)) return textoSoloImagen();
+  return textoSaldo(detalle?.continuidad);
+}
+
 /** Resultado y texto en tres partes para mostrar en Estados de cuenta; null si el archivo no tiene la comprobación guardada. */
 export function textoSaldo(c: ContinuidadGuardada | null | undefined): TextoSaldo | null {
   if (!c || (c.estado !== "cuadra" && c.estado !== "no_cuadra" && c.estado !== "no_verificable")) return null;

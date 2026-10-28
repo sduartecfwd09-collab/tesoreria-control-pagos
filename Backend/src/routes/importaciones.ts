@@ -3,7 +3,7 @@ import { alcanceDe, alcanceParaRespuesta, sociedadesDelAlcance } from "../identi
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
-import { textoSaldo, type ContinuidadGuardada } from "../domain/saldo.js";
+import { esSoloImagen, textoSaldoDeDetalle, type ContinuidadGuardada } from "../domain/saldo.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
@@ -42,7 +42,9 @@ export async function rutasImportaciones(app: FastifyInstance, opts: { modoPrueb
         discrepancias: (d.discrepancias ?? []).map((x) => ({ tipo: x.tipo, mensaje: textoSeguro(x.mensaje) })),
         continuidad: d.continuidad ?? null,
         // resultado del saldo en lenguaje claro: Cuadra, No cuadra o No verificable, con su motivo
-        saldo: textoSaldo(d.continuidad as ContinuidadGuardada | undefined),
+        saldo: textoSaldoDeDetalle({ continuidad: d.continuidad as ContinuidadGuardada | undefined, conImagenes: d.conImagenes }, a.numMovimientos + a.numDuplicados),
+        // el archivo solo trae una captura del estado de cuenta: sin movimientos y con imagen (el lector no lee imágenes)
+        soloImagen: estadoDeArchivo(a) === "leido" && esSoloImagen(d.conImagenes, a.numMovimientos + a.numDuplicados),
         fechas: d.fechas ?? null, periodoDeclarado: d.periodoDeclarado ?? null,
         monedaOrigen: d.monedaOrigen ?? null,
         // el lector ignora las imágenes (sin OCR); null = archivo leído antes de registrar este dato

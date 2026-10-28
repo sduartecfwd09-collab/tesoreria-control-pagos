@@ -9,6 +9,7 @@
     "lint": "eslint",
     "contraste": "node scripts/verificar-contraste.mjs",
     "estados": "node scripts/verificar-estados.mjs",
+    "toasts": "node scripts/verificar-toasts.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
