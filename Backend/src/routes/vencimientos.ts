@@ -15,7 +15,7 @@ import { esPeriodo } from "../domain/vencimientos.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { listarSociedades, sociedadesConObligacionesActivas } from "../repositories/obligaciones.js";
 import { diasDeAviso } from "../vencimientos/generar.js";
-import { valorGlobal } from "../repositories/parametros.js";
+import { ultimoCalculoDeEstados, valorGlobal } from "../repositories/parametros.js";
 import { listarVencimientos, periodosGenerados } from "../repositories/vencimientos.js";
 
 const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"] as const;
@@ -113,7 +113,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         // días de hoy a la fecha vigente (negativo = ya pasó): «Hace N días» / «En N días»
         dias: Math.round((v.fecha.getTime() - hoy.getTime()) / 86_400_000),
       })),
-      alcance: alcanceParaRespuesta(alcance), resumen, diasAviso, total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
+      alcance: alcanceParaRespuesta(alcance), estadosCalculadosEn: await ultimoCalculoDeEstados(), resumen, diasAviso, total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
       hoy: hoy.toISOString().slice(0, 10),
     };
   });

@@ -190,3 +190,43 @@ describe("inspeccionar el saldo de un archivo (solo lectura)", () => {
     expect(texto).toContain("usó el saldo anterior del encabezado para comparar: no");
   });
 });
+
+describe("inspeccionar el saldo: segunda pasada sobre toda la hoja", () => {
+  const raro = () =>
+    M.libro([{
+      nombre: "Movimientos",
+      filas: {
+        1: ["Periodo Seleccionado", null, null, "SOCIEDAD SINTETICA S.A."],
+        2: ["Fecha", "Del: 01/08/2026", "Al: 28/08/2026", "BCT 0000"],
+        4: ["CR91010710102200000001"],
+        6: ["Fecha", "Concepto", "Referencia", "Debito", "Credito", "Saldo"],
+        7: [M.fecha(2026, 8, 3), "SECRETO UNO", "R-1", 111.11, 0, 5000.55],
+        8: [M.fecha(2026, 8, 4), "SECRETO DOS", "R-2", 222.22, 0, 4778.33],
+        9: [null, "SECRETO TRES", "R-3", 333.33, 0, 4445, M.fecha(2026, 8, 5)], // la fecha está en otra columna
+        10: ["03-ago-2026", "SECRETO CUATRO", "R-4", 444.44, 0, 4000.56], // fecha escrita en un formato que el lector no entiende
+        13: ["Total débitos", null, null, 1111.1],
+      },
+    }]);
+
+  it("agrupa las filas por su forma, explica por qué se leyó o se descartó cada fila con forma de movimiento y no imprime contenido", async () => {
+    const texto = (await inspeccionarSaldo(await raro(), "CR91010710102200000001 0826 AAA.xlsx")).join("\n");
+    expect(texto).toContain("filas con forma de movimiento: 3 · leídas por el lector: 2 · no leídas: 1");
+    expect(texto).toMatch(/filas 9: no leídas: la columna de fecha del encabezado \(1\) no trae una fecha legible en estas filas; la fecha legible está en la columna 7|filas 9: no leídas/);
+    expect(texto).toContain("filas 11 a 12: 0 celdas");
+    expect(texto).toContain("«99-aaa-9999»"); // la forma de la fecha que no se pudo leer
+    expect(texto).toMatch(/fila 13, columna 1: «Total débitos» · dentro o después de la tabla/);
+    expect(texto).toContain("filas completamente vacías: 2");
+    for (const prohibido of ["SECRETO", "111.11", "5000.55", "4778", "03-ago-2026", "1111.1", "SINTETICA", "91010710102200000001"]) expect(texto).not.toContain(prohibido);
+  });
+
+  it("un archivo con encabezado y ninguna fila de datos lo dice con claridad", async () => {
+    const vacio = await M.libro([{
+      nombre: "Movimientos",
+      filas: { 1: ["Periodo Seleccionado"], 2: ["Fecha", "Del: 01/08/2026", "Al: 28/08/2026", "BCT 0000"], 4: ["CR91010710102200000001"], 6: ["Fecha", "Concepto", "Referencia", "Debito", "Credito", "Saldo"], 9: ["Sin movimientos en el período"] },
+    }]);
+    const texto = (await inspeccionarSaldo(vacio, "CR91010710102200000001 0826 AAA.xlsx")).join("\n");
+    expect(texto).toContain("movimientos leídos: 0");
+    expect(texto).toMatch(/«Sin movimientos en el período»/);
+    expect(texto).toContain("filas con forma de movimiento: 0");
+  });
+});

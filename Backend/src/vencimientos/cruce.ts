@@ -3,7 +3,7 @@
 import { cruzar, type EstadisticasCruce, type ResultadoCruce } from "../domain/cruce.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { cargarDatosCruce, preferenciasPorObligacion, guardarResultadosCruce, type DatosCruce } from "../repositories/cruce.js";
-import { valorGlobal } from "../repositories/parametros.js";
+import { CLAVE_CALCULO_ESTADOS, guardarValorGlobal, valorGlobal } from "../repositories/parametros.js";
 import { diasDeAviso } from "./generar.js";
 
 export interface ResumenCruce {
@@ -42,6 +42,7 @@ export async function cruzarVencimientos(reloj: Reloj): Promise<ResumenCruce> {
   const parametros = await parametrosDeCruce(hoyDe(reloj));
   const { resultados, estadisticas } = cruzar({ ...datos, ...parametros });
   const cambiados = await guardarResultadosCruce(datos.vencimientos, resultados);
+  await guardarValorGlobal(CLAVE_CALCULO_ESTADOS, reloj().toISOString()); // «Estados calculados el …»
   const porEstado: Record<string, number> = {};
   for (const r of resultados) porEstado[r.estado] = (porEstado[r.estado] ?? 0) + 1;
   return { vencimientos: resultados.length, cambiados, porEstado, resultados, estadisticas, datos, parametros };

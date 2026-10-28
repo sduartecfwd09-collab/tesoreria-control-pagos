@@ -103,9 +103,9 @@ export const api = {
     let pagina = 1;
     const datos: Vencimiento[] = [];
     for (;;) {
-      const r = await pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number; alcance: Alcance }>(`/api/vencimientos${consulta({ ...f, pagina, porPagina: 500 })}`);
+      const r = await pedir<Pagina<Vencimiento> & { hoy: string; resumen: Record<string, number>; diasAviso: number; alcance: Alcance; estadosCalculadosEn: string | null }>(`/api/vencimientos${consulta({ ...f, pagina, porPagina: 500 })}`);
       datos.push(...r.datos);
-      if (pagina >= r.paginas) return { datos, resumen: r.resumen, hoy: r.hoy, diasAviso: r.diasAviso, alcance: r.alcance };
+      if (pagina >= r.paginas) return { datos, resumen: r.resumen, hoy: r.hoy, diasAviso: r.diasAviso, alcance: r.alcance, estadosCalculadosEn: r.estadosCalculadosEn };
       pagina++;
     }
   },

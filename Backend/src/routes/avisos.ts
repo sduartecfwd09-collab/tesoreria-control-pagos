@@ -9,7 +9,7 @@ import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEs
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
 import { usuarioActual } from "../identidad/usuario-actual.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
-import { valorGlobal } from "../repositories/parametros.js";
+import { ultimoCalculoDeEstados, valorGlobal } from "../repositories/parametros.js";
 import { vencimientosParaAvisos } from "../repositories/vencimientos.js";
 import { diasDeAviso } from "../vencimientos/generar.js";
 
@@ -67,6 +67,7 @@ export async function rutasAvisos(app: FastifyInstance, opts: { reloj: Reloj; mo
       usuario: persona ? { nombre: persona.nombre, rol: persona.rol } : null,
       diasAviso: (alcance.tipo === "mio" ? persona?.diasAviso : null) ?? general,
       hoy: iso(hoy),
+      estadosCalculadosEn: await ultimoCalculoDeEstados(),
       total: grupos.reduce((s, g) => s + g.total, 0),
       grupos,
     };

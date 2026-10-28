@@ -4,6 +4,7 @@ import { api, ErrorApi } from "@/lib/api";
 import type { MiConfiguracion } from "@/lib/tipos";
 import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
 import { CajaError } from "./ui";
+import { fechaHoraCR } from "@/lib/formato";
 import { EtiquetaEstado } from "./pagos/EstadoPago";
 import type { EstadoVencimiento } from "@/lib/tipos";
 
@@ -146,6 +147,8 @@ export function PanelConfiguracion() {
   const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
   const [errorCampos, setErrorCampos] = useState<{ aviso?: string; espera?: string }>({});
   const [ok, setOk] = useState<string | null>(null);
+  const [actualizando, setActualizando] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null);
   const [modoPruebas, setModoPruebas] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -222,6 +225,7 @@ export function PanelConfiguracion() {
   function guardar(e: React.FormEvent) {
     e.preventDefault();
     setOk(null);
+    setErrorGuardado(null);
     setErrorCampos({
       aviso: nAviso === null ? "Indique un número entero de días entre 0 y 60." : undefined,
       espera: nEspera === null ? "Indique un número entero de días entre 0 y 15." : undefined,
@@ -232,12 +236,20 @@ export function PanelConfiguracion() {
       titulo: "Cambiar su configuración",
       antes: `Avisarme con ${textoDias(antes.diasAviso)} de anticipación\nMarcar Vencido si pasan ${textoDias(antes.diasEspera)} sin pago`,
       despues: `Avisarme con ${textoDias(nAviso)} de anticipación\nMarcar Vencido si pasan ${textoDias(nEspera)} sin pago`,
+      // Se cierra la confirmación de inmediato: guardar recalcula los estados y puede tardar unos segundos; el avance se ve en el panel.
       ejecutar: async () => {
-        const nuevo = await api.guardarMiConfiguracion(nAviso, nEspera);
-        setDatos(nuevo);
-        setAviso(String(nuevo.diasAviso));
-        setEspera(String(nuevo.diasEspera));
-        setOk("Sus cambios quedaron guardados.");
+        setActualizando(true);
+        api
+          .guardarMiConfiguracion(nAviso, nEspera)
+          .then((nuevo) => {
+            setDatos(nuevo);
+            setAviso(String(nuevo.diasAviso));
+            setEspera(String(nuevo.diasEspera));
+            const f = nuevo.estadosCalculadosEn ? fechaHoraCR(nuevo.estadosCalculadosEn) : null;
+            setOk(f ? `Listo: los estados se calcularon el ${f}` : "Listo: sus cambios quedaron guardados.");
+          })
+          .catch((e) => setErrorGuardado(e instanceof Error ? e.message : "No se pudo guardar. Sus valores anteriores siguen vigentes."))
+          .finally(() => setActualizando(false));
       },
     });
   }
@@ -245,6 +257,7 @@ export function PanelConfiguracion() {
   return (
     <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,640px)_minmax(0,480px)]">
     <form onSubmit={guardar} noValidate>
+      <fieldset disabled={actualizando} className="contents">
       <section aria-labelledby="h-mis-reglas">
         <h2 id="h-mis-reglas" className="text-lg font-bold border-b-2 border-acento pb-1">
           Sus avisos y sus plazos
@@ -270,18 +283,24 @@ export function PanelConfiguracion() {
           error={errorCampos.espera}
         />
       </section>
+      </fieldset>
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={!cambiado}
+          disabled={!cambiado || actualizando}
           className="rounded bg-acento px-6 py-2.5 font-bold text-sobre-acento disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Guardar
+          {actualizando ? "Actualizando…" : "Guardar"}
         </button>
         <span role="status" aria-live="polite" className="text-sm text-suave">
-          {!cambiado ? ok ?? "Cambie algún valor para guardar" : ""}
+          {actualizando ? "Se están recalculando sus pagos con los valores nuevos" : !cambiado ? ok ?? "Cambie algún valor para guardar" : ""}
         </span>
       </div>
+      {errorGuardado && !actualizando && (
+        <p role="alert" className="mt-3 text-sm font-medium text-rojo">
+          {errorGuardado} Sus valores anteriores siguen vigentes.
+        </p>
+      )}
       {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
     </form>
     <PanelEjemplo pago={pago} aviso={nAviso} espera={nEspera} />

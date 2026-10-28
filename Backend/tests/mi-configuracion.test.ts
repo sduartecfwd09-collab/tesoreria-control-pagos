@@ -153,3 +153,31 @@ describe("rol Tesorero", () => {
     expect((await prisma.rol.findMany()).map((r) => r.nombre).sort()).toEqual(["Jefatura", "Tesorero"]);
   });
 });
+
+describe("guardar «Mi configuración» recalcula los estados sin correr el comando", () => {
+  it("cambiar el aviso hace que un vencimiento pase de Programado a Por vencer y de vuelta; la respuesta informa cuándo se calculó", async () => {
+    await prisma.usuario.update({ where: { id: beto }, data: { diasAviso: 7 } }); // el mayor aviso (7) hace que el calendario ya tenga el vencimiento del 1 de noviembre
+    const sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA", tesoreroId: ana } })).id;
+    const categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
+    const luz = await prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor: "Luz Ana", identificador: "7771234", diaEsperadoPago: 1, controlDesde: dia(2026, 10, 1) } });
+    await actualizarVencimientos(reloj); // estados iniciales: aviso de Ana = general (3)
+    const estado = async () => (await prisma.vencimiento.findFirstOrThrow({ where: { obligacionId: luz.id, periodo: "2026-11" } })).estado;
+    expect(await estado()).toBe("proyectado"); // faltan 5 días y su aviso es de 3
+    const app = await crearApp({ reloj, modoPruebas: true });
+    try {
+      const poner = (diasAviso: number) => app.inject({ method: "PUT", url: "/api/mi-configuracion", headers: ENCABEZADO(ana), payload: { diasAviso, diasEspera: 3 } });
+      const sube = await poner(7);
+      expect(sube.statusCode).toBe(200);
+      expect(await estado()).toBe("por_vencer"); // sin correr npm run cruzar
+      expect(sube.json().datos.estadosCalculadosEn).toBe(reloj().toISOString());
+      const lista = (await app.inject({ method: "GET", url: "/api/vencimientos?periodo=2026-11", headers: ENCABEZADO(ana) })).json();
+      expect(lista.estadosCalculadosEn).toBe(reloj().toISOString());
+      expect((lista.datos as { estado: string }[]).map((v) => v.estado)).toEqual(["por_vencer"]);
+      expect((await poner(3)).statusCode).toBe(200);
+      expect(await estado()).toBe("proyectado");
+      expect((await app.inject({ method: "GET", url: "/api/avisos", headers: ENCABEZADO(ana) })).json().estadosCalculadosEn).toBe(reloj().toISOString());
+    } finally {
+      await app.close();
+    }
+  });
+});

@@ -11,13 +11,14 @@ import { TablaPagos, useFiltrosPagos } from "./TablaPagos";
 export function Vencidos() {
   const [datos, setDatos] = useState<Vencimiento[] | null>(null);
   const [alcance, setAlcance] = useState<Alcance | undefined>(undefined);
+  const [calculado, setCalculado] = useState<string | null | undefined>(undefined);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     let vigente = true;
-    api.listarTodosVencimientos({ estado: "vencido" }).then((r) => vigente && (setDatos(r.datos), setAlcance(r.alcance), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    api.listarTodosVencimientos({ estado: "vencido" }).then((r) => vigente && (setDatos(r.datos), setAlcance(r.alcance), setCalculado(r.estadosCalculadosEn), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
     return () => {
       vigente = false;
     };
@@ -31,7 +32,7 @@ export function Vencidos() {
 
   return (
     <>
-      <LineaAlcance alcance={alcance} />
+      <LineaAlcance alcance={alcance} estadosCalculadosEn={calculado} />
       <p className="mt-3 text-sm" aria-live="polite">
         {datos.length === 0 ? "No hay pagos vencidos." : filas.length === datos.length ? `${datos.length.toLocaleString("es-CR")} vencidos` : `${filas.length.toLocaleString("es-CR")} de ${datos.length.toLocaleString("es-CR")} vencidos`}
       </p>

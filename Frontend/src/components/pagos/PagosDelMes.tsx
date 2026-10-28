@@ -25,7 +25,7 @@ const textoHoy = (hoy: string) =>
 export function PagosDelMes() {
   const [hoy, setHoy] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<string | null>(null);
-  const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; alcance: Alcance } | null>(null);
+  const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; alcance: Alcance; calculado: string | null } | null>(null);
   const [pestana, setPestana] = useState<Pestana>("atencion");
   const [abierto, setAbierto] = useState<number | null>(null);
   const [avisos, setAvisos] = useState<AvisoDatos[]>([]);
@@ -52,7 +52,7 @@ export function PagosDelMes() {
   useEffect(() => {
     if (!periodo) return;
     let vigente = true;
-    api.listarTodosVencimientos({ periodo }).then((r) => vigente && (setMes({ periodo, datos: r.datos, alcance: r.alcance }), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    api.listarTodosVencimientos({ periodo }).then((r) => vigente && (setMes({ periodo, datos: r.datos, alcance: r.alcance, calculado: r.estadosCalculadosEn }), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
     return () => {
       vigente = false;
     };
@@ -92,7 +92,7 @@ export function PagosDelMes() {
           </button>
         </div>
       </header>
-      <LineaAlcance alcance={mes?.alcance} />
+      <LineaAlcance alcance={mes?.alcance} estadosCalculadosEn={mes?.calculado} />
 
       {avisos.length > 0 && (
         <section role="status" aria-label="Datos desactualizados" className="mt-6 max-w-3xl rounded-xl border-2 border-texto bg-ambar-fondo p-4 text-texto">

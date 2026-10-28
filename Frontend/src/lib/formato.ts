@@ -89,3 +89,19 @@ export function compararSociedades(a: string, b: string): number {
 }
 
 export const ordenarSociedades = <T extends { nombreLargo: string }>(xs: T[]): T[] => [...xs].sort((a, b) => compararSociedades(a.nombreLargo, b.nombreLargo));
+
+const PARTES_CR = new Intl.DateTimeFormat("en-US", { timeZone: "America/Costa_Rica", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** Fecha y hora corta en la zona de Costa Rica, p. ej. «28 oct 2026, 10:30». Devuelve null si el texto no es una fecha válida. */
+export function fechaHoraCR(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(PARTES_CR.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]} ${p.year}, ${p.hour}:${p.minute}`;
+}
+
+/** «Estados calculados el 28 oct 2026, 10:30», o «Estados sin calcular todavía» si nunca se calcularon. */
+export function textoEstadosCalculados(iso: string | null): string {
+  const f = iso ? fechaHoraCR(iso) : null;
+  return f ? `Estados calculados el ${f}` : "Estados sin calcular todavía";
+}

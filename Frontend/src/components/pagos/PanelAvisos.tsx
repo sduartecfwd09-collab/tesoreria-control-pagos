@@ -34,7 +34,7 @@ export function PanelAvisos() {
 
   return (
     <>
-      <LineaAlcance alcance={datos.alcance} detalle={datos.alcance.tipo === "mio" ? `Con tu aviso de ${datos.diasAviso} días` : undefined} />
+      <LineaAlcance alcance={datos.alcance} detalle={datos.alcance.tipo === "mio" ? `Con tu aviso de ${datos.diasAviso} días` : undefined} estadosCalculadosEn={datos.estadosCalculadosEn} />
 
       <section aria-label="Resumen de avisos" className="mt-5 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         {datos.grupos.map((g) => (

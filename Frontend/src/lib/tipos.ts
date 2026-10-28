@@ -38,6 +38,8 @@ export interface MiConfiguracion {
   diasAviso: number;
   diasEspera: number;
   propios: { diasAviso: number | null; diasEspera: number | null };
+  /** solo llega al guardar: cuándo se recalcularon los estados (ISO en UTC) */
+  estadosCalculadosEn?: string | null;
 }
 
 export type EstadoCelda = "leido" | "error" | "sin_sociedad" | "falta";
@@ -383,6 +385,8 @@ export interface GrupoAviso {
 
 export interface Avisos {
   alcance: Alcance;
+  /** última vez que se calcularon los estados (ISO en UTC); null si nunca */
+  estadosCalculadosEn: string | null;
   usuario: { nombre: string; rol: string } | null;
   diasAviso: number;
   hoy: string;

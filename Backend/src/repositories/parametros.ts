@@ -60,3 +60,19 @@ export async function asegurarCategoria(nombre: string) {
 export async function contarParametros() {
   return prisma.parametro.count();
 }
+
+/** Guarda un dato interno en la tabla de parámetros (crea o actualiza). No es un parámetro editable: no tiene definición. */
+export async function guardarValorGlobal(clave: string, valor: string, tipo = "texto") {
+  return prisma.parametro.upsert({
+    where: { clave_ambito_categoriaId: { clave, ambito: "global", categoriaId: 0 } },
+    create: { clave, valor, tipo, ambito: "global", categoriaId: 0 },
+    update: { valor },
+  });
+}
+
+/** Cuándo se calcularon por última vez los estados de los vencimientos (ISO), o null si nunca. */
+export async function ultimoCalculoDeEstados(): Promise<string | null> {
+  return valorGlobal(CLAVE_CALCULO_ESTADOS);
+}
+
+export const CLAVE_CALCULO_ESTADOS = "estados_calculados_en";
