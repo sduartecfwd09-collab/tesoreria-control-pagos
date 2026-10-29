@@ -180,8 +180,10 @@ describe("sin descarga y con archivos solo imagen", () => {
     const detalle = JSON.stringify({ conImagenes: true, continuidad: { estado: "no_verificable", razon: "sin_movimientos", movimientos: 0 } });
     await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 0, numDuplicados: 0, detalle } });
     const ficha = (await pedir(`/api/archivos/${archivoA}`, encabezado(ana))).json().datos;
-    expect(ficha.saldo.queSePaso).toBe("Este archivo solo trae una captura del estado de cuenta; el sistema no lee imágenes.");
-    expect(ficha.saldo.queHacer).toBe("Pida al banco el estado en Excel o CSV.");
+    expect(ficha.soloImagen).toBe(true);
+    expect(ficha.saldo.queSePaso).toBe("Este archivo solo trae una captura del banco y el sistema no lee imágenes.");
+    expect(ficha.saldo.queSignifica).toBe("Tesorería indica que corresponde a una cuenta sin movimientos en el mes, por eso se cuenta como cobertura.");
+    expect(ficha.saldo.motivo).not.toMatch(/Excel|CSV|Pida al banco/);
     expect(ficha.saldo.motivo).not.toContain("no trae movimientos del mes");
     const lista = (await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean; saldo: { motivo: string } }[];
     expect(lista.find((a) => a.id === archivoA)).toMatchObject({ soloImagen: true });

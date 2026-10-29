@@ -122,6 +122,24 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     expect(t.parrafos.join(" ")).not.toContain("Tampoco");
   });
 
+  it("Gestionar avisa cuando hay cuentas de la sociedad con un archivo solo con imagen ese mes, y no lo dice si no las hay", async () => {
+    const o = await obligacion("Luz Uno", "7771234", 10);
+    hoy = new Date(2026, 9, 25, 10, 0);
+    await actualizarVencimientos(reloj);
+    const v = await vencimientoDe(o.id);
+    expect(v.estado).toBe("vencido");
+    const sin = (await detalle(v.id)).textos.parrafos.join(" ");
+    expect(sin).not.toContain("solo con imagen");
+    await prisma.archivoImportado.updateMany({ where: { mes: "2026-10", cuentaId }, data: { numMovimientos: 0, numDuplicados: 0, detalle: JSON.stringify({ conImagenes: true, continuidad: { estado: "no_verificable", razon: "sin_movimientos" } }) } });
+    const una = (await detalle(v.id)).textos.parrafos;
+    expect(una).toContain("Hay 1 cuenta de esta sociedad con un archivo solo con imagen, que se tomó como cuenta sin movimientos.");
+    await actualizarVencimientos(reloj); // la cobertura no cambia: sigue siendo Vencido (el archivo de solo imagen da cobertura)
+    expect((await vencimientoDe(o.id)).estado).toBe("vencido");
+    const cuenta2 = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000007777" } })).id;
+    await prisma.archivoImportado.create({ data: { ruta: "AAA/segunda-oct.xlsx", hash: "s2", sociedadId, cuentaId: cuenta2, mes: "2026-10", estado: "leido", numMovimientos: 0, detalle: JSON.stringify({ conImagenes: true }) } });
+    expect((await detalle(v.id)).textos.parrafos).toContain("Hay 2 cuentas de esta sociedad con un archivo solo con imagen, que se tomaron como cuentas sin movimientos.");
+  });
+
   it("sin días de espera: el día siguiente al pago ya es Vencido (si hay cobertura)", async () => {
     await fijar("dias_espera_vencido", "0");
     const o = await obligacion("Luz Uno", "7771234", 10);

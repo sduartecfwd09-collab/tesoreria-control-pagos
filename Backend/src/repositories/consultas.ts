@@ -115,3 +115,20 @@ export async function obtenerArchivoRegistrado(id: number) {
     },
   });
 }
+
+/** Cuántas cuentas de la sociedad tienen, en ese mes, un archivo leído que solo trae una imagen (sin movimientos). */
+export async function contarCuentasConArchivoSoloImagen(sociedadId: number, mes: string): Promise<number> {
+  const archivos = await prisma.archivoImportado.findMany({
+    where: { sociedadId, mes, estado: "leido", retiradoEn: null, cuentaId: { not: null }, numMovimientos: 0, numDuplicados: 0 },
+    select: { cuentaId: true, detalle: true },
+  });
+  const cuentas = new Set<number>();
+  for (const a of archivos) {
+    try {
+      if ((JSON.parse(a.detalle ?? "{}") as { conImagenes?: unknown }).conImagenes === true) cuentas.add(a.cuentaId!);
+    } catch {
+      // un detalle ilegible no cuenta como imagen
+    }
+  }
+  return cuentas.size;
+}

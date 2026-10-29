@@ -52,13 +52,19 @@ const NO_CAMBIA_COBERTURA = "La cobertura sigue por fechas.";
 /** Un archivo leído sin ningún movimiento y con una imagen pegada (la captura de la pantalla del banco): el lector no lee imágenes. */
 export const esSoloImagen = (conImagenes: unknown, filasLeidas: number): boolean => conImagenes === true && filasLeidas === 0;
 
-/** Texto de un archivo que solo trae una captura del estado de cuenta. */
+/** Cómo se llama en pantalla el resultado de un archivo solo con imagen. */
+export const ETIQUETA_SOLO_IMAGEN = "Sin movimientos (solo imagen)";
+
+/**
+ * Texto de un archivo que solo trae una captura del banco. Tesorería confirmó que corresponde a una cuenta sin movimientos
+ * en el mes: por eso sigue dando cobertura y no se pide otro archivo.
+ */
 export function textoSoloImagen(): TextoSaldo {
   return armar(
     "no_verificable",
-    "Este archivo solo trae una captura del estado de cuenta; el sistema no lee imágenes.",
-    "No se pudieron revisar ni los movimientos ni el saldo.",
-    "Pida al banco el estado en Excel o CSV.",
+    "Este archivo solo trae una captura del banco y el sistema no lee imágenes.",
+    "Tesorería indica que corresponde a una cuenta sin movimientos en el mes, por eso se cuenta como cobertura.",
+    "No hay nada que hacer.",
   );
 }
 

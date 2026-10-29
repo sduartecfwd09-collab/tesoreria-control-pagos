@@ -50,10 +50,10 @@ function Celda({ c, soloImagen }: { c: CeldaCobertura; soloImagen: boolean }) {
   }
   return (
     <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}${c.saldoMotivo ? ` · ${c.saldoMotivo}` : ""}`} className="rounded border border-control px-2 py-1.5">
-      <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>
+      {!soloImagen && <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>}
       {soloImagen ? (
-        <span className="mt-1 block">
-          <EtiquetaEstado estado="sin_informacion" texto="Solo imagen" />
+        <span className="block">
+          <EtiquetaEstado estado="proyectado" texto="Sin movimientos (solo imagen)" />
         </span>
       ) : (
         c.saldo !== undefined && (
@@ -213,17 +213,6 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
           saldo: a.saldo!,
         }))}
       />
-      {soloImagen.length > 0 && (
-        <ListaAtencion
-          titulo="Archivo solo con imagen"
-          ayuda="Este archivo solo trae una captura del estado de cuenta; el sistema no lee imágenes. Pida al banco el estado en Excel o CSV."
-          vacio=""
-          estado="sin_informacion"
-          etiqueta="Solo imagen"
-          alVer={setVerId}
-          filas={soloImagen.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
-        />
-      )}
       <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"
         ayuda="La cuenta, el mes o la sociedad del nombre no coinciden con lo que trae el archivo."
@@ -243,6 +232,16 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         alVer={setVerId}
         filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
       />
+      {soloImagen.length > 0 && (
+        <LineaInformativa
+          texto="Archivos solo con imagen"
+          ayuda="Este archivo solo trae una captura del banco y el sistema no lee imágenes. Tesorería indica que corresponde a una cuenta sin movimientos en el mes, por eso se cuenta como cobertura."
+          vacio=""
+          etiqueta="Sin movimientos (solo imagen)"
+          alVer={setVerId}
+          filas={soloImagen.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.saldo!.queSePaso, verInfo: true }))}
+        />
+      )}
       <LineaInformativa
         texto="Archivos con saldo no verificable"
         ayuda="No se puede comprobar el saldo de estos archivos. No cambia la cobertura: sigue por fechas."
@@ -251,7 +250,7 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         alVer={setVerId}
         filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
-      {verId !== null && <FichaArchivo id={verId} alCerrar={() => setVerId(null)} />}
+      {verId !== null && <FichaArchivo id={verId} soloImagen={soloImagen.some((a) => a.id === verId)} alCerrar={() => setVerId(null)} />}
     </>
   );
 }

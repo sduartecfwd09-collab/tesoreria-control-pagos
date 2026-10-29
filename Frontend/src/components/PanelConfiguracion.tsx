@@ -6,7 +6,7 @@ import type { MiConfiguracion } from "@/lib/tipos";
 import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
 import { CajaError } from "./ui";
 import { fechaHoraCR } from "@/lib/formato";
-import { EtiquetaEstado } from "./pagos/EstadoPago";
+import { ESTADO, EtiquetaEstado } from "./pagos/EstadoPago";
 import type { EstadoVencimiento } from "@/lib/tipos";
 
 const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
@@ -53,15 +53,21 @@ function CampoDias({
   );
 }
 
-interface Hito {
-  titulo: string;
-  fecha: Date;
-  estado: EstadoVencimiento;
-  etiqueta: string;
-  frase: string;
+/** Un hito es un día que marca un cambio (marcador neutro, sin color de estado); un tramo es un estado real entre dos hitos. */
+type Paso =
+  | { tipo: "hito"; titulo: string; fecha: Date; frase: string }
+  | { tipo: "tramo"; estado: EstadoVencimiento; etiqueta: string; espera?: boolean; rango: string; frase: string };
+
+/** Reloj de arena del sistema de diseño (mismo trazo y tamaño que los íconos de estado). */
+function IconoEspera() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+      <path d="M4 2h8M4 14h8M5 2v2.5L8 8l3-3.5V2M5 14v-2.5L8 8l3 3.5V14" />
+    </svg>
+  );
 }
 
-/** Un pago de ejemplo, con los dos valores escritos en los campos (no los guardados), en orden cronológico. */
+/** Un pago de ejemplo, con los dos valores escritos en los campos (no los guardados): hito, tramo, hito, tramo, en orden cronológico. */
 function PanelEjemplo({ pago, aviso, espera }: { pago: Date; aviso: number | null; espera: number | null }) {
   const invalidos = [aviso === null && "los días de aviso (de 0 a 60)", espera === null && "los días de espera (de 0 a 15)"].filter(Boolean);
   let contenido: React.ReactNode;
@@ -75,57 +81,92 @@ function PanelEjemplo({ pago, aviso, espera }: { pago: Date; aviso: number | nul
     const inicio = sumarDias(pago, -aviso);
     const finEspera = sumarDias(pago, espera);
     const vence = sumarDias(pago, espera + 1);
-    const hitos: Hito[] = [
+    const pasos: Paso[] = [
       {
+        tipo: "tramo",
+        estado: "proyectado",
+        etiqueta: "Programado",
+        rango: `Hasta el ${fecha(sumarDias(inicio, -1))}`,
+        frase: "Todavía falta tiempo: el pago está programado y no se avisa.",
+      },
+      {
+        tipo: "hito",
         titulo: "Empieza el aviso",
         fecha: inicio,
+        frase: aviso === 0 ? "No hay días de aviso: el aviso empieza el mismo día de pago." : `Desde este día el sistema le avisa del pago (${textoDias(aviso)} antes).`,
+      },
+      {
+        tipo: "tramo",
         estado: "por_vencer",
         etiqueta: "Por vencer",
-        frase:
-          aviso === 0
-            ? "No hay días de aviso: el pago sigue Programado hasta el mismo día de pago."
-            : `Del ${fecha(inicio)} al ${fecha(pago)}: Por vencer. Antes del ${fecha(inicio)} el pago sigue Programado.`,
+        rango: aviso === 0 ? `Solo el ${fecha(pago)}` : `Del ${fecha(inicio)} al ${fecha(pago)}`,
+        frase: "El pago se acerca o es hoy. Si aparece en el estado de cuenta, pasa a Pagado.",
       },
       {
+        tipo: "hito",
         titulo: "Día de pago",
         fecha: pago,
-        estado: "por_vencer",
-        etiqueta: "Día de pago",
-        frase: "Es la fecha habitual de pago. Si el pago aparece en el estado de cuenta, pasa a Pagado.",
+        frase: espera === 0 ? "Es la fecha habitual de pago. No hay días de espera: si el pago no aparece este día, al siguiente se marca Vencido." : "Es la fecha habitual de pago.",
       },
+      ...(espera > 0
+        ? ([
+            {
+              tipo: "tramo",
+              estado: "por_vencer",
+              etiqueta: "Por vencer, esperando el pago",
+              espera: true,
+              rango: espera === 1 ? `Solo el ${fecha(finEspera)}` : `Del ${fecha(sumarDias(pago, 1))} al ${fecha(finEspera)}`,
+              frase: "La fecha de pago pasó y se espera que el pago aparezca. Sigue Por vencer.",
+            },
+            { tipo: "hito", titulo: "Fin de la espera", fecha: finEspera, frase: "Último día de espera. Si el pago no aparece, desde el día siguiente se marca Vencido." },
+          ] as Paso[])
+        : []),
       {
-        titulo: "Fin de la espera",
-        fecha: finEspera,
-        estado: "por_vencer",
-        etiqueta: "En espera",
-        frase:
-          espera === 0
-            ? "No hay días de espera: si el pago no aparece el día de pago, se marca Vencido al día siguiente."
-            : `Del ${fecha(sumarDias(pago, 1))} al ${fecha(finEspera)}: se espera el pago, sigue Por vencer.`,
-      },
-      {
-        titulo: "Pasa a Vencido",
-        fecha: vence,
+        tipo: "tramo",
         estado: "vencido",
         etiqueta: "Vencido",
-        frase: `Desde el ${fecha(vence)}: Vencido, si el pago no aparece.`,
+        rango: `Desde el ${fecha(vence)}`,
+        frase: "El pago no apareció en el tiempo de espera. Se sigue buscando por si llega.",
       },
     ];
     contenido = (
       <ol className="mt-4">
-        {hitos.map((h, i) => (
-          <li key={h.titulo} className={`border-l-2 border-divisor pb-5 pl-4 ${i === hitos.length - 1 ? "!border-transparent pb-0" : ""}`}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold">{h.titulo}</span>
-              <span className="text-sm text-suave">{fecha(h.fecha)}</span>
-              <EtiquetaEstado estado={h.estado} texto={h.etiqueta} />
-            </div>
-            <p className="mt-1 text-sm">{h.frase}</p>
-          </li>
-        ))}
+        {pasos.map((p, i) => {
+          const ultimo = i === pasos.length - 1;
+          const riel = `border-l-2 ${p.tipo === "tramo" && p.espera ? "border-dashed" : ""} border-divisor pl-5 ${ultimo ? "!border-transparent pb-0" : "pb-4"}`;
+          if (p.tipo === "hito") {
+            return (
+              <li key={`h-${p.titulo}`} className={`relative ${riel}`}>
+                <span aria-hidden="true" className="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-texto bg-fondo" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{p.titulo}</span>
+                  <span className="text-sm text-suave">{fecha(p.fecha)}</span>
+                </div>
+                <p className="mt-1 text-sm">{p.frase}</p>
+              </li>
+            );
+          }
+          return (
+            <li key={`t-${p.etiqueta}`} className={riel}>
+              <div className="flex flex-wrap items-center gap-2">
+                {p.espera ? (
+                  <span title={ESTADO.por_vencer.ayuda} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-dashed border-texto px-3 py-1 text-xs font-bold ${ESTADO.por_vencer.clase}`}>
+                    <IconoEspera />
+                    {p.etiqueta}
+                  </span>
+                ) : (
+                  <EtiquetaEstado estado={p.estado} texto={p.etiqueta} />
+                )}
+                <span className="text-sm text-suave">{p.rango}</span>
+              </div>
+              <p className="mt-1 text-sm">{p.frase}</p>
+            </li>
+          );
+        })}
       </ol>
     );
   }
+
   return (
     <aside aria-labelledby="h-ejemplo" className="rounded-[14px] border border-divisor bg-fondo p-5">
       <h2 id="h-ejemplo" className="text-lg font-bold border-b-2 border-acento pb-1">
@@ -147,7 +188,6 @@ export function PanelConfiguracion() {
   const [espera, setEspera] = useState("");
   const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
   const [errorCampos, setErrorCampos] = useState<{ aviso?: string; espera?: string }>({});
-  const [ok, setOk] = useState<string | null>(null);
   const [actualizando, setActualizando] = useState(false);
   const [errorGuardado, setErrorGuardado] = useState<string | null>(null);
   const [modoPruebas, setModoPruebas] = useState<boolean | null>(null);
@@ -225,7 +265,6 @@ export function PanelConfiguracion() {
 
   function guardar(e: React.FormEvent) {
     e.preventDefault();
-    setOk(null);
     setErrorGuardado(null);
     setErrorCampos({
       aviso: nAviso === null ? "Indique un número entero de días entre 0 y 60." : undefined,
@@ -249,7 +288,6 @@ export function PanelConfiguracion() {
             setEspera(String(nuevo.diasEspera));
             const f = nuevo.estadosCalculadosEn ? fechaHoraCR(nuevo.estadosCalculadosEn) : null;
             const texto = f ? `Listo: los estados se calcularon el ${f}` : "Listo: sus cambios quedaron guardados.";
-            setOk(texto);
             reemplazar(idAviso, "exito", texto);
           })
           .catch((e) => {
@@ -304,7 +342,7 @@ export function PanelConfiguracion() {
           {actualizando ? "Actualizando…" : "Guardar"}
         </button>
         <span role="status" aria-live="polite" className="text-sm text-suave">
-          {actualizando ? "Se están recalculando sus pagos con los valores nuevos" : !cambiado ? ok ?? "Cambie algún valor para guardar" : ""}
+          {actualizando ? "Se están recalculando sus pagos con los valores nuevos" : !cambiado ? "Cambie algún valor para guardar" : ""}
         </span>
       </div>
       {errorGuardado && !actualizando && (
