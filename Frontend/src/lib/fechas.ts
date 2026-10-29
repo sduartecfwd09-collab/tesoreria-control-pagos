@@ -109,7 +109,7 @@ export function recortarRango(r: Rango, opciones: { limites?: Limites | null; me
 /** Mensaje claro si el rango no es válido (desde <= hasta, dentro de los límites y del mes); null si lo es. */
 export function validarRango(r: Rango, opciones: { limites?: Limites | null; mes?: string | null } = {}): string | null {
   if (!esFechaIso(r.desde) || !esFechaIso(r.hasta)) return "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
-  if (r.desde > r.hasta) return "La fecha «Desde» no puede ser posterior a la fecha «Hasta».";
+  if (r.desde > r.hasta) return "«Desde» no puede ser posterior a «Hasta».";
   if (opciones.mes && (r.desde < primerDia(opciones.mes) || r.hasta > ultimoDia(opciones.mes))) {
     return `Las fechas deben estar dentro de ${nombreDelPeriodo(opciones.mes)}.`;
   }

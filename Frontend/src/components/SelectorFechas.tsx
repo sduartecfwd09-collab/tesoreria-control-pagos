@@ -112,7 +112,7 @@ function SelectorRango({ valor, alCambiar, limites, hoy, atajos, etiqueta, restr
     if (d.trim() === "" && h.trim() === "") return setError(null), alCambiar(null);
     const a = deTextoDMA(d);
     const b = deTextoDMA(h);
-    if (d.trim() === "" || h.trim() === "") return setError("Complete «Desde» y «Hasta», o deje ambos vacíos para ver todo el período.");
+    if (d.trim() === "" || h.trim() === "") return setError("Complete «Desde» y «Hasta».");
     const mensaje = a && b ? validarRango({ desde: a, hasta: b }, opciones) : "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
     setError(mensaje);
     if (!mensaje && a && b) alCambiar({ desde: a, hasta: b });
@@ -121,7 +121,7 @@ function SelectorRango({ valor, alCambiar, limites, hoy, atajos, etiqueta, restr
   const usarAtajo = (idAtajo: IdAtajo) => {
     if (!hoy) return;
     const r = recortarRango(rangoDeAtajo(idAtajo, hoy), opciones);
-    if (!r) return setError(restringidoAMes ? `«${TEXTO_ATAJO[idAtajo]}» queda fuera de ${nombreDelPeriodo(restringidoAMes)}.` : `«${TEXTO_ATAJO[idAtajo]}» queda fuera del período con datos.`);
+    if (!r) return setError(restringidoAMes ? `«${TEXTO_ATAJO[idAtajo]}» queda fuera de ${nombreDelPeriodo(restringidoAMes)}.` : `«${TEXTO_ATAJO[idAtajo]}» queda fuera de las fechas que se pueden elegir.`);
     setError(null);
     alCambiar(r);
   };

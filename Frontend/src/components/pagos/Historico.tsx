@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { aTextoDMA, textoEntre, type Rango } from "@/lib/fechas";
+import { textoEntre, type Rango } from "@/lib/fechas";
 import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { Categoria, EstadoVencimiento, LimitesFechas, RespuestaHistorico, Sociedad } from "@/lib/tipos";
@@ -112,12 +112,6 @@ export function Historico() {
         </p>
       ) : (
         <>
-          <p className="mt-4 text-sm" aria-live="polite">{lista.total.toLocaleString("es-CR")} {lista.total === 1 ? "vencimiento" : "vencimientos"}</p>
-          {meta?.cobertura.parcial && meta.coberturaEstados && (
-            <p className="mt-1 text-sm text-suave">
-              Los estados de cuenta cargados cubren del {aTextoDMA(meta.coberturaEstados.primera)} al {aTextoDMA(meta.coberturaEstados.ultima)}: fuera de ese período los pagos pueden aparecer como «Sin información».
-            </p>
-          )}
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[1000px] border-collapse text-sm">
               <caption className="sr-only">Histórico de vencimientos</caption>
