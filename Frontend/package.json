@@ -11,6 +11,7 @@
     "estados": "node scripts/verificar-estados.mjs",
     "toasts": "node scripts/verificar-toasts.mjs",
     "tarjetas": "node scripts/verificar-tarjetas.mjs",
+    "fechas": "node --test scripts/verificar-fechas.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
