@@ -132,6 +132,8 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     fecha: iso(v.fecha),
     fechaOriginal: iso(v.fechaOriginal ?? v.fecha), // si no se movió, la original es la vigente
     movida: v.fechaOriginal !== null,
+    /** quién movió la fecha, si se guardó; solo con la fecha movida */
+    fechaMovidaPor: v.fechaOriginal !== null ? v.cambiosDia[0]?.usuario.nombre ?? null : null,
     estado: v.estado,
     motivo: v.motivo,
     textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionImagen ? TEXTO_SALDO_IMAGEN : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias, fecha: iso(v.fecha), fechaHasta: iso(hasta) }),

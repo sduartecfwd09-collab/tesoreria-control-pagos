@@ -398,6 +398,7 @@ export interface DetalleVencimiento {
   fecha: string;
   fechaOriginal: string;
   movida: boolean;
+  fechaMovidaPor: string | null;
   estado: EstadoVencimiento;
   motivo: string | null;
   textoEstado: string | null;

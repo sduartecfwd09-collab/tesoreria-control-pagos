@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
+import { montoPagado, nombreFecha } from "@/lib/formato";
 import type { DetalleVencimiento, EstadoVencimiento, MovimientoDetalle } from "@/lib/tipos";
 import { Ficha } from "../Ficha";
-import { ESTADO, EstadoPago } from "./EstadoPago";
+import { EstadoPago } from "./EstadoPago";
 
 const ESTADOS: EstadoVencimiento[] = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"];
 
@@ -27,7 +27,7 @@ function TablaMovimientos({ movimientos, conSociedad }: { movimientos: Movimient
             <tr key={i} className="border-t border-linea align-top">
               <td className="px-3 py-2 whitespace-nowrap">
                 {nombreFecha(m.fecha)}
-                {m.delPago && <span className="block text-xs text-suave">Pago tomado</span>}
+                {m.delPago && <span className="block text-xs text-suave">Pago encontrado en el banco</span>}
               </td>
               <td className="px-3 py-2">
                 {m.banco ?? "Banco sin dato"}
@@ -136,11 +136,8 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
                 {fila("Proveedor", d.proveedor)}
                 {fila("Número de servicio", <span className="font-mono">{d.identificador}</span>)}
                 {fila("Sociedad", d.sociedad)}
-                {fila("Período", nombrePeriodo(d.periodo))}
-                {fila("Fecha original", nombreFecha(d.fechaOriginal))}
-                {fila("Fecha vigente", d.movida ? `${nombreFecha(d.fecha)} (se movió solo este mes)` : nombreFecha(d.fecha))}
+                {fila("Vence", <>{nombreFecha(d.fecha)}{d.movida && <span className="block text-xs font-normal text-suave">Antes: {nombreFecha(d.fechaOriginal)}{d.fechaMovidaPor ? ` · lo cambió ${d.fechaMovidaPor}` : ""}</span>}</>)}
                 {fila("Responsable", d.responsableEfectivo ?? "Sin responsable")}
-                {fila("Estado", ESTADO[d.estado]?.texto ?? "Sin definir")}
               </dl>
             </Seccion>
           </>

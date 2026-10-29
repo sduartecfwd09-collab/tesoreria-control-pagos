@@ -137,6 +137,8 @@ export async function obtenerVencimientoDetalle(id: number) {
       sociedad: true, categoria: true,
       obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } },
       movimiento: incluirMovimiento,
+      // quién movió la fecha de este vencimiento (el último cambio de «solo este mes»)
+      cambiosDia: { where: { tipo: "una_vez" }, orderBy: { id: "desc" }, take: 1, select: { usuario: { select: { nombre: true } } } },
     },
   });
 }
