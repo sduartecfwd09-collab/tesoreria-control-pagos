@@ -1,11 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { MESES, sumarMeses } from "@/lib/formato";
+import { MESES } from "@/lib/formato";
+import { textoEntre, type Rango } from "@/lib/fechas";
+import { guardarPeriodo, leerPeriodo } from "@/lib/periodo-guardado";
 import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_PAGOS } from "@/lib/filtro-tarjetas";
 import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
-import type { Alcance, AvisoDatos, EstadoVencimiento, Vencimiento } from "@/lib/tipos";
+import type { Alcance, AvisoDatos, EstadoVencimiento, LimitesFechas, Vencimiento } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
+import { FiltroFechasActivo, SelectorFechas } from "../SelectorFechas";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { Icono, Insignia, Tarjeta } from "./TarjetaEstado";
@@ -29,7 +32,9 @@ const textoHoy = (hoy: string) =>
 export function PagosDelMes() {
   const [hoy, setHoy] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<string | null>(null);
-  const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; alcance: Alcance; calculado: string | null } | null>(null);
+  const [rango, setRango] = useState<Rango | null>(null);
+  const [limites, setLimites] = useState<LimitesFechas["vencimientos"]>(null);
+  const [mes, setMes] = useState<{ clave: string; datos: Vencimiento[]; alcance: Alcance; calculado: string | null } | null>(null);
   const [pestana, setPestana] = useState<Pestana>("atencion");
   const [abierto, setAbierto] = useState<number | null>(null);
   const { activa: tarjetaActiva, alternar: alternarTarjeta, limpiar: limpiarTarjeta, destino: destinoTarjeta } = useFiltroTarjeta();
@@ -37,15 +42,35 @@ export function PagosDelMes() {
   const [avisos, setAvisos] = useState<AvisoDatos[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
+  // el mes y el día o rango opcional dentro de él identifican lo que se pidió: un resultado viejo no se muestra
+  const clave = `${periodo ?? ""}|${rango?.desde ?? ""}|${rango?.hasta ?? ""}`;
 
   // Abre en el mes de hoy según el reloj del servidor.
   useEffect(() => {
     let vigente = true;
-    api.hoy().then((h) => vigente && (setHoy(h), setPeriodo((p) => p ?? h.slice(0, 7)))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    api.hoy().then((h) => {
+      if (!vigente) return;
+      const guardado = leerPeriodo<{ periodo: string; rango: Rango | null }>("pagos");
+      setHoy(h);
+      setPeriodo((p) => p ?? guardado?.periodo ?? h.slice(0, 7));
+      setRango((r) => r ?? guardado?.rango ?? null);
+    }).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
     return () => {
       vigente = false;
     };
   }, [intento]);
+
+  useEffect(() => {
+    let vigente = true;
+    api.limitesFechas().then((l) => vigente && setLimites(l.vencimientos)).catch(() => vigente && setLimites(null));
+    return () => {
+      vigente = false;
+    };
+  }, [intento]);
+
+  useEffect(() => {
+    if (periodo) guardarPeriodo("pagos", { periodo, rango });
+  }, [periodo, rango]);
 
   useEffect(() => {
     let vigente = true;
@@ -58,19 +83,20 @@ export function PagosDelMes() {
   useEffect(() => {
     if (!periodo) return;
     let vigente = true;
-    api.listarTodosVencimientos({ periodo }).then((r) => vigente && (setMes({ periodo, datos: r.datos, alcance: r.alcance, calculado: r.estadosCalculadosEn }), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    api.listarTodosVencimientos({ periodo, fechaDesde: rango?.desde, fechaHasta: rango?.hasta }).then((r) => vigente && (setMes({ clave, datos: r.datos, alcance: r.alcance, calculado: r.estadosCalculadosEn }), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
     return () => {
       vigente = false;
     };
-  }, [periodo, intento]);
+  }, [periodo, rango, intento]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const datos = useMemo(() => (mes && mes.periodo === periodo ? mes.datos : null), [mes, periodo]);
+  const datos = useMemo(() => (mes && mes.clave === clave ? mes.datos : null), [mes, clave]);
   const filtros = useFiltrosPagos(datos ?? []);
 
   if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
   if (!hoy || !periodo) return <p className="mt-8 text-suave" role="status">Cargando pagos…</p>;
 
   const nombreMes = MESES[Number(periodo.slice(5, 7)) - 1]!;
+  const cambiarMes = (nuevo: string) => (setPeriodo(nuevo), setRango(null)); // el día o rango es de un mes: al cambiar de mes se quita
   const todos = datos ?? [];
   const cuenta = (...e: EstadoVencimiento[]) => todos.filter((v) => e.includes(v.estado)).length;
   // El número de cada tarjeta y las filas que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
@@ -99,17 +125,18 @@ export function PagosDelMes() {
           <span className="text-xs font-light uppercase tracking-[0.24em] text-suave">Hoy · {textoHoy(hoy)}</span>
           <h1 className="mt-1.5 text-[32px] font-extrabold">Pagos de {nombreMes}</h1>
         </div>
-        <div className="flex items-center overflow-hidden rounded-[10px] border border-control">
-          <button type="button" onClick={() => setPeriodo(sumarMeses(periodo, -1))} aria-label="Mes anterior" className="flex px-3.5 py-2.5">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <span aria-live="polite" className="border-x border-control px-4 py-2.5 text-sm font-semibold capitalize">{nombreMes} {periodo.slice(0, 4)}</span>
-          <button type="button" onClick={() => setPeriodo(sumarMeses(periodo, 1))} aria-label="Mes siguiente" className="flex px-3.5 py-2.5">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
-          </button>
-        </div>
+        <SelectorFechas modo="mes" valor={periodo} onChange={cambiarMes} limites={limites} hoy={hoy} />
       </header>
       <LineaAlcance alcance={mes?.alcance} estadosCalculadosEn={mes?.calculado} />
+
+      <section aria-label="Afinar por día" className="mt-5">
+        <SelectorFechas modo="rango" valor={rango} onChange={setRango} limites={limites} hoy={hoy} atajos={["hoy", "semana"]} etiqueta="Vence entre" restringidoAMes={periodo} />
+        {rango && (
+          <div className="mt-2">
+            <FiltroFechasActivo rotulo="Vence entre" rango={rango} alQuitar={() => setRango(null)} />
+          </div>
+        )}
+      </section>
 
       {avisos.length > 0 && (
         <section role="status" aria-label="Datos desactualizados" className="mt-6 max-w-3xl rounded-xl border-2 border-texto bg-ambar-fondo p-4 text-texto">
@@ -122,7 +149,7 @@ export function PagosDelMes() {
         </section>
       )}
 
-      <section aria-label="Resumen del mes" className="mt-7 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+      <section aria-label={rango ? "Resumen del período elegido" : "Resumen del mes"} className="mt-7 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         <Tarjeta titulo="Vencidos" filtro={filtroDe("vencidos")} acento="bg-rojo" detalle="Sin pago encontrado" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></Icono>}
           insignia={<Insignia clase="bg-rojo text-fondo">Atender hoy</Insignia>}>{porTarjeta.vencidos}</Tarjeta>
         <Tarjeta titulo="Por vencer" filtro={filtroDe("por_vencer")} acento="bg-ambar" detalle="Dentro de los días de aviso" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></Icono>}
@@ -158,7 +185,7 @@ export function PagosDelMes() {
         {datos === null ? (
           <p className="mt-6 text-suave" role="status">Cargando pagos…</p>
         ) : (
-          <TablaPagos datos={filas} alGestionar={setAbierto} vacio={N === 0 ? `No hay pagos de ${nombreMes}.` : "No hay pagos que coincidan."} />
+          <TablaPagos datos={filas} alGestionar={setAbierto} vacio={N === 0 ? (rango ? `No hay vencimientos con fecha de vencimiento entre ${textoEntre(rango)}.` : `No hay pagos de ${nombreMes}.`) : "No hay pagos que coincidan."} />
         )}
       </section>
       {abierto !== null && <DetallePago id={abierto} alCerrar={() => setAbierto(null)} />}

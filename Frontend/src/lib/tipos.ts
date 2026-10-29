@@ -305,10 +305,21 @@ export interface AvisoDatos {
   texto: string;
 }
 
+/** Primera y última fecha con datos (GET /api/fechas/limites), con el alcance de la persona; null = sin datos. */
+export interface LimitesFechas {
+  alcance: Alcance;
+  hoy: string;
+  vencimientos: { primera: string; ultima: string } | null;
+  movimientos: { primera: string; ultima: string } | null;
+}
+
 export interface FiltroVencimientos {
   sociedadId?: number;
   categoria?: number;
   periodo?: string;
+  /** día exacto de la fecha de vencimiento (AAAA-MM-DD), ambos incluidos */
+  fechaDesde?: string;
+  fechaHasta?: string;
   q?: string;
   /** estados separados por coma */
   estado?: string;

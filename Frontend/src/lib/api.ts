@@ -1,5 +1,5 @@
 import type {
-  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
+  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
@@ -89,6 +89,8 @@ export const api = {
   detalleVencimiento: async (id: number) => (await pedir<{ datos: DetalleVencimiento }>(`/api/vencimientos/${id}`)).datos,
   avisosDatos: async () => (await pedir<{ datos: AvisoDatos[] }>("/api/vencimientos/avisos-datos")).datos,
   periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[]; hoy: string }>("/api/vencimientos/periodos")).datos,
+  /** Primera y última fecha con datos (límites del selector de fechas) y «hoy» del servidor. */
+  limitesFechas: () => pedir<LimitesFechas>("/api/fechas/limites"),
   /** La fecha de hoy según el servidor (reloj inyectable). */
   hoy: async () => (await pedir<{ datos: unknown; hoy: string }>("/api/vencimientos/periodos")).hoy,
 };
