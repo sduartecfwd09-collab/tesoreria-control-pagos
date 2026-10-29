@@ -227,8 +227,8 @@ describe("sección 12: archivos sin movimientos e imágenes", () => {
     const t = await informe();
     expect(t).toContain("12. Archivos sin movimientos e imágenes (solo conteos). Una imagen es «grande» desde el 15% del área de la hoja; la esquina es la franja exterior del 25%");
     expect(t).toContain("archivos leídos: 6 · sin movimientos: 3");
-    expect(t).toContain("E3 · sin movimientos: con logo (probable): 1 · con posible captura: 0 · con otra imagen: 0 · sin imagen: 1 · sin dato (leídos con una versión anterior del lector): 1");
-    expect(t).toContain("E1 · con movimientos: con logo (probable): 0 · con posible captura: 1");
+    expect(t).toContain("E3 · sin movimientos: total 3 = con logo (probable; cubre): 1 · imagen no legible (no cubre): 0 · con otra imagen: 0 · sin imagen (cubre): 1 · sin dato (leídos con una versión anterior del lector): 1");
+    expect(t).toContain("E1 · con movimientos: total 1 = con logo (probable): 0 · con posible captura: 1");
     expect(t).toContain("con bloque de saldos en el encabezado (Saldo Inicial, Saldo en Libros, Saldo Disponible o Fecha): 1 · sin dato (versión anterior del lector): 1");
     expect(t).toContain("Saldo Inicial igual a Saldo en Libros: sí 1 · no 0 · sin poder comparar (falta uno de los dos): 0");
     expect(t).toContain("traen «Fecha» en el encabezado: sí 1 · no 0");
@@ -237,7 +237,7 @@ describe("sección 12: archivos sin movimientos e imágenes", () => {
 
   it("el umbral es un parámetro: con un umbral más bajo el mismo archivo pasa de logo a posible captura", async () => {
     await prisma.archivoImportado.updateMany({ where: { cuentaId, mes: "2026-10" }, data: { formato: "E3", numMovimientos: 0, detalle: JSON.stringify({ conImagenes: true, imagenes: [{ ...logo, areaPct: 10 }], continuidad: sinMov }) } });
-    expect(await informe()).toContain("E3 · sin movimientos: con logo (probable): 1 · con posible captura: 0");
-    expect(await informe(45, { grandePct: 5, esquinaPct: 25 })).toContain("E3 · sin movimientos: con logo (probable): 0 · con posible captura: 1");
+    expect(await informe()).toContain("E3 · sin movimientos: total 1 = con logo (probable; cubre): 1 · imagen no legible (no cubre): 0");
+    expect(await informe(45, { grandePct: 5, esquinaPct: 25 })).toContain("E3 · sin movimientos: total 1 = con logo (probable; cubre): 0 · imagen no legible (no cubre): 1");
   });
 });

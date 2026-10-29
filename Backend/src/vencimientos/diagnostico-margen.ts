@@ -531,10 +531,6 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
   L.push("", `12. Archivos sin movimientos e imágenes (solo conteos). Una imagen es «grande» desde el ${u.grandePct}% del área de la hoja; la esquina es la franja exterior del ${u.esquinaPct}%; pequeña en esquina = probable logo, grande = posible captura:`);
   type Detalle = { continuidad?: ContinuidadGuardada; conImagenes?: boolean; imagenes?: ImagenRelativa[]; encabezadoSaldos?: EncabezadoSaldos | null };
   const leidos = x.archivos.filter((a) => a.retiradoEn === null && estadoDeArchivo(a) === "leido");
-  const CLASES: ClaseArchivoImagen[] = ["probable_logo", "posible_captura", "otra", "sin_imagen", "sin_dato"];
-  const ETIQUETA_CLASE: Record<ClaseArchivoImagen, string> = {
-    probable_logo: "con logo (probable)", posible_captura: "con posible captura", otra: "con otra imagen", sin_imagen: "sin imagen", sin_dato: "sin dato (leídos con una versión anterior del lector)",
-  };
   const porFormatoImagen12 = new Map<string, { sin: Map<ClaseArchivoImagen, number>; con: Map<ClaseArchivoImagen, number> }>();
   let sinMov = 0;
   let conEncabezado = 0;
@@ -543,7 +539,7 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
   const fechaEnEncabezado = { si: 0, no: 0 };
   for (const a of leidos) {
     const d = (a.detalle ?? {}) as Detalle;
-    const sin = esSinMovimientos(d.continuidad);
+    const sin = esSinMovimientosEnDiagnostico(d.continuidad);
     const clase = clasificarArchivo(d.imagenes, d.conImagenes, u);
     const f = porFormatoImagen12.get(a.formato ?? "sin formato") ?? { sin: new Map(), con: new Map() };
     const mapa = sin ? f.sin : f.con;
@@ -560,18 +556,56 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
     if (d.encabezadoSaldos.fecha) fechaEnEncabezado.si++;
     else fechaEnEncabezado.no++;
   }
-  const lineaClases = (m: Map<ClaseArchivoImagen, number>) => CLASES.map((c) => `${ETIQUETA_CLASE[c]}: ${m.get(c) ?? 0}`).join(" · ");
+  const lineaClases = (m: Map<ClaseArchivoImagen, number>, et: Record<ClaseArchivoImagen, string>) => `total ${totalClases(m)} = ${CLASES_12.map((c) => `${et[c]}: ${m.get(c) ?? 0}`).join(" · ")}`;
   L.push(`  archivos leídos: ${leidos.length} · sin movimientos: ${sinMov}`);
   L.push("  por formato:");
   for (const [formato, f] of [...porFormatoImagen12].sort(([a], [b]) => a.localeCompare(b))) {
-    L.push(`    ${formato} · sin movimientos: ${lineaClases(f.sin)}`);
-    L.push(`    ${formato} · con movimientos: ${lineaClases(f.con)}`);
+    L.push(`    ${formato} · sin movimientos: ${lineaClases(f.sin, ETIQUETA_CLASE_12)}`);
+    L.push(`    ${formato} · con movimientos: ${lineaClases(f.con, ETIQUETA_CLASE_12_CON)}`);
   }
   if (porFormatoImagen12.size === 0) L.push("    ninguno");
   L.push(`  archivos sin movimientos con bloque de saldos en el encabezado (Saldo Inicial, Saldo en Libros, Saldo Disponible o Fecha): ${conEncabezado}${encabezadoSinDato ? ` · sin dato (versión anterior del lector): ${encabezadoSinDato}` : ""}`);
   L.push(`    Saldo Inicial igual a Saldo en Libros: sí ${igualdad.si} · no ${igualdad.no} · sin poder comparar (falta uno de los dos): ${igualdad.sinComparar}`);
   L.push(`    traen «Fecha» en el encabezado: sí ${fechaEnEncabezado.si} · no ${fechaEnEncabezado.no}`);
   return L.join("\n");
+}
+
+/** Clases de la sección 12, en el orden en que se muestran. */
+export const CLASES_12: ClaseArchivoImagen[] = ["probable_logo", "posible_captura", "otra", "sin_imagen", "sin_dato"];
+
+/**
+ * Rótulo de cada clase en la sección 12. Cobertura verificada en el código: la imagen no legible (razón «imagen_no_legible»,
+ * clase «posible captura» con cero movimientos) no da cobertura (domain/cobertura.ts y repositories/cruce.ts); el logo y el
+ * archivo sin imagen son «sin movimientos» y sí cubren. «Otra imagen» y «sin dato» conservan su etiqueta anterior.
+ */
+export const ETIQUETA_CLASE_12: Record<ClaseArchivoImagen, string> = {
+  probable_logo: "con logo (probable; cubre)",
+  posible_captura: "imagen no legible (no cubre)",
+  otra: "con otra imagen",
+  sin_imagen: "sin imagen (cubre)",
+  sin_dato: "sin dato (leídos con una versión anterior del lector)",
+};
+
+/** Rótulos del grupo «con movimientos»: ahí la imagen grande no impide leer los movimientos, así que no se habla de cobertura. */
+export const ETIQUETA_CLASE_12_CON: Record<ClaseArchivoImagen, string> = {
+  probable_logo: "con logo (probable)", posible_captura: "con posible captura", otra: "con otra imagen", sin_imagen: "sin imagen", sin_dato: "sin dato (leídos con una versión anterior del lector)",
+};
+
+/** En la sección 12 «sin movimientos» incluye la imagen no legible (cero movimientos persistidos). No cambia esSinMovimientos. */
+export const esSinMovimientosEnDiagnostico = (c: ContinuidadGuardada | null | undefined): boolean => esSinMovimientos(c) || esImagenNoLegible(c);
+
+/** El total de un grupo es la suma de todas sus clases. */
+export const totalClases = (m: Map<ClaseArchivoImagen, number>): number => CLASES_12.reduce((s, c) => s + (m.get(c) ?? 0), 0);
+
+/** Desglose de la sección 12: por clase, los archivos leídos sin y con movimientos. */
+export function desglosarSinMovimientos(archivos: { continuidad?: ContinuidadGuardada; clase: ClaseArchivoImagen }[]): { sin: Map<ClaseArchivoImagen, number>; con: Map<ClaseArchivoImagen, number>; totalSin: number; totalCon: number } {
+  const sin = new Map<ClaseArchivoImagen, number>();
+  const con = new Map<ClaseArchivoImagen, number>();
+  for (const a of archivos) {
+    const m = esSinMovimientosEnDiagnostico(a.continuidad) ? sin : con;
+    m.set(a.clase, (m.get(a.clase) ?? 0) + 1);
+  }
+  return { sin, con, totalSin: totalClases(sin), totalCon: totalClases(con) };
 }
 
 /** Días antes que prueba la tabla 9. */
