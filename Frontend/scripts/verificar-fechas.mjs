@@ -40,6 +40,9 @@ test("atajos", () => {
   assert.deepEqual(f.rangoDeAtajo("mes_anterior", "2026-01-15"), { desde: "2025-12-01", hasta: "2025-12-31" });
   assert.deepEqual(f.rangoDeAtajo("ultimos_3_meses", hoy), { desde: "2026-08-01", hasta: "2026-10-31" });
   assert.deepEqual(f.rangoDeAtajo("ultimos_3_meses", "2026-02-10"), { desde: "2025-12-01", hasta: "2026-02-28" });
+  assert.deepEqual(f.rangoDeAtajo("ultimos_12_meses", hoy), { desde: "2025-11-01", hasta: hoy });
+  assert.deepEqual(f.rangoDeAtajo("ultimos_12_meses", "2026-01-15"), { desde: "2025-02-01", hasta: "2026-01-15" });
+  assert.deepEqual(f.recortarRango(f.rangoDeAtajo("mes", hoy), { limites: { primera: "2021-10-01", ultima: hoy } }), { desde: "2026-10-01", hasta: hoy }); // el pasado se recorta a hoy
   assert.deepEqual(f.rangoDeAtajo("anio", hoy), { desde: "2026-01-01", hasta: "2026-12-31" });
 });
 

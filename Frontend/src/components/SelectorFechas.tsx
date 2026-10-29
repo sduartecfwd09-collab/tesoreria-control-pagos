@@ -146,7 +146,10 @@ function SelectorRango({ valor, alCambiar, limites, hoy, atajos, etiqueta, restr
               const r = hoy ? recortarRango(rangoDeAtajo(a, hoy), opciones) : null; // sin «hoy» del servidor aún no se calculan los atajos
               const activo = Boolean(valor && r && valor.desde === r.desde && valor.hasta === r.hasta);
               return (
-                <button key={a} type="button" onClick={() => usarAtajo(a)} aria-pressed={activo} disabled={!hoy} className={claseAtajo}>{TEXTO_ATAJO[a]}</button>
+                <button key={a} type="button" onClick={() => usarAtajo(a)} aria-pressed={activo} disabled={!hoy} className={`${claseAtajo} ${activo ? "inline-flex items-center gap-1" : ""}`}>
+                  {activo && <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 8.5 3.2 3.2L13 4.5" /></svg>}
+                  {TEXTO_ATAJO[a]}
+                </button>
               );
             })}
           </div>

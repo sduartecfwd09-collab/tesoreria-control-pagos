@@ -17,11 +17,11 @@ function finDeMes(iso: string): string {
   return sumarDias(new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10), -1);
 }
 
-/** Período por defecto: los últimos N meses de calendario completos, contando el actual (del día 1 del mes de hace N-1 meses al último día del mes actual). */
+/** Período por defecto: los últimos N meses terminando hoy (del día 1 del mes de hace N-1 meses a hoy). El Histórico es el pasado. */
 export function rangoPorDefecto(hoy: string, meses: number): RangoDeDias {
   const indice = Number(hoy.slice(0, 4)) * 12 + Number(hoy.slice(5, 7)) - 1 - (Math.max(1, meses) - 1);
   const desde = `${Math.floor(indice / 12)}-${String((indice % 12) + 1).padStart(2, "0")}-01`;
-  return { desde, hasta: finDeMes(hoy) };
+  return { desde, hasta: hoy };
 }
 
 export interface CoberturaDelPeriodo {

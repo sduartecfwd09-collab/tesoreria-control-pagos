@@ -78,6 +78,8 @@ export function Historico() {
   if (lista.error) return <CajaError mensaje={lista.error} alReintentar={() => setIntento((n) => n + 1)} />;
 
   const aplicado = meta?.rango ?? null;
+  // el Histórico es el pasado: no se elige después de hoy
+  const limitesHistorico = limites ? { primera: limites.ventana.primera, ultima: limites.hoy } : undefined;
   const hayFiltros = Boolean(sociedad || categoria || estado || q);
   const vacio = lista.datos !== null && lista.datos.length === 0 && aplicado;
 
@@ -86,15 +88,13 @@ export function Historico() {
       <LineaAlcance alcance={lista.alcance} />
 
       <section aria-label="Filtros del histórico" className="mt-5">
-        <SelectorFechas modo="rango" valor={rango ?? aplicado} onChange={setRango} limites={limites?.ventana} hoy={limites?.hoy ?? aplicado?.hasta ?? ""}
-          atajos={["mes", "mes_anterior", "ultimos_3_meses", "anio"]} etiqueta="Vence entre" />
-        <div className="mt-2" aria-live="polite">
-          {rango ? (
+        <SelectorFechas modo="rango" valor={rango ?? aplicado} onChange={setRango} limites={limitesHistorico} hoy={limites?.hoy ?? aplicado?.hasta ?? ""}
+          atajos={["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"]} etiqueta="Vence entre" />
+        {rango && (
+          <div className="mt-2">
             <FiltroFechasActivo rotulo="Vence entre" rango={rango} alQuitar={() => setRango(null)} />
-          ) : (
-            aplicado && <span className="text-sm text-suave">Período por defecto: vence entre {textoEntre(aplicado)}.</span>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="flex min-w-60 max-w-sm flex-1 items-center gap-2 rounded-[10px] border border-control px-3 py-1.5 text-suave">
@@ -136,13 +136,12 @@ export function Historico() {
             </p>
           )}
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-sm">
+            <table className="w-full min-w-[1000px] border-collapse text-sm">
               <caption className="sr-only">Histórico de vencimientos</caption>
               <thead>
                 <tr>
                   <th scope="col" className={th}>Sociedad</th>
                   <th scope="col" className={th}>Proveedor y categoría</th>
-                  <th scope="col" className={th}>Período</th>
                   <th scope="col" className={th}>Fecha de vencimiento</th>
                   <th scope="col" className={th}>Estado</th>
                   <th scope="col" className={th}>Fecha de pago</th>
@@ -159,7 +158,6 @@ export function Historico() {
                       <span className="block font-semibold">{v.proveedor}</span>
                       <span className="mt-0.5 block text-xs text-suave">{v.categoria}</span>
                     </td>
-                    <td className="px-3.5 py-4 align-top whitespace-nowrap capitalize">{nombrePeriodo(v.periodo)}</td>
                     <td className="px-3.5 py-4 align-top whitespace-nowrap font-semibold">{nombreFecha(v.fecha)}</td>
                     <td className="px-3.5 py-4 align-top"><EstadoPago estado={v.estado} /></td>
                     <td className="px-3.5 py-4 align-top whitespace-nowrap">{v.pago ? nombreFecha(v.pago.fecha) : <span className="text-suave">—</span>}</td>
@@ -176,7 +174,7 @@ export function Historico() {
                     <td className="px-3.5 py-4 align-top text-right whitespace-nowrap tabular-nums">{v.pago ? <b>{montoPagado(v.pago.monto, v.pago.moneda)}</b> : <span className="text-suave">—</span>}</td>
                     <td className="px-3.5 py-4 align-top text-right">
                       <button type="button" onClick={(e) => (e.stopPropagation(), alAbrir(v.id))} className="rounded border-2 border-control px-3 py-1.5 text-xs font-semibold hover:bg-fondo-suave">
-                        Ver línea de tiempo
+                        Ver detalle
                       </button>
                     </td>
                   </tr>

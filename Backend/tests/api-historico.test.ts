@@ -55,7 +55,7 @@ const pedir = async (consulta = "", quien = jefa) => (await app.inject({ method:
 describe("GET /api/historico", () => {
   it("sin fechas abre en los últimos 12 meses (parámetro), del más reciente al más antiguo", async () => {
     const r = await pedir();
-    expect(r.rango).toEqual({ desde: "2025-11-01", hasta: "2026-10-31" });
+    expect(r.rango).toEqual({ desde: "2025-11-01", hasta: "2026-10-27" }); // termina hoy
     expect(r.porDefecto).toBe(true);
     expect(r.total).toBe(8); // sin «Cable» (2025-10-31)
     const fechas = r.datos.map((v: { fecha: string }) => v.fecha);
@@ -124,7 +124,7 @@ describe("GET /api/historico", () => {
   it("el parámetro historico_meses cambia el período por defecto", async () => {
     await prisma.parametro.upsert({ where: { clave_ambito_categoriaId: { clave: "historico_meses", ambito: "global", categoriaId: 0 } }, create: { clave: "historico_meses", valor: "3", tipo: "entero", ambito: "global", categoriaId: 0 }, update: { valor: "3" } });
     try {
-      expect((await pedir()).rango).toEqual({ desde: "2026-08-01", hasta: "2026-10-31" });
+      expect((await pedir()).rango).toEqual({ desde: "2026-08-01", hasta: "2026-10-27" });
     } finally {
       await prisma.parametro.update({ where: { clave_ambito_categoriaId: { clave: "historico_meses", ambito: "global", categoriaId: 0 } }, data: { valor: "12" } });
     }
@@ -132,10 +132,10 @@ describe("GET /api/historico", () => {
 });
 
 describe("reglas puras del Histórico", () => {
-  it("período por defecto: N meses de calendario contando el actual, a través del año", () => {
-    expect(rangoPorDefecto("2026-10-27", 12)).toEqual({ desde: "2025-11-01", hasta: "2026-10-31" });
-    expect(rangoPorDefecto("2026-02-10", 12)).toEqual({ desde: "2025-03-01", hasta: "2026-02-28" });
-    expect(rangoPorDefecto("2026-10-27", 1)).toEqual({ desde: "2026-10-01", hasta: "2026-10-31" });
+  it("período por defecto: N meses terminando hoy, a través del año", () => {
+    expect(rangoPorDefecto("2026-10-27", 12)).toEqual({ desde: "2025-11-01", hasta: "2026-10-27" });
+    expect(rangoPorDefecto("2026-02-10", 12)).toEqual({ desde: "2025-03-01", hasta: "2026-02-10" });
+    expect(rangoPorDefecto("2026-10-27", 1)).toEqual({ desde: "2026-10-01", hasta: "2026-10-27" });
   });
   it("cobertura del período", () => {
     const c = { primera: "2026-03-10", ultima: "2026-09-30" };

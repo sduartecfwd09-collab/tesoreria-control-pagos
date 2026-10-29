@@ -12,7 +12,7 @@ export interface Limites {
   ultima: string;
 }
 
-export type IdAtajo = "hoy" | "semana" | "mes" | "mes_anterior" | "ultimos_3_meses" | "anio";
+export type IdAtajo = "hoy" | "semana" | "mes" | "mes_anterior" | "ultimos_3_meses" | "ultimos_12_meses" | "anio";
 
 export const TEXTO_ATAJO: Record<IdAtajo, string> = {
   hoy: "Hoy",
@@ -20,6 +20,7 @@ export const TEXTO_ATAJO: Record<IdAtajo, string> = {
   mes: "Este mes",
   mes_anterior: "Mes anterior",
   ultimos_3_meses: "Últimos 3 meses",
+  ultimos_12_meses: "Últimos 12 meses",
   anio: "Este año",
 };
 
@@ -75,7 +76,8 @@ export function semanaDe(iso: string): Rango {
 
 /**
  * Rango de cada atajo a partir de «hoy». Son bloques de calendario: «Este mes» y «Mes anterior» son meses completos;
- * «Últimos 3 meses» son los dos meses anteriores y el actual, completos; «Este año» va del 1 de enero al 31 de diciembre.
+ * «Últimos 3 meses» son los dos meses anteriores y el actual, completos; «Últimos 12 meses» van del día 1 del mes de hace 11 meses a hoy;
+ * «Este año» va del 1 de enero al 31 de diciembre. Quien los usa en una pantalla del pasado los recorta a hoy (recortarRango).
  */
 export function rangoDeAtajo(id: IdAtajo, hoy: string): Rango {
   const mes = periodoDe(hoy);
@@ -85,6 +87,7 @@ export function rangoDeAtajo(id: IdAtajo, hoy: string): Rango {
     case "mes": return { desde: primerDia(mes), hasta: ultimoDia(mes) };
     case "mes_anterior": { const m = sumarMeses(mes, -1); return { desde: primerDia(m), hasta: ultimoDia(m) }; }
     case "ultimos_3_meses": return { desde: primerDia(sumarMeses(mes, -2)), hasta: ultimoDia(mes) };
+    case "ultimos_12_meses": return { desde: primerDia(sumarMeses(mes, -11)), hasta: hoy };
     case "anio": return { desde: `${hoy.slice(0, 4)}-01-01`, hasta: `${hoy.slice(0, 4)}-12-31` };
   }
 }
