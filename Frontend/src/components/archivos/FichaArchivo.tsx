@@ -11,7 +11,7 @@ const ESTADO_ARCHIVO: Record<string, string> = { leido: "Leído", con_error: "Co
 const RESULTADO_SALDO = { cuadra: "cuadra", no_cuadra: "no cuadra", no_verificable: "no verificable" } as const;
 
 /** Información completa de un archivo de estado de cuenta (solo lectura), con «Copiar ruta». */
-export function FichaArchivo({ id, alCerrar, soloImagen = false }: { id: number; alCerrar: () => void; soloImagen?: boolean }) {
+export function FichaArchivo({ id, alCerrar, sinMovimientos = false }: { id: number; alCerrar: () => void; sinMovimientos?: boolean }) {
   const [a, setA] = useState<InfoArchivo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +54,7 @@ export function FichaArchivo({ id, alCerrar, soloImagen = false }: { id: number;
             {fila("Saldo siguiente detectado", saldoTexto(a.saldoFinal))}
           </dl>
           <section className="mt-5 border-t border-linea pt-4">
-            <h3 className="text-sm font-bold">Resultado del saldo{a.saldo ? `: ${soloImagen ? "Sin movimientos (solo imagen)" : RESULTADO_SALDO[a.saldo.resultado]}` : ""}</h3>
+            <h3 className="text-sm font-bold">Resultado del saldo{a.saldo ? `: ${sinMovimientos ? "Sin movimientos" : RESULTADO_SALDO[a.saldo.resultado]}` : ""}</h3>
             {a.saldo ? <TextoSaldoTres saldo={a.saldo} /> : <p className="mt-1 text-sm text-suave">Este archivo no trae la comprobación del saldo.</p>}
           </section>
           <section className="mt-5 border-t border-linea pt-4">

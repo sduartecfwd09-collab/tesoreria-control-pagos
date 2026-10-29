@@ -9,8 +9,11 @@ import { cruzar, MOTIVOS, type ResultadoCruce } from "../domain/cruce.js";
 import { NOMBRE_ESTADO } from "../domain/textos-pago.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { estadoDeArchivo } from "../domain/estado-archivo.js";
-import { esSoloImagen, razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
+import { clasificarArchivo, UMBRALES_IMAGEN_DEFECTO, type ClaseArchivoImagen, type UmbralesImagen } from "../domain/clasificar-imagenes.js";
+import { esSinMovimientos, esSoloImagen, razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
+import type { EncabezadoSaldos } from "../ingest/encabezado-saldos.js";
 import { FORMATOS } from "../ingest/formatos.js";
+import type { ImagenRelativa } from "../ingest/medir-imagenes.js";
 import { normalizar } from "../ingest/utiles.js";
 import type { CreditoParaDiagnostico, DebitoParaFormato } from "../repositories/cruce.js";
 import type { ResumenCruce } from "./cruce.js";
@@ -58,6 +61,8 @@ export interface ExtrasMargen {
   archivos: ArchivoMargen[];
   /** parámetro «Distancia máxima para el diagnóstico de pagos» */
   diasLejos: number;
+  /** umbrales (parámetros) para clasificar las imágenes de los archivos; sin ellos, los valores por defecto */
+  umbralesImagen?: UmbralesImagen;
 }
 
 export interface CifrasAntes {
@@ -508,6 +513,52 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
   L.push("  por sociedad y mes:");
   for (const [k, n] of [...porSociedadMes].sort(([a], [b]) => a.localeCompare(b))) L.push(`    ${k}: ${n}`);
   if (porSociedadMes.size === 0) L.push("    ninguno");
+
+  // 12. Archivos sin movimientos e imágenes embebidas (logo o captura) y bloque de saldos del encabezado. Solo conteos.
+  const u = x.umbralesImagen ?? UMBRALES_IMAGEN_DEFECTO;
+  L.push("", `12. Archivos sin movimientos e imágenes (solo conteos). Una imagen es «grande» desde el ${u.grandePct}% del área de la hoja; la esquina es la franja exterior del ${u.esquinaPct}%; pequeña en esquina = probable logo, grande = posible captura:`);
+  type Detalle = { continuidad?: ContinuidadGuardada; conImagenes?: boolean; imagenes?: ImagenRelativa[]; encabezadoSaldos?: EncabezadoSaldos | null };
+  const leidos = x.archivos.filter((a) => a.retiradoEn === null && estadoDeArchivo(a) === "leido");
+  const CLASES: ClaseArchivoImagen[] = ["probable_logo", "posible_captura", "otra", "sin_imagen", "sin_dato"];
+  const ETIQUETA_CLASE: Record<ClaseArchivoImagen, string> = {
+    probable_logo: "con logo (probable)", posible_captura: "con posible captura", otra: "con otra imagen", sin_imagen: "sin imagen", sin_dato: "sin dato (leídos con una versión anterior del lector)",
+  };
+  const porFormatoImagen12 = new Map<string, { sin: Map<ClaseArchivoImagen, number>; con: Map<ClaseArchivoImagen, number> }>();
+  let sinMov = 0;
+  let conEncabezado = 0;
+  let encabezadoSinDato = 0;
+  const igualdad = { si: 0, no: 0, sinComparar: 0 };
+  const fechaEnEncabezado = { si: 0, no: 0 };
+  for (const a of leidos) {
+    const d = (a.detalle ?? {}) as Detalle;
+    const sin = esSinMovimientos(d.continuidad);
+    const clase = clasificarArchivo(d.imagenes, d.conImagenes, u);
+    const f = porFormatoImagen12.get(a.formato ?? "sin formato") ?? { sin: new Map(), con: new Map() };
+    const mapa = sin ? f.sin : f.con;
+    mapa.set(clase, (mapa.get(clase) ?? 0) + 1);
+    porFormatoImagen12.set(a.formato ?? "sin formato", f);
+    if (!sin) continue;
+    sinMov++;
+    if (d.encabezadoSaldos === undefined) { encabezadoSinDato++; continue; }
+    if (d.encabezadoSaldos === null) continue;
+    conEncabezado++;
+    if (d.encabezadoSaldos.inicialIgualLibros === true) igualdad.si++;
+    else if (d.encabezadoSaldos.inicialIgualLibros === false) igualdad.no++;
+    else igualdad.sinComparar++;
+    if (d.encabezadoSaldos.fecha) fechaEnEncabezado.si++;
+    else fechaEnEncabezado.no++;
+  }
+  const lineaClases = (m: Map<ClaseArchivoImagen, number>) => CLASES.map((c) => `${ETIQUETA_CLASE[c]}: ${m.get(c) ?? 0}`).join(" · ");
+  L.push(`  archivos leídos: ${leidos.length} · sin movimientos: ${sinMov}`);
+  L.push("  por formato:");
+  for (const [formato, f] of [...porFormatoImagen12].sort(([a], [b]) => a.localeCompare(b))) {
+    L.push(`    ${formato} · sin movimientos: ${lineaClases(f.sin)}`);
+    L.push(`    ${formato} · con movimientos: ${lineaClases(f.con)}`);
+  }
+  if (porFormatoImagen12.size === 0) L.push("    ninguno");
+  L.push(`  archivos sin movimientos con bloque de saldos en el encabezado (Saldo Inicial, Saldo en Libros, Saldo Disponible o Fecha): ${conEncabezado}${encabezadoSinDato ? ` · sin dato (versión anterior del lector): ${encabezadoSinDato}` : ""}`);
+  L.push(`    Saldo Inicial igual a Saldo en Libros: sí ${igualdad.si} · no ${igualdad.no} · sin poder comparar (falta uno de los dos): ${igualdad.sinComparar}`);
+  L.push(`    traen «Fecha» en el encabezado: sí ${fechaEnEncabezado.si} · no ${fechaEnEncabezado.no}`);
   return L.join("\n");
 }
 

@@ -1,4 +1,6 @@
+import type { EncabezadoSaldos } from "./encabezado-saldos.js";
 import type { FormatoId } from "./formatos.js";
+import type { ImagenRelativa } from "./medir-imagenes.js";
 
 /** Movimiento ya normalizado (montos en centavos, enteros >= 0 en débito y crédito). */
 export interface MovimientoLeido {
@@ -63,4 +65,8 @@ export interface ResultadoLectura {
   filasPieIgnoradas: number;
   /** el archivo trae imágenes (que el lector ignora) */
   conImagenes: boolean;
+  /** las imágenes de la hoja leída, medidas contra la hoja: porcentaje del área y posición */
+  imagenes: ImagenRelativa[];
+  /** el bloque de saldos del encabezado (solo qué etiquetas hay, nunca importes); null si no lo trae */
+  encabezadoSaldos: EncabezadoSaldos | null;
 }

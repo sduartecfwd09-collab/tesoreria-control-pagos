@@ -63,7 +63,7 @@ export const conImagenesDe = (d: unknown): boolean | null => {
 };
 
 const continuidadDe = (d: unknown): string | undefined => (d as { continuidad?: { estado?: string } } | null)?.continuidad?.estado;
-const saldoDe = (d: unknown, filasLeidas: number) => textoSaldoDeDetalle(d as { continuidad?: ContinuidadGuardada; conImagenes?: boolean } | null, filasLeidas);
+const saldoDe = (d: unknown) => textoSaldoDeDetalle(d as { continuidad?: ContinuidadGuardada } | null);
 
 /**
  * Cobertura por sociedad, cuenta y mes: qué hay, qué falta y qué falló.
@@ -102,7 +102,7 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       movimientos: a.numMovimientos,
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
-      saldoMotivo: saldoDe(a.detalle, a.numMovimientos + a.numDuplicados)?.motivo,
+      saldoMotivo: saldoDe(a.detalle)?.motivo,
       error: motivoDeArchivo(a),
     };
     filas.set(k, fila);

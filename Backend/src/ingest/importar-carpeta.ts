@@ -180,7 +180,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     const claves = clavesDeDeduplicacion(cuenta.id, r.movimientos);
     const movs = r.movimientos.map((m, i) => ({ ...m, claveDedup: claves[i]! }));
     const detalle = {
-      versionLector: LECTOR_VERSION, continuidad: r.continuidad, saldoInicial: r.saldoInicial, saldoFinal: r.saldoFinal, fechas: r.fechas, periodoDeclarado: r.periodoDeclarado, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes,
+      versionLector: LECTOR_VERSION, continuidad: r.continuidad, saldoInicial: r.saldoInicial, saldoFinal: r.saldoFinal, fechas: r.fechas, periodoDeclarado: r.periodoDeclarado, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes, imagenes: r.imagenes, encabezadoSaldos: r.encabezadoSaldos,
       monedaOrigen: origen, moneda: monedaArchivo, hojaLeida: r.hoja, filaEncabezado: r.filaEncabezado,
     };
     try {

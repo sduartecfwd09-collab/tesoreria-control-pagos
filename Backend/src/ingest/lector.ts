@@ -4,12 +4,14 @@ import { quitarDibujos, tieneImagenes } from "./quitar-dibujos.js";
 import { detectarFormato } from "./detectar-formato.js";
 import { especDe } from "./formatos.js";
 import { verificarContinuidad } from "./calidad.js";
+import { leerEncabezadoSaldos } from "./encabezado-saldos.js";
+import { medirImagenes, medirRelativo, type ImagenAncla } from "./medir-imagenes.js";
 import type { NombreArchivo } from "./nombre-archivo.js";
 import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js";
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 9; // 9: avisa de las filas con importe sin fecha legible aunque no se lea ningún movimiento; 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
+export const LECTOR_VERSION = 10; // 10: guarda el tamaño y la posición de las imágenes y el bloque de saldos del encabezado; 9: avisa de las filas con importe sin fecha legible aunque no se lea ningún movimiento; 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
 
 export class ErrorLectura extends Error {}
 
@@ -20,6 +22,8 @@ export interface LibroLeido {
   dibujosOmitidos: boolean;
   /** el archivo trae imágenes (no se leen ni se hace OCR: solo se registra que existen) */
   conImagenes: boolean;
+  /** dónde están pegadas las imágenes de cada hoja (solo geometría, por nombre de hoja) */
+  anclas: Map<string, ImagenAncla[]>;
 }
 
 /**
@@ -41,7 +45,8 @@ export async function leerLibro(contenido: Buffer): Promise<LibroLeido> {
     }
   }
   if (wb.worksheets.length === 0) throw new ErrorLectura("El libro no tiene hojas");
-  return { wb, dibujosOmitidos, conImagenes: await tieneImagenes(contenido) };
+  const conImagenes = await tieneImagenes(contenido);
+  return { wb, dibujosOmitidos, conImagenes, anclas: conImagenes ? await medirImagenes(contenido) : new Map() };
 }
 
 /** Tolerancia de redondeo del saldo cuando no se indica otra (centavos); es el valor inicial del parámetro «Tolerancia de redondeo del saldo». */
@@ -151,6 +156,9 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     advertencias,
     filasPieIgnoradas,
     conImagenes: libro.conImagenes,
+    // las imágenes de la hoja leída medidas contra la hoja (tamaño y posición relativos), y el bloque de saldos del encabezado
+    imagenes: (libro.anclas.get(hoja.name) ?? []).map((a) => medirRelativo(a, hoja.columnCount, hoja.rowCount)),
+    encabezadoSaldos: leerEncabezadoSaldos(hoja, filaEncabezado),
   };
 }
 

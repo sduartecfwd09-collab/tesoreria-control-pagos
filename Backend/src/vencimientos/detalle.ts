@@ -16,7 +16,6 @@ import { preferenciasPorObligacion } from "../repositories/cruce.js";
 import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import { contarCuentasConArchivoSoloImagen } from "../repositories/consultas.js";
 import { asignadosAOtraObligacion, datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
 import { diasDeAviso } from "./generar.js";
 
@@ -122,16 +121,6 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     proveedor: v.proveedor, periodo: v.periodo, asignadoAOtro,
     movimientos, grupo, pagoCercano, datosDesde: datosDesde ? iso(datosDesde) : null,
   });
-  // Un Vencido o un Sin información puede depender de cuentas que solo trajeron una imagen: se avisa en la ficha.
-  if (v.estado === "vencido" || v.estado === "sin_informacion") {
-    const soloImagen = await contarCuentasConArchivoSoloImagen(v.sociedadId, v.periodo);
-    if (soloImagen > 0) {
-      textos.parrafos.push(soloImagen === 1
-        ? "Hay 1 cuenta de esta sociedad con un archivo solo con imagen, que se tomó como cuenta sin movimientos."
-        : `Hay ${soloImagen} cuentas de esta sociedad con un archivo solo con imagen, que se tomaron como cuentas sin movimientos.`);
-    }
-  }
-
   return {
     id: v.id,
     obligacionId: v.obligacionId,

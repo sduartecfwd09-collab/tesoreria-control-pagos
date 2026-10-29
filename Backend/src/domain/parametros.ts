@@ -54,6 +54,18 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "45", unidad: "días", min: 1, max: 365, supuesto: false, visible: false,
   },
   {
+    clave: "diagnostico_imagen_grande_pct",
+    etiqueta: "Tamaño desde el que una imagen es grande (diagnóstico)",
+    ayuda: "Solo para el diagnóstico: porcentaje del área de la hoja desde el que una imagen pegada se considera grande (posible captura). No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "15", unidad: "%", min: 1, max: 100, supuesto: false, visible: false,
+  },
+  {
+    clave: "diagnostico_imagen_esquina_pct",
+    etiqueta: "Franja de la esquina para el diagnóstico de imágenes",
+    ayuda: "Solo para el diagnóstico: ancho, en porcentaje de la hoja, de la franja exterior que se considera esquina (una imagen pequeña en la esquina es probablemente un logo). No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "25", unidad: "%", min: 1, max: 50, supuesto: false, visible: false,
+  },
+  {
     clave: "tolerancia_saldo",
     etiqueta: "Tolerancia de redondeo del saldo",
     ayuda:

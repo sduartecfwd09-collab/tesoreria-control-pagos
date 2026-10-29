@@ -171,28 +171,35 @@ describe("inspeccionar el saldo: segunda pasada sobre toda la hoja", () => {
   });
 });
 
-describe("sin descarga y con archivos solo imagen", () => {
+describe("sin descarga y con archivos sin movimientos", () => {
   it("la ruta de descarga ya no existe", async () => {
     expect((await pedir(`/api/archivos/${archivoA}/descargar`, encabezado(jefa))).statusCode).toBe(404);
   });
 
-  it("un archivo leído sin movimientos y con una imagen se reconoce y usa el texto de la captura, no «no trae movimientos del mes»", async () => {
-    const detalle = JSON.stringify({ conImagenes: true, continuidad: { estado: "no_verificable", razon: "sin_movimientos", movimientos: 0 } });
-    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 0, numDuplicados: 0, detalle } });
-    const ficha = (await pedir(`/api/archivos/${archivoA}`, encabezado(ana))).json().datos;
-    expect(ficha.soloImagen).toBe(true);
-    expect(ficha.saldo.queSePaso).toBe("Este archivo solo trae una captura del banco y el sistema no lee imágenes.");
-    expect(ficha.saldo.queSignifica).toBe("Tesorería indica que corresponde a una cuenta sin movimientos en el mes, por eso se cuenta como cobertura.");
-    expect(ficha.saldo.motivo).not.toMatch(/Excel|CSV|Pida al banco/);
-    expect(ficha.saldo.motivo).not.toContain("no trae movimientos del mes");
-    const lista = (await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean; saldo: { motivo: string } }[];
-    expect(lista.find((a) => a.id === archivoA)).toMatchObject({ soloImagen: true });
-    // con imagen pero con movimientos, o sin imagen y sin movimientos, no es «solo imagen»
-    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 3 } });
-    expect(((await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean }[]).find((a) => a.id === archivoA)?.soloImagen).toBe(false);
-    await prisma.archivoImportado.update({ where: { id: archivoA }, data: { numMovimientos: 0, detalle: JSON.stringify({ conImagenes: false, continuidad: { estado: "no_verificable", razon: "sin_movimientos" } }) } });
-    const sinImagen = ((await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; soloImagen: boolean; saldo: { queSePaso: string } }[]).find((a) => a.id === archivoA)!;
-    expect(sinImagen.soloImagen).toBe(false);
-    expect(sinImagen.saldo.queSePaso).toBe("Este archivo no trae movimientos del mes.");
+  const ponerDetalle = (conImagenes: boolean, estado: string, razon?: string) =>
+    prisma.archivoImportado.update({ where: { id: archivoA }, data: { detalle: JSON.stringify({ conImagenes, continuidad: { estado, razon, movimientos: 0 } }) } });
+  const lista = async () => ((await pedir("/api/importaciones", encabezado(ana))).json().datos as { id: number; sinMovimientos: boolean; soloImagen?: unknown; saldo: { queSePaso: string; queSignifica: string; queHacer: string; motivo: string } }[]).find((a) => a.id === archivoA)!;
+
+  it("todo archivo leído con 0 movimientos es «sin movimientos», tenga imagen o no, con el mismo texto", async () => {
+    for (const conImagenes of [true, false]) {
+      await ponerDetalle(conImagenes, "no_verificable", "sin_movimientos");
+      const a = await lista();
+      expect(a.sinMovimientos).toBe(true);
+      expect(a.soloImagen).toBeUndefined();
+      expect(a.saldo.queSePaso).toBe("Este archivo no trae movimientos del mes.");
+      expect(a.saldo.queSignifica).toBe("Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura.");
+      expect(a.saldo.queHacer).toBe("No hay nada que hacer.");
+      expect(a.saldo.motivo).not.toMatch(/captura|imagen|Excel|CSV|Pida al banco/);
+      const ficha = (await pedir(`/api/archivos/${archivoA}`, encabezado(ana))).json().datos;
+      expect(ficha.sinMovimientos).toBe(true);
+      expect(ficha.soloImagen).toBeUndefined();
+    }
+  });
+
+  it("un archivo con movimientos, aunque traiga imagen, no es «sin movimientos»", async () => {
+    await ponerDetalle(true, "cuadra");
+    expect((await lista()).sinMovimientos).toBe(false);
+    await ponerDetalle(true, "no_verificable", "un_solo_saldo");
+    expect((await lista()).sinMovimientos).toBe(false);
   });
 });

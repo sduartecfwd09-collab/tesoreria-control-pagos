@@ -29,13 +29,13 @@ const debito = (fecha: Date, descripcion: string, extra: object = {}) => mov(cue
 const obligacion = (proveedor: string, identificador: string) =>
   prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor, identificador, diaEsperadoPago: 15, controlDesde: dia(2026, 10, 1) } });
 
-async function informe(diasLejos = 45) {
+async function informe(diasLejos = 45, umbralesImagen?: { grandePct: number; esquinaPct: number }) {
   await actualizarVencimientos(reloj);
   const r = await cruzarVencimientos(reloj);
   const anterior = cruzar({ ...r.datos, ...r.parametros, diasDespues: 3 });
   
   return informeMargenCruce(r, { diasDespues: 3, resultados: anterior.resultados }, [{ id: sociedadId, codigo: "AAA" }, { id: otraSociedadId, codigo: "BBB" }], {
-    categorias: await categoriasPorObligacion(), debitosFormato: await debitosParaFormato(), creditos: await creditosParaDiagnostico(), archivos: (await listarArchivos()).filter((a) => a.retiradoEn === null), diasLejos,
+    categorias: await categoriasPorObligacion(), debitosFormato: await debitosParaFormato(), creditos: await creditosParaDiagnostico(), archivos: (await listarArchivos()).filter((a) => a.retiradoEn === null), diasLejos, umbralesImagen,
   });
 }
 
@@ -200,5 +200,34 @@ describe("sección 11: archivos que solo traen una imagen", () => {
     const t = await informe();
     expect(t).toContain("archivos: 0");
     expect(t).toMatch(/vencimientos que cambiarían de estado: 0 /);
+  });
+});
+
+describe("sección 12: archivos sin movimientos e imágenes", () => {
+  const logo = { areaPct: 2, colInicioPct: 0, colFinPct: 20, filaInicioPct: 0, filaFinPct: 7 };
+  const grande = { areaPct: 60, colInicioPct: 0, colFinPct: 90, filaInicioPct: 20, filaFinPct: 90 };
+  const sinMov = { estado: "no_verificable", razon: "sin_movimientos" };
+
+  it("clasifica por formato los archivos sin movimientos (logo, posible captura, sin imagen) y cuenta el bloque de saldos, sin nombres ni montos", async () => {
+    await prisma.archivoImportado.updateMany({ where: { cuentaId, mes: "2026-10" }, data: { formato: "E3", numMovimientos: 0, detalle: JSON.stringify({ conImagenes: true, imagenes: [logo], continuidad: sinMov, encabezadoSaldos: { saldoInicial: true, saldoEnLibros: true, saldoDisponible: true, fecha: true, inicialIgualLibros: true } }) } });
+    await prisma.archivoImportado.updateMany({ where: { cuentaId, mes: "2026-09" }, data: { formato: "E3", numMovimientos: 0, detalle: JSON.stringify({ conImagenes: false, imagenes: [], continuidad: sinMov, encabezadoSaldos: null }) } });
+    const cuenta2 = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000009001" } })).id;
+    await prisma.archivoImportado.create({ data: { ruta: "AAA/a-e1.xlsx", hash: "e1", sociedadId, cuentaId: cuenta2, mes: "2026-10", estado: "leido", formato: "E1", numMovimientos: 4, detalle: JSON.stringify({ conImagenes: true, imagenes: [grande], continuidad: { estado: "cuadra" } }) } });
+    await prisma.archivoImportado.create({ data: { ruta: "AAA/antiguo.xlsx", hash: "viejo", sociedadId, cuentaId: cuenta2, mes: "2026-09", estado: "leido", formato: "E3", numMovimientos: 0, detalle: JSON.stringify({ continuidad: sinMov }) } });
+    const t = await informe();
+    expect(t).toContain("12. Archivos sin movimientos e imágenes (solo conteos). Una imagen es «grande» desde el 15% del área de la hoja; la esquina es la franja exterior del 25%");
+    expect(t).toContain("archivos leídos: 6 · sin movimientos: 3");
+    expect(t).toContain("E3 · sin movimientos: con logo (probable): 1 · con posible captura: 0 · con otra imagen: 0 · sin imagen: 1 · sin dato (leídos con una versión anterior del lector): 1");
+    expect(t).toContain("E1 · con movimientos: con logo (probable): 0 · con posible captura: 1");
+    expect(t).toContain("con bloque de saldos en el encabezado (Saldo Inicial, Saldo en Libros, Saldo Disponible o Fecha): 1 · sin dato (versión anterior del lector): 1");
+    expect(t).toContain("Saldo Inicial igual a Saldo en Libros: sí 1 · no 0 · sin poder comparar (falta uno de los dos): 0");
+    expect(t).toContain("traen «Fecha» en el encabezado: sí 1 · no 0");
+    for (const prohibido of ["a-e1.xlsx", "antiguo", "CR0000000000000000009001", "AAA/"]) expect(t).not.toContain(prohibido);
+  });
+
+  it("el umbral es un parámetro: con un umbral más bajo el mismo archivo pasa de logo a posible captura", async () => {
+    await prisma.archivoImportado.updateMany({ where: { cuentaId, mes: "2026-10" }, data: { formato: "E3", numMovimientos: 0, detalle: JSON.stringify({ conImagenes: true, imagenes: [{ ...logo, areaPct: 10 }], continuidad: sinMov }) } });
+    expect(await informe()).toContain("E3 · sin movimientos: con logo (probable): 1 · con posible captura: 0");
+    expect(await informe(45, { grandePct: 5, esquinaPct: 25 })).toContain("E3 · sin movimientos: con logo (probable): 0 · con posible captura: 1");
   });
 });

@@ -19,7 +19,7 @@ const TEXTO_SALDO: Record<string, string> = { cuadra: "Saldo cuadra", no_cuadra:
 /** Estado existente que toma cada resultado del saldo (con su texto propio): cuadra = Pagado, no verificable = Programado (neutral), no cuadra = Sin información. */
 const ESTADO_SALDO: Record<string, EstadoVencimiento> = { cuadra: "pagado", no_cuadra: "sin_informacion", no_verificable: "proyectado" };
 
-function Celda({ c, soloImagen }: { c: CeldaCobertura; soloImagen: boolean }) {
+function Celda({ c, sinMovimientos }: { c: CeldaCobertura; sinMovimientos: boolean }) {
   if (c.estado === "falta") {
     return (
       <div title="No hay archivo de esta cuenta para este mes" className="rounded border border-divisor px-2 py-1.5">
@@ -50,10 +50,10 @@ function Celda({ c, soloImagen }: { c: CeldaCobertura; soloImagen: boolean }) {
   }
   return (
     <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}${c.saldoMotivo ? ` · ${c.saldoMotivo}` : ""}`} className="rounded border border-control px-2 py-1.5">
-      {!soloImagen && <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>}
-      {soloImagen ? (
+      {!sinMovimientos && <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>}
+      {sinMovimientos ? (
         <span className="block">
-          <EtiquetaEstado estado="proyectado" texto="Sin movimientos (solo imagen)" />
+          <EtiquetaEstado estado="proyectado" texto="Sin movimientos" />
         </span>
       ) : (
         c.saldo !== undefined && (
@@ -167,12 +167,12 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
   const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
   const retirados = archivos.filter((a) => a.estado === "retirado");
   const vigentes = archivos.filter((a) => a.estado === "leido" && a.saldo !== null);
-  // Los archivos solo con imagen tienen su propio grupo: no se cuentan además como saldo no verificable.
-  const soloImagen = vigentes.filter((a) => a.soloImagen);
-  const sinImagen = vigentes.filter((a) => !a.soloImagen);
-  const saldo = sinImagen.filter((a) => a.saldo!.resultado === "no_cuadra");
-  const noVerificable = sinImagen.filter((a) => a.saldo!.resultado === "no_verificable");
-  const cuadran = sinImagen.filter((a) => a.saldo!.resultado === "cuadra");
+  // Los archivos sin movimientos tienen su propio grupo: no se cuentan además como saldo no verificable.
+  const sinMovimientos = vigentes.filter((a) => a.sinMovimientos);
+  const conMovimientos = vigentes.filter((a) => !a.sinMovimientos);
+  const saldo = conMovimientos.filter((a) => a.saldo!.resultado === "no_cuadra");
+  const noVerificable = conMovimientos.filter((a) => a.saldo!.resultado === "no_verificable");
+  const cuadran = conMovimientos.filter((a) => a.saldo!.resultado === "cuadra");
   const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0);
   return (
     <>
@@ -232,14 +232,14 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         alVer={setVerId}
         filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
       />
-      {soloImagen.length > 0 && (
+      {sinMovimientos.length > 0 && (
         <LineaInformativa
-          texto="Archivos solo con imagen"
-          ayuda="Este archivo solo trae una captura del banco y el sistema no lee imágenes. Tesorería indica que corresponde a una cuenta sin movimientos en el mes, por eso se cuenta como cobertura."
+          texto="Archivos sin movimientos"
+          ayuda="Este archivo no trae movimientos del mes. Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura. No hay nada que hacer."
           vacio=""
-          etiqueta="Sin movimientos (solo imagen)"
+          etiqueta="Sin movimientos"
           alVer={setVerId}
-          filas={soloImagen.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.saldo!.queSePaso, verInfo: true }))}
+          filas={sinMovimientos.map((a) => ({ id: a.id, ruta: a.archivo, verInfo: true }))}
         />
       )}
       <LineaInformativa
@@ -250,7 +250,7 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         alVer={setVerId}
         filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
-      {verId !== null && <FichaArchivo id={verId} soloImagen={soloImagen.some((a) => a.id === verId)} alCerrar={() => setVerId(null)} />}
+      {verId !== null && <FichaArchivo id={verId} sinMovimientos={sinMovimientos.some((a) => a.id === verId)} alCerrar={() => setVerId(null)} />}
     </>
   );
 }
@@ -279,7 +279,7 @@ export function PanelArchivos() {
 
   // alfabético por nombre largo (el orden es estable: las cuentas de una sociedad conservan su orden)
   const sociedades = useMemo(() => [...new Set((cob?.filas ?? []).map((f) => f.sociedad))].sort(compararSociedades), [cob]);
-  const idsSoloImagen = useMemo(() => new Set((imp?.datos ?? []).filter((a) => a.soloImagen).map((a) => a.id)), [imp]);
+  const idsSinMovimientos = useMemo(() => new Set((imp?.datos ?? []).filter((a) => a.sinMovimientos).map((a) => a.id)), [imp]);
   const filas = useMemo(
     () => (cob?.filas ?? []).filter((f) => !sociedad || f.sociedad === sociedad).sort((a, b) => compararSociedades(a.sociedad, b.sociedad)),
     [cob, sociedad],
@@ -377,7 +377,7 @@ export function PanelArchivos() {
                   </td>
                   {cob.meses.map((m) => (
                     <td key={m} className="px-2 py-2 min-w-44">
-                      <Celda c={f.celdas[m]!} soloImagen={idsSoloImagen.has(f.celdas[m]!.archivoId ?? -1)} />
+                      <Celda c={f.celdas[m]!} sinMovimientos={idsSinMovimientos.has(f.celdas[m]!.archivoId ?? -1)} />
                     </td>
                   ))}
                 </tr>

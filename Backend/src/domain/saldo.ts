@@ -49,30 +49,16 @@ const armar = (resultado: ResultadoSaldo, queSePaso: string, queSignifica: strin
 
 const NO_CAMBIA_COBERTURA = "La cobertura sigue por fechas.";
 
-/** Un archivo leído sin ningún movimiento y con una imagen pegada (la captura de la pantalla del banco): el lector no lee imágenes. */
+/** Un archivo leído sin ningún movimiento y con alguna imagen pegada (solo lo usa la sección 11 del diagnóstico; el criterio de pantalla es «sin movimientos», tenga imagen o no). */
 export const esSoloImagen = (conImagenes: unknown, filasLeidas: number): boolean => conImagenes === true && filasLeidas === 0;
 
-/** Cómo se llama en pantalla el resultado de un archivo solo con imagen. */
-export const ETIQUETA_SOLO_IMAGEN = "Sin movimientos (solo imagen)";
-
-/**
- * Texto de un archivo que solo trae una captura del banco. Tesorería confirmó que corresponde a una cuenta sin movimientos
- * en el mes: por eso sigue dando cobertura y no se pide otro archivo.
- */
-export function textoSoloImagen(): TextoSaldo {
-  return armar(
-    "no_verificable",
-    "Este archivo solo trae una captura del banco y el sistema no lee imágenes.",
-    "Tesorería indica que corresponde a una cuenta sin movimientos en el mes, por eso se cuenta como cobertura.",
-    "No hay nada que hacer.",
-  );
-}
-
-/** El texto del saldo de un archivo según lo guardado en su detalle; los archivos solo con imagen usan su propio texto. */
-export function textoSaldoDeDetalle(detalle: { continuidad?: ContinuidadGuardada; conImagenes?: boolean } | null | undefined, filasLeidas: number): TextoSaldo | null {
-  if (esSoloImagen(detalle?.conImagenes, filasLeidas)) return textoSoloImagen();
+/** El texto del saldo de un archivo según lo guardado en su detalle. */
+export function textoSaldoDeDetalle(detalle: { continuidad?: ContinuidadGuardada } | null | undefined): TextoSaldo | null {
   return textoSaldo(detalle?.continuidad);
 }
+
+/** ¿El archivo se leyó y no trae ningún movimiento (tenga imagen o no)? */
+export const esSinMovimientos = (c: ContinuidadGuardada | null | undefined): boolean => razonDeContinuidad(c) === "sin_movimientos";
 
 /** Resultado y texto en tres partes para mostrar en Estados de cuenta; null si el archivo no tiene la comprobación guardada. */
 export function textoSaldo(c: ContinuidadGuardada | null | undefined): TextoSaldo | null {
@@ -88,7 +74,7 @@ export function textoSaldo(c: ContinuidadGuardada | null | undefined): TextoSald
   }
   switch (razonDeContinuidad(c) ?? "otro") {
     case "sin_movimientos":
-      return armar("no_verificable", "Este archivo no trae movimientos del mes.", `No hay saldos que revisar. ${NO_CAMBIA_COBERTURA}`, "Si el mes tuvo movimientos, pida el estado de cuenta completo al banco; si no tuvo, no hay nada que hacer.");
+      return armar("no_verificable", "Este archivo no trae movimientos del mes.", "Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura.", "No hay nada que hacer.");
     case "saldo_vacio_todas":
       return armar("no_verificable", "Este archivo no trae saldo en ninguna fila.", `No se puede revisar que los movimientos estén completos. ${NO_CAMBIA_COBERTURA}`, "Si el banco ofrece una versión con el saldo, descargue esa.");
     case "saldo_vacio_algunas": {
