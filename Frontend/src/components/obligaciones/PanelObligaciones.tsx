@@ -1,8 +1,9 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { ordenarSociedades } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
+import { desplazarSuave } from "@/lib/useFiltroTarjeta";
 import type {
   CambiosObligacion, Categoria, FiltroObligaciones, Frecuencia, Obligacion, Regeneracion,
   ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad,
@@ -48,7 +49,15 @@ export function PanelObligaciones() {
   const [importando, setImportando] = useState(false);
   const [importacion, setImportacion] = useState<ResultadoImportacionCatalogo | null>(null);
 
+  const destinoLista = useRef<HTMLElement | null>(null);
+  const previo = useRef<{ filtro: Filtro; texto: string } | null>(null);
+
   const cambiarFiltro = useCallback((f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f })), []);
+
+  // Al activar una tarjeta baja la vista hasta la lista.
+  useEffect(() => {
+    if (filtro.falta) desplazarSuave(destinoLista.current);
+  }, [filtro.falta]);
 
   // Búsqueda: espera 300 ms después de la última tecla para no consultar en cada letra.
   useEffect(() => {
@@ -101,6 +110,13 @@ export function PanelObligaciones() {
     }
   }
 
+  function quitarTarjeta() {
+    const p = previo.current;
+    previo.current = null;
+    setTexto(p?.texto ?? "");
+    setFiltro(p ? { ...p.filtro, falta: undefined } : { ...filtro, falta: undefined });
+  }
+
   const mensajeError = error ?? lista.error;
   if (mensajeError) return <CajaError mensaje={mensajeError} alReintentar={() => (setError(null), recargar())} />;
   if (!catalogos || !resumen || !lista.datos)
@@ -143,7 +159,13 @@ export function PanelObligaciones() {
           r={resumen}
           faltaActiva={filtro.falta}
           // los contadores de las tarjetas cuentan solo obligaciones activas: el filtro también, para que N coincida con la tarjeta
-          alFiltrarFalta={(falta) => cambiarFiltro(filtro.falta === falta ? { falta: undefined } : { falta, activa: true })}
+          // y quita los otros filtros para que el total de la lista sea el de la tarjeta; el segundo toque los restaura
+          alFiltrarFalta={(falta) => {
+            if (filtro.falta === falta) return quitarTarjeta();
+            if (!filtro.falta) previo.current = { filtro, texto };
+            setTexto("");
+            setFiltro({ activa: true, falta });
+          }}
           alBuscar={(sociedad, q) => {
             setTexto(q);
             // El aviso de calidad trae la sociedad como texto (abreviatura o nombre largo): se busca su identificador.
@@ -160,7 +182,7 @@ export function PanelObligaciones() {
         </p>
       )}
 
-      <section aria-labelledby="h-lista" className="mt-10">
+      <section ref={destinoLista} aria-labelledby="h-lista" className="mt-10 scroll-mt-4">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b-2 border-acento pb-1">
           <h2 id="h-lista" className="text-lg font-bold">Lista de obligaciones</h2>
           <button type="button" className={claseBoton} onClick={() => setEditando("nueva")}>
@@ -225,7 +247,7 @@ export function PanelObligaciones() {
                 : `${lista.total.toLocaleString("es-CR")} obligaciones`}
           </span>
           {filtro.falta && (
-            <button type="button" className={`${claseBotonSecundario} py-1 text-sm`} onClick={() => cambiarFiltro({ falta: undefined })}>
+            <button type="button" className={`${claseBotonSecundario} py-1 text-sm`} onClick={quitarTarjeta}>
               Quitar filtro
             </button>
           )}
@@ -234,6 +256,7 @@ export function PanelObligaciones() {
               type="button"
               className={`${claseBotonSecundario} py-1 text-sm`}
               onClick={() => {
+                previo.current = null;
                 setTexto("");
                 setFiltro(FILTRO_INICIAL);
               }}

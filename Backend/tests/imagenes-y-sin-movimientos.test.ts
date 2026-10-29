@@ -14,11 +14,10 @@ const leer = async (buf: Buffer) => leerEstadoDeCuenta(await leerLibro(buf), par
 describe("textos de «archivo sin movimientos»", () => {
   it("el texto es el mismo con o sin imagen y no habla de capturas ni de pedir el Excel", () => {
     const t = textoSaldo({ estado: "no_verificable", razon: "sin_movimientos" })!;
-    expect(t.queSePaso).toBe("Este archivo no trae movimientos del mes.");
-    expect(t.queSignifica).toBe("Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura.");
-    expect(t.queHacer).toBe("No hay nada que hacer.");
-    expect(t.motivo).toBe("Este archivo no trae movimientos del mes. Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura. No hay nada que hacer.");
-    expect(t.motivo).not.toMatch(/captura|imagen|Excel|CSV|Pida al banco|\(/);
+    expect(t.queSePaso).toBe("El archivo no tiene movimientos de este mes.");
+    expect(t.queSignifica).toBe("Se entiende que la cuenta no tuvo actividad, por eso se da por revisada.");
+    expect(t.queHacer).toBe("Si la cuenta sí tuvo movimientos, pida el estado completo al banco.");
+    expect(t.motivo).not.toMatch(/captura|imagen|Excel|CSV|Tesorería indica|nada que hacer|\(/);
   });
 
   it("«sin movimientos» se reconoce por la razón guardada y también en archivos guardados con la versión anterior", () => {

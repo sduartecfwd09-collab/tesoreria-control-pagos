@@ -13,7 +13,7 @@ import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { normalizar } from "../ingest/utiles.js";
 import { preferenciasPorObligacion } from "../repositories/cruce.js";
-import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
+import { TEXTO_SALDO_IMAGEN, TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores, textosDePago, type MovimientoTexto, type ObligacionGrupoTexto } from "../domain/textos-pago.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { asignadosAOtraObligacion, datosDeCuentas, debitosEnVentana, movimientosAsignados, obtenerVencimientoDetalle, vencimientosDeSociedadEnPeriodo } from "../repositories/vencimientos.js";
@@ -134,7 +134,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     movida: v.fechaOriginal !== null,
     estado: v.estado,
     motivo: v.motivo,
-    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias, fecha: iso(v.fecha), fechaHasta: iso(hasta) }),
+    textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionImagen ? TEXTO_SALDO_IMAGEN : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias, fecha: iso(v.fecha), fechaHasta: iso(hasta) }),
     textos,
     diferenciaDias: v.diferenciaDias,
     sinInfoHasta: v.sinInfoHasta ? iso(v.sinInfoHasta) : null,

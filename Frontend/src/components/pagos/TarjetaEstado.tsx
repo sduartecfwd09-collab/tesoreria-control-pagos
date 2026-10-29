@@ -9,12 +9,20 @@ export const Icono = ({ children }: { children: ReactNode }) => (
   </svg>
 );
 
-export function Tarjeta({ titulo, icono, insignia, detalle, acento, barra, pie, children }: { titulo: string; icono: ReactNode; insignia?: ReactNode; detalle?: string; acento: string; barra?: number; pie?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5 rounded-[14px] border border-divisor bg-fondo p-5 text-left">
+/** Con `filtro`, la tarjeta es un botón que filtra la lista de su pantalla: foco visible, «Filtro activo» y borde más grueso al estar activa. */
+export interface FiltroTarjeta {
+  activa: boolean;
+  alTocar: () => void;
+  desactivada?: boolean;
+}
+
+export function Tarjeta({ titulo, icono, insignia, detalle, acento, barra, pie, filtro, children }: { titulo: string; icono: ReactNode; insignia?: ReactNode; detalle?: string; acento: string; barra?: number; pie?: ReactNode; filtro?: FiltroTarjeta; children: ReactNode }) {
+  const contenido = (
+    <>
       <span className="flex items-center gap-2 text-[13px] font-semibold text-suave">
         {icono}
         {titulo}
+        {filtro?.activa && <span className="ml-auto rounded-md bg-texto px-2 py-0.5 text-[11px] font-bold text-fondo">Filtro activo</span>}
       </span>
       <span className="flex flex-wrap items-baseline gap-2.5">
         <span className="text-[44px] font-extrabold leading-none">{children}</span>
@@ -23,12 +31,25 @@ export function Tarjeta({ titulo, icono, insignia, detalle, acento, barra, pie, 
       {detalle && <span className="text-[13px] text-suave">{detalle}</span>}
       {pie}
       {barra !== undefined && (
-        <div className="h-2 overflow-hidden rounded-full bg-[#eeeeee]" role="img" aria-label={`${barra} % pagado`}>
-          <div className="h-2 rounded-full bg-acento" style={{ width: `${barra}%` }} />
-        </div>
+        <span className="block h-2 overflow-hidden rounded-full bg-[#eeeeee]" role="img" aria-label={`${barra} % pagado`}>
+          <span className="block h-2 rounded-full bg-acento" style={{ width: `${barra}%` }} />
+        </span>
       )}
-      <div className={`mt-auto h-[3px] rounded-full ${acento}`} />
-    </div>
+      <span className={`mt-auto block h-[3px] rounded-full ${acento}`} />
+    </>
+  );
+  const base = "flex h-full w-full flex-col gap-2.5 rounded-[14px] bg-fondo text-left";
+  if (!filtro) return <div className={`${base} border border-divisor p-5`}>{contenido}</div>;
+  return (
+    <button
+      type="button"
+      onClick={filtro.alTocar}
+      aria-pressed={filtro.activa}
+      disabled={filtro.desactivada}
+      className={`${base} ${filtro.activa ? "border-2 border-control p-[19px]" : "border border-divisor p-5"} cursor-pointer hover:bg-fondo-suave disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-fondo`}
+    >
+      {contenido}
+    </button>
   );
 }
 
@@ -48,9 +69,9 @@ export const ACENTO_ESTADO: Record<EstadoVencimiento, string> = {
 };
 
 /** Tarjeta de contador de un estado: ícono, etiqueta del estado, número y barra de acento. */
-export function TarjetaDeEstado({ estado, titulo, children }: { estado: EstadoVencimiento; titulo: string; children: ReactNode }) {
+export function TarjetaDeEstado({ estado, titulo, filtro, children }: { estado: EstadoVencimiento; titulo: string; filtro?: FiltroTarjeta; children: ReactNode }) {
   return (
-    <Tarjeta titulo={titulo} acento={ACENTO_ESTADO[estado]} icono={<IconoEstado estado={estado} />} insignia={<EstadoPago estado={estado} />}>
+    <Tarjeta titulo={titulo} filtro={filtro} acento={ACENTO_ESTADO[estado]} icono={<IconoEstado estado={estado} />} insignia={<EstadoPago estado={estado} />}>
       {children}
     </Tarjeta>
   );

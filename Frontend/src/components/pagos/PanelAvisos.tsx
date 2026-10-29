@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { nombreFecha, nombrePeriodo } from "@/lib/formato";
+import { aplanarAvisos, contarPorTarjeta, filtrarPorTarjeta, TARJETAS_AVISOS } from "@/lib/filtro-tarjetas";
+import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
 import type { Avisos, ClaveGrupoAviso, EstadoVencimiento } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
@@ -20,6 +22,9 @@ export function PanelAvisos() {
   const [abierto, setAbierto] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
+  const { activa: tarjetaActiva, alternar: alternarTarjeta, destino: destinoTarjeta } = useFiltroTarjeta();
+  const planas = useMemo(() => aplanarAvisos(datos?.grupos ?? []), [datos]);
+  const visibles = useMemo(() => filtrarPorTarjeta(planas, TARJETAS_AVISOS, tarjetaActiva), [planas, tarjetaActiva]);
 
   useEffect(() => {
     let vigente = true;
@@ -32,13 +37,17 @@ export function PanelAvisos() {
   if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
   if (datos === null) return <p className="mt-8 text-suave" role="status">Cargando avisos…</p>;
 
+  // El número de cada tarjeta y las filas que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
+  const porTarjeta = contarPorTarjeta(planas, TARJETAS_AVISOS);
+  const grupos = datos.grupos.map((g) => ({ ...g, filas: visibles.filter((x) => x.clave === g.clave).map((x) => x.fila) }));
+
   return (
     <>
       <LineaAlcance alcance={datos.alcance} detalle={datos.alcance.tipo === "mio" ? `Con tu aviso de ${datos.diasAviso} días` : undefined} estadosCalculadosEn={datos.estadosCalculadosEn} />
 
       <section aria-label="Resumen de avisos" className="mt-5 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         {datos.grupos.map((g) => (
-          <TarjetaDeEstado key={g.clave} estado={ESTADO_DEL_GRUPO[g.clave]} titulo={g.titulo}>{g.total.toLocaleString("es-CR")}</TarjetaDeEstado>
+          <TarjetaDeEstado key={g.clave} estado={ESTADO_DEL_GRUPO[g.clave]} titulo={g.titulo} filtro={{ activa: tarjetaActiva === g.clave, alTocar: () => alternarTarjeta(g.clave) }}>{porTarjeta[g.clave]!.toLocaleString("es-CR")}</TarjetaDeEstado>
         ))}
       </section>
 
@@ -46,13 +55,15 @@ export function PanelAvisos() {
         <p className="mt-8 text-suave" role="status">{datos.alcance.tipo === "mio" ? "Nada por atender con tus días de aviso" : "Nada por atender."}</p>
       )}
 
-      {datos.grupos.filter((g) => g.total > 0).map((g) => (
+      <section ref={destinoTarjeta} aria-hidden="true" className="scroll-mt-4" />
+      {tarjetaActiva !== null && visibles.length === 0 && datos.total > 0 && <p className="mt-8 text-suave" role="status">No hay avisos en este grupo.</p>}
+      {grupos.filter((g) => g.filas.length > 0).map((g) => (
         <section key={g.clave} className="mt-8" aria-labelledby={`aviso-${g.clave}`}>
           <h2 id={`aviso-${g.clave}`} className="flex items-center gap-2.5 text-xl font-bold">
             <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${ACENTO_ESTADO[ESTADO_DEL_GRUPO[g.clave]]} ${["vencido", "sin_informacion"].includes(ESTADO_DEL_GRUPO[g.clave]) ? "text-fondo" : "text-texto"}`}>
               <IconoEstado estado={ESTADO_DEL_GRUPO[g.clave]} />
             </span>
-            {g.titulo} <span className="font-normal text-suave">({g.total.toLocaleString("es-CR")})</span>
+            {g.titulo} <span className="font-normal text-suave">({g.filas.length.toLocaleString("es-CR")})</span>
           </h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[1000px] border-collapse text-sm">

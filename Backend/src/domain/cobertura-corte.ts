@@ -17,6 +17,8 @@ export interface CuentaCorte {
   inicioCobertura?: Date | null;
   /** meses con archivo leído cuyo saldo no cuadra: la cuenta es conocida, pero ese mes NO cuenta como cobertura (no está en `meses`) */
   mesesNoCuadran?: Set<string>;
+  /** meses con archivo leído sin movimientos y con una imagen grande (los movimientos vienen como imagen): tampoco cuentan como cobertura */
+  mesesSinLectura?: Set<string>;
 }
 
 export interface ResultadoCobertura {
@@ -78,6 +80,15 @@ export function noCuadraEnRango(cuentas: CuentaCorte[], desde: Date, hasta: Date
   const ultimoMes = periodoDeFecha(hasta);
   for (let mes = periodoDeFecha(desde); mes <= ultimoMes; mes = mesSiguiente(mes)) {
     if (cuentas.some((c) => c.mesesNoCuadran?.has(mes))) return true;
+  }
+  return false;
+}
+
+/** ¿Alguna cuenta tiene, dentro del rango, un mes cuyo archivo trae los movimientos como imagen? */
+export function sinLecturaEnRango(cuentas: CuentaCorte[], desde: Date, hasta: Date): boolean {
+  const ultimoMes = periodoDeFecha(hasta);
+  for (let mes = periodoDeFecha(desde); mes <= ultimoMes; mes = mesSiguiente(mes)) {
+    if (cuentas.some((c) => c.mesesSinLectura?.has(mes))) return true;
   }
   return false;
 }

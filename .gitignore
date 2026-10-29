@@ -40,3 +40,15 @@ resultados/
 .DS_Store
 Thumbs.db
 .claude/
+
+# Claves y certificados (SendGrid, Microsoft, TI): nunca se versionan
+.env.*
+!.env.example
+!.env.local.example
+*.key
+*.pem
+*.pfx
+*.p12
+*.crt
+secrets/
+claves/

@@ -1,6 +1,6 @@
 import { estadoDeArchivo, motivoDeArchivo } from "./estado-archivo.js";
 import { parsearNombreArchivo } from "../ingest/nombre-archivo.js";
-import { textoSaldoDeDetalle, type ContinuidadGuardada } from "./saldo.js";
+import { esImagenNoLegible, textoSaldoDeDetalle, type ContinuidadGuardada } from "./saldo.js";
 
 export interface ArchivoCobertura {
   id?: number;
@@ -36,6 +36,8 @@ export interface CeldaCobertura {
   saldo?: string;
   /** el resultado del saldo en lenguaje claro (también para Cuadra y No verificable) */
   saldoMotivo?: string;
+  /** los movimientos vienen como imagen: el archivo no da cobertura */
+  imagenNoLegible?: boolean;
   error?: string | null;
 }
 
@@ -103,6 +105,7 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
       saldoMotivo: saldoDe(a.detalle)?.motivo,
+      ...(estadoDeArchivo(a) === "leido" && esImagenNoLegible((a.detalle as { continuidad?: ContinuidadGuardada } | null)?.continuidad) ? { imagenNoLegible: true } : {}),
       error: motivoDeArchivo(a),
     };
     filas.set(k, fila);

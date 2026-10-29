@@ -25,6 +25,7 @@
 //  5. Pasó F + días de espera y la cobertura de estados de cuenta cubre el rango hasta ayer (o hasta F + días después, si ya pasó) -> Vencido
 //     («se sigue buscando» hasta F + días después; después, «no se encontró pago»).
 //  6. No cubre y algún estado de cuenta del rango no cuadra con su saldo -> Sin información (siempre; ni el parámetro lo vuelve Vencido).
+//  6b. No cubre y algún archivo del rango trae los movimientos como imagen (sin movimientos y con imagen grande) -> Sin información (siempre).
 //  7. No cubre y el parámetro «Marcar Vencido aunque falte el estado de cuenta» está encendido -> Vencido con nota.
 //  8. No cubre porque el rango empieza antes de la primera fecha con datos -> Sin información.
 //  9. No cubre por otra causa -> Sin información con la fecha hasta la que hay datos.
@@ -32,7 +33,7 @@
 // Los créditos nunca cuentan como pago: solo se cruzan débitos.
 import { nombresEnDescripcion } from "../config/alias-proveedores.js";
 import { normalizar } from "../ingest/utiles.js";
-import { coberturaDeSociedad, noCuadraEnRango, type CuentaCorte } from "./cobertura-corte.js";
+import { coberturaDeSociedad, noCuadraEnRango, sinLecturaEnRango, type CuentaCorte } from "./cobertura-corte.js";
 import { identificadorClave, patronIdentificador } from "./identificadores.js";
 
 export type EstadoCruce = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar";
@@ -48,6 +49,7 @@ export const MOTIVOS = {
   esperaPago: "Pasó el día de pago; se espera el pago",
   sinInformacion: "Faltan estados de cuenta para confirmar si hubo pago",
   sinInformacionSaldo: "Un estado de cuenta no cuadra con su saldo: no se usa para confirmar si hubo pago",
+  sinInformacionImagen: "Un estado de cuenta trae los movimientos como imagen y no se puede leer: no se usa para confirmar si hubo pago",
   sinInformacionDesde: "No hay estados de cuenta anteriores a la primera fecha cargada: el pago pudo hacerse antes",
   vencidoSinEstado: "Pasó la fecha de pago; sin estado de cuenta que lo confirme",
 } as const;
@@ -220,6 +222,8 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
     if (cobertura.cubre) return { ...base, estado: "vencido", motivo: hoyDia <= f + e.diasDespues ? MOTIVOS.vencidoBuscando : MOTIVOS.vencido };
     // un estado de cuenta cuyo saldo no cuadra no cuenta como cobertura: nunca Vencido, ni siquiera con el parámetro encendido
     if (noCuadraEnRango(e.cuentas.get(v.sociedadId) ?? [], inicioRango, limite)) return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacionSaldo, sinInfoHasta: cobertura.hasta };
+    // un archivo cuyos movimientos vienen como imagen no se puede leer: tampoco cuenta como cobertura ni se vuelve Vencido
+    if (sinLecturaEnRango(e.cuentas.get(v.sociedadId) ?? [], inicioRango, limite)) return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacionImagen, sinInfoHasta: cobertura.hasta };
     // con el parámetro encendido se muestra Vencido, pero conserva la fecha de corte y la nota de que nadie lo confirmó
     if (e.marcarVencidoSinEstado) return { ...base, estado: "vencido", motivo: MOTIVOS.vencidoSinEstado, sinInfoHasta: cobertura.hasta };
     if (cobertura.antesDe) return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacionDesde, sinInfoHasta: null };

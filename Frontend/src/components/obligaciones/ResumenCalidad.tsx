@@ -33,34 +33,21 @@ export function ResumenCalidad({
     <section aria-labelledby="h-calidad" className="mt-6">
       <h2 id="h-calidad" className="text-lg font-bold border-b-2 border-acento pb-1">Calidad del catálogo</h2>
       <p className="mt-2 text-sm text-suave max-w-3xl">
-        Pulse «Ver estas» en una tarjeta para ver solo esas obligaciones. Nada de esto bloquea el trabajo: se completa editando cada obligación.
+        Toque una tarjeta para ver solo esas obligaciones; vuelva a tocarla para quitar el filtro. Nada de esto bloquea el trabajo: se completa editando cada obligación.
       </p>
       <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {tarjetas.map((t) => {
           const activa = !!t.falta && t.falta === faltaActiva;
           const sinNada = t.n === 0 && !activa;
           return (
-            <li key={t.titulo} className={`rounded-[14px] ${activa ? "ring-2 ring-control ring-offset-2" : ""}`}>
+            <li key={t.titulo}>
               <Tarjeta
                 titulo={t.titulo}
                 acento={ACENTO_ESTADO[t.estado]}
                 icono={<IconoEstado estado={t.estado} />}
                 insignia={<EtiquetaEstado estado={t.estado} texto={t.texto} />}
                 detalle={t.ayuda}
-                pie={
-                  t.falta ? (
-                    <button
-                      type="button"
-                      onClick={() => alFiltrarFalta(t.falta!)}
-                      disabled={sinNada}
-                      aria-pressed={activa}
-                      aria-label={`${activa ? "Mostrando estas" : "Ver estas"}: ${t.titulo}`}
-                      className="self-start rounded border-2 border-control px-3 py-1 text-xs font-bold hover:bg-fondo-suave disabled:cursor-not-allowed disabled:border-divisor disabled:text-suave disabled:opacity-50 disabled:hover:bg-transparent"
-                    >
-                      {activa ? "Mostrando estas" : "Ver estas"}
-                    </button>
-                  ) : undefined
-                }
+                filtro={t.falta ? { activa, alTocar: () => alFiltrarFalta(t.falta!), desactivada: sinNada } : undefined}
               >
                 {t.n.toLocaleString("es-CR")}
               </Tarjeta>

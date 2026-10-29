@@ -4,7 +4,10 @@ import path from "node:path";
 import { relojSistema, type Reloj } from "../domain/reloj.js";
 import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 import { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE } from "../domain/estado-archivo.js";
+import { clasificarArchivo } from "../domain/clasificar-imagenes.js";
+import { esSinMovimientos } from "../domain/saldo.js";
 import { clavesDeDeduplicacion } from "./clave-dedup.js";
+import { cargarUmbralesImagen } from "./umbrales-imagen.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { ErrorLectura, LECTOR_VERSION, TOLERANCIA_SALDO_DEFECTO, leerEstadoDeCuenta, leerLibro } from "./lector.js";
 import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
@@ -102,6 +105,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   const lecturas: Lectura[] = [];
   const tolerancia = Number(await valorGlobal("tolerancia_saldo"));
   const toleranciaSaldo = Number.isInteger(tolerancia) && tolerancia >= 0 ? tolerancia : TOLERANCIA_SALDO_DEFECTO;
+  const umbralesImagen = await cargarUmbralesImagen();
   const sociedades = new Map<string, Awaited<ReturnType<typeof buscarSociedadPorCodigo>>>();
   for (const cand of candidatos) {
     if (!sociedades.has(cand.carpeta)) sociedades.set(cand.carpeta, await buscarSociedadPorCodigo(cand.carpeta));
@@ -179,8 +183,14 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     });
     const claves = clavesDeDeduplicacion(cuenta.id, r.movimientos);
     const movs = r.movimientos.map((m, i) => ({ ...m, claveDedup: claves[i]! }));
+    // Clase de la imagen más grande, guardada con el archivo (no se recalcula al consultar). Un archivo sin movimientos con una
+    // imagen grande trae los movimientos como imagen: no se pueden leer y no da cobertura. Con logo pequeño o sin imagen, sí.
+    const claseImagen = clasificarArchivo(r.imagenes, r.conImagenes, umbralesImagen);
+    const continuidad = esSinMovimientos(r.continuidad) && claseImagen === "posible_captura"
+      ? { ...r.continuidad, razon: "imagen_no_legible" as const, motivo: "imagen no legible" }
+      : r.continuidad;
     const detalle = {
-      versionLector: LECTOR_VERSION, continuidad: r.continuidad, saldoInicial: r.saldoInicial, saldoFinal: r.saldoFinal, fechas: r.fechas, periodoDeclarado: r.periodoDeclarado, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes, imagenes: r.imagenes, encabezadoSaldos: r.encabezadoSaldos,
+      versionLector: LECTOR_VERSION, continuidad, claseImagen, saldoInicial: r.saldoInicial, saldoFinal: r.saldoFinal, fechas: r.fechas, periodoDeclarado: r.periodoDeclarado, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes, imagenes: r.imagenes, encabezadoSaldos: r.encabezadoSaldos,
       monedaOrigen: origen, moneda: monedaArchivo, hojaLeida: r.hoja, filaEncabezado: r.filaEncabezado,
     };
     try {

@@ -1,8 +1,10 @@
 "use client";
 import { LineaAlcance } from "./LineaAlcance";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type RefObject } from "react";
 import { api } from "@/lib/api";
 import { compararSociedades } from "@/lib/formato";
+import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_ARCHIVOS } from "@/lib/filtro-tarjetas";
+import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
 import { SelectorSociedad } from "./SelectorSociedad";
 import { NombreSociedad } from "./ui";
 import { EtiquetaEstado, IconoEstado } from "./pagos/EstadoPago";
@@ -48,6 +50,13 @@ function Celda({ c, sinMovimientos }: { c: CeldaCobertura; sinMovimientos: boole
       </div>
     );
   }
+  if (c.imagenNoLegible) {
+    return (
+      <div title="Los movimientos vienen como imagen y no se pueden leer" className="rounded border border-control px-2 py-1.5">
+        <EtiquetaEstado estado="sin_informacion" texto="Imagen no legible" />
+      </div>
+    );
+  }
   return (
     <div title={`Formato ${c.formato ?? "?"}${c.duplicados > 0 ? ` · ${c.duplicados} repetidos en otro archivo` : ""}${c.saldoMotivo ? ` · ${c.saldoMotivo}` : ""}`} className="rounded border border-control px-2 py-1.5">
       {!sinMovimientos && <span className="font-semibold">{c.movimientos === 0 ? "Sin movimientos" : `${numero(c.movimientos)} mov.`}</span>}
@@ -66,22 +75,23 @@ function Celda({ c, sinMovimientos }: { c: CeldaCobertura; sinMovimientos: boole
   );
 }
 
-function Resumen({ r }: { r: Importaciones["resumen"] }) {
+function Resumen({ r, cuentas, activa, alTocar }: { r: Importaciones["resumen"]; cuentas: Record<string, number>; activa: string | null; alTocar: (clave: string) => void }) {
   // Archivos = Leídos + Con error + Sin sociedad. Los retirados de la carpeta no cuentan y tienen su propia tarjeta.
   // Cada tarjeta toma un estado que ya existe con su texto propio; los totales son neutrales (Programado) y lo que está en cero no alerta.
-  const items: { titulo: string; n: number; nota?: string; estado: EstadoVencimiento; texto: string }[] = [
+  // Las tarjetas con `clave` filtran los grupos de abajo; su número sale de la misma lista de archivos (lib/filtro-tarjetas).
+  const items: { clave?: string; titulo: string; n: number; nota?: string; estado: EstadoVencimiento; texto: string }[] = [
     { titulo: "Archivos", n: r.archivos, nota: "leídos + con error + sin sociedad", estado: "proyectado", texto: "Total" },
-    { titulo: "Leídos", n: r.leidos, estado: "pagado", texto: "Leídos" },
-    { titulo: "Con error", n: r.conError, ...(r.conError > 0 ? { estado: "vencido" as const, texto: "Con error" } : { estado: "proyectado" as const, texto: "Sin errores" }) },
-    { titulo: "Sin sociedad", n: r.sinSociedad, ...(r.sinSociedad > 0 ? { estado: "por_revisar" as const, texto: "Requiere decisión" } : { estado: "proyectado" as const, texto: "Completo" }) },
-    ...(r.retirados > 0 ? [{ titulo: "Retirados de la carpeta", n: r.retirados, nota: "no cuentan en los totales", estado: "proyectado" as const, texto: "Informativo" }] : []),
+    { clave: "leidos", titulo: "Leídos", n: cuentas.leidos!, estado: "pagado", texto: "Leídos" },
+    { clave: "con_error", titulo: "Con error", n: cuentas.con_error!, ...(cuentas.con_error! > 0 ? { estado: "vencido" as const, texto: "Con error" } : { estado: "proyectado" as const, texto: "Sin errores" }) },
+    { clave: "sin_sociedad", titulo: "Sin sociedad", n: cuentas.sin_sociedad!, ...(cuentas.sin_sociedad! > 0 ? { estado: "por_revisar" as const, texto: "Requiere decisión" } : { estado: "proyectado" as const, texto: "Completo" }) },
+    ...(cuentas.retirados! > 0 ? [{ clave: "retirados", titulo: "Retirados de la carpeta", n: cuentas.retirados!, nota: "no cuentan en los totales", estado: "proyectado" as const, texto: "Informativo" }] : []),
     { titulo: "Movimientos", n: r.movimientos, estado: "proyectado", texto: "Total" },
   ];
   return (
     <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       {items.map((t) => (
         <li key={t.titulo}>
-          <Tarjeta titulo={t.titulo} acento={ACENTO_ESTADO[t.estado]} icono={<IconoEstado estado={t.estado} />} insignia={<EtiquetaEstado estado={t.estado} texto={t.texto} />} detalle={t.nota}>
+          <Tarjeta titulo={t.titulo} filtro={t.clave ? { activa: activa === t.clave, alTocar: () => alTocar(t.clave!) } : undefined} acento={ACENTO_ESTADO[t.estado]} icono={<IconoEstado estado={t.estado} />} insignia={<EtiquetaEstado estado={t.estado} texto={t.texto} />} detalle={t.nota}>
             {numero(t.n)}
           </Tarjeta>
         </li>
@@ -101,7 +111,8 @@ interface FilaAtencion {
 }
 
 /** Cada grupo toma el estado visual que ya existe (ícono, color y borde) con un texto propio; los estados de vencimiento no se reescriben. */
-function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer }: { titulo: string; ayuda: string; vacio: string; filas: FilaAtencion[]; estado: EstadoVencimiento; etiqueta: string; alVer: (id: number) => void }) {
+function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer, ocultarVacio }: { titulo: string; ayuda: string; vacio: string; filas: FilaAtencion[]; estado: EstadoVencimiento; etiqueta: string; alVer: (id: number) => void; ocultarVacio?: boolean }) {
+  if (ocultarVacio && filas.length === 0) return null;
   return (
     <section className="mt-8" aria-label={titulo}>
       <h3 className="flex flex-wrap items-center gap-2.5 font-bold">
@@ -138,7 +149,8 @@ function FilasArchivos({ filas, alVer }: { filas: FilaAtencion[]; alVer: (id: nu
 }
 
 /** Una línea informativa (estado neutral Programado, con su texto propio) con el detalle plegado: lo que no pide acción no ocupa la pantalla. */
-function LineaInformativa({ texto, ayuda, vacio, filas, etiqueta, alVer }: { texto: string; ayuda: string; vacio: string; filas: FilaAtencion[]; etiqueta: string; alVer: (id: number) => void }) {
+function LineaInformativa({ texto, ayuda, vacio, filas, etiqueta, alVer, ocultarVacio }: { texto: string; ayuda: string; vacio: string; filas: FilaAtencion[]; etiqueta: string; alVer: (id: number) => void; ocultarVacio?: boolean }) {
+  if (ocultarVacio && filas.length === 0) return null;
   return (
     <div className="mt-3 max-w-3xl">
       <p className="flex flex-wrap items-center gap-2.5 text-sm">
@@ -161,22 +173,25 @@ function LineaInformativa({ texto, ayuda, vacio, filas, etiqueta, alVer }: { tex
 }
 
 
-function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
+function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]; tarjeta: string | null; destino: RefObject<HTMLElement | null> }) {
+  // Con una tarjeta activa solo se muestran los grupos que tienen archivos de esa tarjeta.
+  const ocultarVacio = tarjeta !== null;
   const [verId, setVerId] = useState<number | null>(null);
   const errores = archivos.filter((a) => a.estado === "con_error");
   const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
   const retirados = archivos.filter((a) => a.estado === "retirado");
   const vigentes = archivos.filter((a) => a.estado === "leido" && a.saldo !== null);
-  // Los archivos sin movimientos tienen su propio grupo: no se cuentan además como saldo no verificable.
-  const sinMovimientos = vigentes.filter((a) => a.sinMovimientos);
-  const conMovimientos = vigentes.filter((a) => !a.sinMovimientos);
+  // Imagen no legible y sin movimientos tienen su propio grupo: no se cuentan además como saldo no cuadra ni no verificable.
+  const imagenNoLegible = vigentes.filter((a) => a.imagenNoLegible);
+  const sinMovimientos = vigentes.filter((a) => a.sinMovimientos && !a.imagenNoLegible);
+  const conMovimientos = vigentes.filter((a) => !a.sinMovimientos && !a.imagenNoLegible);
   const saldo = conMovimientos.filter((a) => a.saldo!.resultado === "no_cuadra");
   const noVerificable = conMovimientos.filter((a) => a.saldo!.resultado === "no_verificable");
   const cuadran = conMovimientos.filter((a) => a.saldo!.resultado === "cuadra");
   const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0);
   return (
     <>
-      <h2 className="mt-12 text-lg font-bold border-b-2 border-acento pb-1">Archivos que requieren atención</h2>
+      <h2 ref={destino as RefObject<HTMLHeadingElement | null>} className="mt-12 scroll-mt-4 text-lg font-bold border-b-2 border-acento pb-1">Archivos que requieren atención</h2>
       <ListaAtencion
         titulo="Archivos con error"
         ayuda="No se pudieron leer. El resto de la importación continuó con normalidad."
@@ -184,6 +199,7 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         estado="vencido"
         etiqueta="Con error"
         alVer={setVerId}
+        ocultarVacio={ocultarVacio}
         filas={errores.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "Sin motivo registrado" }))}
       />
       <ListaAtencion
@@ -193,13 +209,18 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         estado="por_revisar"
         etiqueta="Requiere decisión"
         alVer={setVerId}
+        ocultarVacio={ocultarVacio}
         filas={sinSociedad.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "La carpeta no tiene una sociedad asignada" }))}
       />
+      {(tarjeta === null || tarjeta === "leidos") && (
+      <>
       <h3 className="mt-8 font-bold">Comprobación del saldo</h3>
       <p className="mt-1 text-sm text-suave max-w-2xl">{'El saldo comprueba que el estado de cuenta está completo. Si no cuadra, la sociedad queda en "Sin información" en lugar de "Vencido".'}</p>
       <p className="mt-2 text-sm" aria-label="Resultado del saldo">
-        <span className="font-bold">Resultado del saldo de los archivos leídos:</span> {numero(cuadran.length)} cuadran · {numero(saldo.length)} no cuadran · {numero(noVerificable.length)} no se pueden verificar
+        <span className="font-bold">Resultado del saldo de los archivos leídos:</span> {numero(cuadran.length)} cuadran · {numero(saldo.length)} no cuadran · {numero(noVerificable.length)} no se pueden verificar{imagenNoLegible.length > 0 && ` · ${numero(imagenNoLegible.length)} con imagen no legible`}
       </p>
+      </>
+      )}
       <ListaAtencion
         titulo="Archivos donde el saldo no cuadra"
         ayuda="El saldo anterior más créditos y menos débitos no coincide con el saldo siguiente. Un archivo así no cuenta como estado de cuenta completo: los pagos de esa sociedad quedan en «Sin información» hasta revisarlo."
@@ -207,11 +228,22 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         estado="sin_informacion"
         etiqueta="Sin información"
         alVer={setVerId}
+        ocultarVacio={ocultarVacio}
         filas={saldo.map((a) => ({
           id: a.id,
           ruta: a.archivo,
           saldo: a.saldo!,
         }))}
+      />
+      <ListaAtencion
+        titulo="Archivos con imagen no legible"
+        ayuda="Los movimientos vienen como imagen y el sistema no puede leerlos. Estos archivos no cuentan como estado de cuenta: los pagos de esa sociedad quedan en «Sin información» hasta cargar uno legible."
+        vacio="No hay archivos con imagen no legible."
+        estado="sin_informacion"
+        etiqueta="Sin información"
+        alVer={setVerId}
+        ocultarVacio={ocultarVacio}
+        filas={imagenNoLegible.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
       <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"
@@ -220,6 +252,7 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         estado="por_revisar"
         etiqueta="Por revisar"
         alVer={setVerId}
+        ocultarVacio={ocultarVacio}
         filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ ruta: a.archivo, texto: d.mensaje })))}
       />
       <h3 className="mt-10 font-bold">Para su información</h3>
@@ -230,24 +263,27 @@ function Atencion({ archivos }: { archivos: ArchivoImportado[] }) {
         vacio="Todos los archivos registrados siguen en la carpeta."
         etiqueta="Retirados"
         alVer={setVerId}
+        ocultarVacio={ocultarVacio}
         filas={retirados.map((a) => ({ id: a.id, ruta: a.archivo, texto: "Retirado de la carpeta" }))}
       />
       {sinMovimientos.length > 0 && (
         <LineaInformativa
           texto="Archivos sin movimientos"
-          ayuda="Este archivo no trae movimientos del mes. Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura. No hay nada que hacer."
+          ayuda="Estos archivos no traen movimientos del mes. Se entiende que la cuenta no tuvo actividad y cuentan como cobertura."
           vacio=""
           etiqueta="Sin movimientos"
           alVer={setVerId}
-          filas={sinMovimientos.map((a) => ({ id: a.id, ruta: a.archivo, verInfo: true }))}
+        ocultarVacio={ocultarVacio}
+          filas={sinMovimientos.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
         />
       )}
       <LineaInformativa
         texto="Archivos con saldo no verificable"
-        ayuda="No se puede comprobar el saldo de estos archivos. No cambia la cobertura: sigue por fechas."
+        ayuda="No se puede comprobar el saldo de estos archivos. La cobertura sigue por fechas."
         vacio="El saldo se pudo comprobar en todos los archivos."
         etiqueta="Sin cambio en la cobertura"
         alVer={setVerId}
+        ocultarVacio={ocultarVacio}
         filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
       {verId !== null && <FichaArchivo id={verId} sinMovimientos={sinMovimientos.some((a) => a.id === verId)} alCerrar={() => setVerId(null)} />}
@@ -261,6 +297,7 @@ export function PanelArchivos() {
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [sociedad, setSociedad] = useState("");
+  const tarjeta = useFiltroTarjeta();
 
   useEffect(() => {
     let vigente = true;
@@ -279,6 +316,14 @@ export function PanelArchivos() {
 
   // alfabético por nombre largo (el orden es estable: las cuentas de una sociedad conservan su orden)
   const sociedades = useMemo(() => [...new Set((cob?.filas ?? []).map((f) => f.sociedad))].sort(compararSociedades), [cob]);
+  // El número de cada tarjeta y los archivos que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
+  const porTarjeta = useMemo(() => contarPorTarjeta(imp?.datos ?? [], TARJETAS_ARCHIVOS), [imp]);
+  const archivosVisibles = useMemo(() => filtrarPorTarjeta(imp?.datos ?? [], TARJETAS_ARCHIVOS, tarjeta.activa), [imp, tarjeta.activa]);
+  const { activa: tarjetaActiva, limpiar: limpiarTarjeta } = tarjeta;
+  // Si la tarjeta activa dejó de existir (p. ej. ya no hay retirados), se quita el filtro.
+  useEffect(() => {
+    if (tarjetaActiva !== null && !porTarjeta[tarjetaActiva]) limpiarTarjeta();
+  }, [tarjetaActiva, porTarjeta, limpiarTarjeta]);
   const idsSinMovimientos = useMemo(() => new Set((imp?.datos ?? []).filter((a) => a.sinMovimientos).map((a) => a.id)), [imp]);
   const filas = useMemo(
     () => (cob?.filas ?? []).filter((f) => !sociedad || f.sociedad === sociedad).sort((a, b) => compararSociedades(a.sociedad, b.sociedad)),
@@ -318,7 +363,7 @@ export function PanelArchivos() {
   return (
     <>
       <LineaAlcance alcance={imp.alcance} />
-      <Resumen r={imp.resumen} />
+      <Resumen r={imp.resumen} cuentas={porTarjeta} activa={tarjeta.activa} alTocar={tarjeta.alternar} />
 
       <h2 className="mt-12 text-lg font-bold border-b-2 border-acento pb-1">Cobertura por cuenta y mes</h2>
       <p className="mt-2 text-sm text-suave max-w-2xl">
@@ -392,7 +437,7 @@ export function PanelArchivos() {
         </p>
       )}
 
-      <Atencion archivos={imp.datos} />
+      <Atencion archivos={archivosVisibles} tarjeta={tarjeta.activa} destino={tarjeta.destino} />
     </>
   );
 }

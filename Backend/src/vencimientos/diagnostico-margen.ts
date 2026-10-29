@@ -10,7 +10,7 @@ import { NOMBRE_ESTADO } from "../domain/textos-pago.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { estadoDeArchivo } from "../domain/estado-archivo.js";
 import { clasificarArchivo, UMBRALES_IMAGEN_DEFECTO, type ClaseArchivoImagen, type UmbralesImagen } from "../domain/clasificar-imagenes.js";
-import { esSinMovimientos, esSoloImagen, razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
+import { esImagenNoLegible, esSinMovimientos, esSoloImagen, razonDeContinuidad, TEXTO_RAZON, type ContinuidadGuardada } from "../domain/saldo.js";
 import type { EncabezadoSaldos } from "../ingest/encabezado-saldos.js";
 import { FORMATOS } from "../ingest/formatos.js";
 import type { ImagenRelativa } from "../ingest/medir-imagenes.js";
@@ -479,14 +479,26 @@ export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedad
     L.push(`  ${nombre(v.sociedadId)} | ${o.proveedor} | ${mesDe(v.fecha)} | ${ultimos4(o.identificador)} | ${nombreEstado(estadoAntes.get(q.vencimientoId))} -> ${nombreEstado(q.estado)} | cobertura ${grupoVenc(q.vencimientoId)}`);
   }
 
-  // 11. Si los archivos que solo traen una imagen (sin movimientos) NO dieran cobertura. Solo en memoria: la regla no cambia.
-  const soloImagen = x.archivos.filter((a) =>
+  // 11. Archivos sin movimientos con imagen. Regla vigente: con una imagen grande los movimientos vienen como imagen (no legible) y NO
+  // dan cobertura; con un logo pequeño o sin imagen sí. Se cuentan ambos grupos y, solo en memoria, qué pasaría si también los que hoy
+  // cubren dejaran de cubrir.
+  const conImagenSinMov = x.archivos.filter((a) =>
     a.retiradoEn === null && estadoDeArchivo(a) === "leido" && a.cuentaId !== null && a.mes !== null &&
     esSoloImagen((a.detalle as { conImagenes?: unknown } | null)?.conImagenes, (a.numMovimientos ?? 0) + (a.numDuplicados ?? 0)));
-  L.push("", "11. Archivos que solo traen una imagen (el lector no lee imágenes) y no tienen movimientos: vencimientos que cambiarían de estado si NO dieran cobertura (la regla actual los cuenta como cobertura; no se cambió):");
-  const porFormatoImagen = new Map<string, number>();
-  for (const a of soloImagen) porFormatoImagen.set(a.formato ?? "sin formato", (porFormatoImagen.get(a.formato ?? "sin formato") ?? 0) + 1);
-  L.push(`  archivos: ${soloImagen.length}${soloImagen.length ? ` (${[...porFormatoImagen].sort().map(([f, n]) => `${f}: ${n}`).join(" · ")})` : ""}`);
+  const esNoLegible = (a: ArchivoMargen) => esImagenNoLegible((a.detalle as { continuidad?: ContinuidadGuardada } | null)?.continuidad);
+  const noLegibles = conImagenSinMov.filter(esNoLegible);
+  const soloImagen = conImagenSinMov.filter((a) => !esNoLegible(a)); // con logo u otra imagen pequeña: siguen dando cobertura
+  const formatos11 = (lista: ArchivoMargen[]) => {
+    const m = new Map<string, number>();
+    for (const a of lista) m.set(a.formato ?? "sin formato", (m.get(a.formato ?? "sin formato") ?? 0) + 1);
+    return lista.length ? ` (${[...m].sort().map(([k, n]) => `${k}: ${n}`).join(" · ")})` : "";
+  };
+  L.push("", "11. Archivos sin movimientos con imagen. Regla vigente: imagen grande = movimientos como imagen (imagen no legible, NO da cobertura); logo pequeño = cobertura. Vencimientos que cambiarían además si los que hoy cubren dejaran de cubrir:");
+  L.push(`  archivos con imagen no legible (sin cobertura): ${noLegibles.length}${formatos11(noLegibles)}`);
+  const vencimientosPorImagen = new Conteo();
+  for (const q of r.resultados) if (q.motivo === MOTIVOS.sinInformacionImagen) vencimientosPorImagen.add(grupoVenc(q.vencimientoId));
+  L.push(`  vencimientos hoy en Sin información por imagen no legible: ${vencimientosPorImagen.texto()}`);
+  L.push(`  archivos con logo u otra imagen pequeña (siguen dando cobertura): ${soloImagen.length}${formatos11(soloImagen)}`);
   const quitar = new Set(soloImagen.map((a) => `${a.cuentaId}|${a.mes}`));
   const cuentasSin = new Map([...r.datos.cuentas].map(([s, cs]) => [s, cs.map((c) => {
     const meses = new Map([...c.meses].filter(([m]) => !quitar.has(`${c.cuentaId}|${m}`)));

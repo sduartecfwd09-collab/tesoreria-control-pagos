@@ -11,7 +11,7 @@ import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 10; // 10: guarda el tamaño y la posición de las imágenes y el bloque de saldos del encabezado; 9: avisa de las filas con importe sin fecha legible aunque no se lea ningún movimiento; 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
+export const LECTOR_VERSION = 11; // 11: la importación guarda la clase de imagen del archivo y marca «imagen no legible» (sin movimientos y con imagen grande); 10: guarda el tamaño y la posición de las imágenes y el bloque de saldos del encabezado; 9: avisa de las filas con importe sin fecha legible aunque no se lea ningún movimiento; 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
 
 export class ErrorLectura extends Error {}
 

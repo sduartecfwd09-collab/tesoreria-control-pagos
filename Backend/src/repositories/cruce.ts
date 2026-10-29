@@ -1,6 +1,7 @@
 // Acceso a la base del motor de cruce (única capa que usa Prisma). Lee solo lo necesario: nunca devuelve la
 // descripción de un movimiento fuera del motor, y los archivos retirados de la carpeta no cuentan en ningún caso.
 import { prisma } from "../db.js";
+import { esImagenNoLegible, type ContinuidadGuardada } from "../domain/saldo.js";
 import { normalizarNombrePersona } from "../domain/usuarios.js";
 import type { CuentaCorte } from "../domain/cobertura-corte.js";
 import type { MovimientoCruce, ObligacionCruce, ResultadoCruce, VencimientoCruce } from "../domain/cruce.js";
@@ -42,6 +43,16 @@ function noCuadra(detalle: string | null): boolean {
   }
 }
 
+/** La importación guardó que el archivo no trae movimientos y sí una imagen grande (los movimientos vienen como imagen). */
+function imagenNoLegible(detalle: string | null): boolean {
+  if (!detalle) return false;
+  try {
+    return esImagenNoLegible((JSON.parse(detalle) as { continuidad?: ContinuidadGuardada }).continuidad);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos.
  * Con `hasta` (solo para simular un «hoy» pasado) se ignoran los meses y los movimientos posteriores a esa fecha.
@@ -64,6 +75,7 @@ export async function cargarCoberturaCuentas(hasta?: Date): Promise<Map<number, 
     const cuentaId = a.cuentaId!;
     const c: { sociedadId: number; corte: CuentaCorte } = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map(), primeraFecha: primeras.get(cuentaId) ?? null } };
     if (noCuadra(a.detalle)) c.corte.mesesNoCuadran = (c.corte.mesesNoCuadran ?? new Set()).add(a.mes!);
+    else if (imagenNoLegible(a.detalle)) c.corte.mesesSinLectura = (c.corte.mesesSinLectura ?? new Set()).add(a.mes!);
     else {
       c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
       // la cobertura de la cuenta empieza en el «Del» que declara su primer archivo leído (que cuadre) o, si no lo declara, el día 1 de su mes

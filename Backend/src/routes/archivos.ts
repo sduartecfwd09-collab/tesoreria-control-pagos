@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { enmascararCuenta, nombreDeArchivoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo } from "../domain/estado-archivo.js";
-import { esSinMovimientos, textoSaldoDeDetalle, type ContinuidadGuardada } from "../domain/saldo.js";
+import { esImagenNoLegible, esSinMovimientos, textoSaldoDeDetalle, type ContinuidadGuardada } from "../domain/saldo.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { alcanceDe, sociedadesDelAlcance } from "../identidad/alcance.js";
 import { obtenerArchivoRegistrado } from "../repositories/consultas.js";
@@ -63,6 +63,7 @@ export async function rutasArchivos(app: FastifyInstance, opts: { modoPruebas: b
         saldoFinal: d.saldoFinal ?? null,
         saldo: textoSaldoDeDetalle(d),
         sinMovimientos: esSinMovimientos(d.continuidad),
+        imagenNoLegible: esImagenNoLegible(d.continuidad),
       },
     };
   });

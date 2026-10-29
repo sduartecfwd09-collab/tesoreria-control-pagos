@@ -34,7 +34,7 @@ export interface Continuidad {
   filasSinSaldo?: number;
 }
 
-export type RazonNoVerificable = "sin_movimientos" | "saldo_vacio_todas" | "saldo_vacio_algunas" | "un_solo_saldo" | "otro";
+export type RazonNoVerificable = "sin_movimientos" | "saldo_vacio_todas" | "saldo_vacio_algunas" | "un_solo_saldo" | "imagen_no_legible" | "otro";
 
 export interface Discrepancia {
   tipo: "sociedad" | "cuenta" | "periodo" | "formato";

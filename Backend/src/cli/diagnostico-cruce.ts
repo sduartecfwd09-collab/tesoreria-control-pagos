@@ -1,7 +1,7 @@
 import { prisma } from "../db.js";
 import { env } from "../config/env.js";
 import { nombreDeBase } from "../conexion.js";
-import { UMBRALES_IMAGEN_DEFECTO } from "../domain/clasificar-imagenes.js";
+import { cargarUmbralesImagen } from "../ingest/umbrales-imagen.js";
 import { cruzar } from "../domain/cruce.js";
 import { resumirImagenes } from "../domain/imagenes.js";
 import { relojSistema } from "../domain/reloj.js";
@@ -30,11 +30,7 @@ const anterior = cruzar({ ...r.datos, ...r.parametros, diasDespues: DIAS_DESPUES
 console.log(`Base: ${base}`);
 const lejos = Number(await valorGlobal("diagnostico_dias_lejos"));
 const diasLejos = Number.isInteger(lejos) && lejos > 0 ? lejos : DIAS_LEJOS_DEFECTO;
-const pct = async (clave: string, defecto: number) => {
-  const n = Number(await valorGlobal(clave));
-  return Number.isInteger(n) && n > 0 && n <= 100 ? n : defecto;
-};
-const umbralesImagen = { grandePct: await pct("diagnostico_imagen_grande_pct", UMBRALES_IMAGEN_DEFECTO.grandePct), esquinaPct: await pct("diagnostico_imagen_esquina_pct", UMBRALES_IMAGEN_DEFECTO.esquinaPct) };
+const umbralesImagen = await cargarUmbralesImagen();
 const avisoDias = Number(await valorGlobal("aviso_datos_dias"));
 const sociedades = (await listarSociedades()).map((s) => ({ id: s.id, codigo: s.codigo, nombreLargo: s.nombreLargo }));
 const archivos = (await listarArchivos()).filter((a) => a.retiradoEn === null);

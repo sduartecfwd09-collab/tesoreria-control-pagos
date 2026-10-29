@@ -55,6 +55,8 @@ export interface CeldaCobertura {
   saldo?: "cuadra" | "no_cuadra" | "no_verificable";
   /** el resultado del saldo en lenguaje claro */
   saldoMotivo?: string;
+  /** los movimientos vienen como imagen y no se pueden leer: no cuenta como estado de cuenta */
+  imagenNoLegible?: boolean;
   error?: string | null;
 }
 
@@ -93,6 +95,8 @@ export interface ArchivoImportado {
   continuidad: { estado: string; verificados: number; fallos: number; filasConFallo: number[] } | null;
   /** archivo leído y con 0 movimientos (tenga imagen o no): cuenta sin actividad */
   sinMovimientos: boolean;
+  /** los movimientos vienen como imagen y el sistema no puede leerlos (no es «sin movimientos») */
+  imagenNoLegible: boolean;
   /** Cuadra, No cuadra o No verificable, con su motivo en lenguaje claro; null si el archivo no trae la comprobación */
   saldo: TextoSaldo | null;
   /** primera y última fecha con movimientos del archivo */
@@ -458,5 +462,6 @@ export interface InfoArchivo {
   /** centavos; null = no detectado */
   saldoInicial: number | null;
   saldoFinal: number | null;
+  imagenNoLegible: boolean;
   saldo: TextoSaldo | null;
 }

@@ -3,7 +3,7 @@ import { alcanceDe, alcanceParaRespuesta, sociedadesDelAlcance } from "../identi
 import { calcularCobertura } from "../domain/cobertura.js";
 import { coberturaSegura, enmascararCuenta, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { estadoDeArchivo, motivoDeArchivo, resumirEstados } from "../domain/estado-archivo.js";
-import { esSinMovimientos, textoSaldoDeDetalle, type ContinuidadGuardada } from "../domain/saldo.js";
+import { esImagenNoLegible, esSinMovimientos, textoSaldoDeDetalle, type ContinuidadGuardada } from "../domain/saldo.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
@@ -45,6 +45,8 @@ export async function rutasImportaciones(app: FastifyInstance, opts: { modoPrueb
         saldo: textoSaldoDeDetalle({ continuidad: d.continuidad as ContinuidadGuardada | undefined }),
         // el archivo se leyó y no trae ningún movimiento (tenga imagen o no): se cuenta como una cuenta sin actividad
         sinMovimientos: estadoDeArchivo(a) === "leido" && esSinMovimientos(d.continuidad as ContinuidadGuardada | undefined),
+        // los movimientos vienen como imagen (sin movimientos y con una imagen grande): no se leen y no dan cobertura
+        imagenNoLegible: estadoDeArchivo(a) === "leido" && esImagenNoLegible(d.continuidad as ContinuidadGuardada | undefined),
         fechas: d.fechas ?? null, periodoDeclarado: d.periodoDeclarado ?? null,
         monedaOrigen: d.monedaOrigen ?? null,
         // el lector ignora las imágenes (sin OCR); null = archivo leído antes de registrar este dato

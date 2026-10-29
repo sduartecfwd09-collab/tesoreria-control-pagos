@@ -63,7 +63,7 @@ describe("información completa de un archivo", () => {
     const d = r.json().datos;
     expect(d).toMatchObject({ sociedad: "Sociedad AAA", cuenta: "****0001", banco: "Banco Uno", mes: "2026-10", hoja: "Movimientos", periodoDeclarado: { del: "2026-10-01", al: "2026-10-31" }, filasLeidas: 1, movimientos: 1, saldoInicial: null, saldoFinal: 123456, rutaRelativa: `AAA/${NOMBRE_A}` });
     expect(d.nombre).not.toContain("91010710102200000001");
-    expect(d.saldo.queSePaso).toBe("Este archivo trae un solo movimiento, así que no hay un saldo anterior para revisar.");
+    expect(d.saldo.queSePaso).toBe("El archivo trae un solo movimiento.");
     expect(JSON.stringify(d)).not.toContain("CR91010710102200000001\"");
   });
 
@@ -186,10 +186,10 @@ describe("sin descarga y con archivos sin movimientos", () => {
       const a = await lista();
       expect(a.sinMovimientos).toBe(true);
       expect(a.soloImagen).toBeUndefined();
-      expect(a.saldo.queSePaso).toBe("Este archivo no trae movimientos del mes.");
-      expect(a.saldo.queSignifica).toBe("Tesorería indica que corresponde a una cuenta sin actividad, por eso se cuenta como cobertura.");
-      expect(a.saldo.queHacer).toBe("No hay nada que hacer.");
-      expect(a.saldo.motivo).not.toMatch(/captura|imagen|Excel|CSV|Pida al banco/);
+      expect(a.saldo.queSePaso).toBe("El archivo no tiene movimientos de este mes.");
+      expect(a.saldo.queSignifica).toBe("Se entiende que la cuenta no tuvo actividad, por eso se da por revisada.");
+      expect(a.saldo.queHacer).toBe("Si la cuenta sí tuvo movimientos, pida el estado completo al banco.");
+      expect(a.saldo.motivo).not.toMatch(/captura|imagen|Excel|CSV|Tesorería indica|nada que hacer/);
       const ficha = (await pedir(`/api/archivos/${archivoA}`, encabezado(ana))).json().datos;
       expect(ficha.sinMovimientos).toBe(true);
       expect(ficha.soloImagen).toBeUndefined();

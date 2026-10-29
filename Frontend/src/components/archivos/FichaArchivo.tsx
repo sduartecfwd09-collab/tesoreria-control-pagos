@@ -54,7 +54,7 @@ export function FichaArchivo({ id, alCerrar, sinMovimientos = false }: { id: num
             {fila("Saldo siguiente detectado", saldoTexto(a.saldoFinal))}
           </dl>
           <section className="mt-5 border-t border-linea pt-4">
-            <h3 className="text-sm font-bold">Resultado del saldo{a.saldo ? `: ${sinMovimientos ? "Sin movimientos" : RESULTADO_SALDO[a.saldo.resultado]}` : ""}</h3>
+            <h3 className="text-sm font-bold">Resultado del saldo{a.saldo ? `: ${a.imagenNoLegible ? "Imagen no legible" : sinMovimientos ? "Sin movimientos" : RESULTADO_SALDO[a.saldo.resultado]}` : ""}</h3>
             {a.saldo ? <TextoSaldoTres saldo={a.saldo} /> : <p className="mt-1 text-sm text-suave">Este archivo no trae la comprobación del saldo.</p>}
           </section>
           <section className="mt-5 border-t border-linea pt-4">

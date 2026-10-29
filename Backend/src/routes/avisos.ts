@@ -5,7 +5,7 @@ import { MOTIVOS } from "../domain/cruce.js";
 import { responsableEfectivo } from "../domain/obligaciones.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
-import { TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
+import { TEXTO_SALDO_IMAGEN, TEXTO_SALDO_NO_CUADRA, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
 import { usuarioActual } from "../identidad/usuario-actual.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
@@ -44,6 +44,8 @@ export async function rutasAvisos(app: FastifyInstance, opts: { reloj: Reloj; mo
         v.estado === "sin_informacion"
           ? v.motivo === MOTIVOS.sinInformacionSaldo
             ? TEXTO_SALDO_NO_CUADRA
+            : v.motivo === MOTIVOS.sinInformacionImagen
+              ? TEXTO_SALDO_IMAGEN
             : v.motivo === MOTIVOS.sinInformacionDesde
               ? textoSinEstadosAnteriores(datosDesde.get(v.sociedadId) ?? null)
               : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)

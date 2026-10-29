@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { MESES, sumarMeses } from "@/lib/formato";
+import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_PAGOS } from "@/lib/filtro-tarjetas";
+import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
 import type { Alcance, AvisoDatos, EstadoVencimiento, Vencimiento } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
 import { CajaError } from "../ui";
@@ -11,6 +13,8 @@ import { ORDEN } from "./EstadoPago";
 import { TablaPagos, useFiltrosPagos } from "./TablaPagos";
 
 type Pestana = "atencion" | "pagados" | "programados" | "todos";
+/** La pestaña donde vive cada tarjeta: al tocarla se abre esa pestaña y se filtra además por el estado de la tarjeta. */
+const PESTANA_DE_TARJETA: Record<string, Pestana> = { vencidos: "atencion", por_vencer: "atencion", sin_informacion: "atencion", pagados: "pagados" };
 const PESTANAS: { clave: Pestana; texto: string; estados: EstadoVencimiento[] | null }[] = [
   { clave: "atencion", texto: "Requiere atención", estados: ["vencido", "por_vencer", "por_revisar", "sin_informacion"] },
   { clave: "pagados", texto: "Pagados", estados: ["pagado", "pagado_con_inconsistencia"] },
@@ -28,6 +32,8 @@ export function PagosDelMes() {
   const [mes, setMes] = useState<{ periodo: string; datos: Vencimiento[]; alcance: Alcance; calculado: string | null } | null>(null);
   const [pestana, setPestana] = useState<Pestana>("atencion");
   const [abierto, setAbierto] = useState<number | null>(null);
+  const { activa: tarjetaActiva, alternar: alternarTarjeta, limpiar: limpiarTarjeta, destino: destinoTarjeta } = useFiltroTarjeta();
+  const [pestanaPrevia, setPestanaPrevia] = useState<Pestana>("atencion");
   const [avisos, setAvisos] = useState<AvisoDatos[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
@@ -67,11 +73,22 @@ export function PagosDelMes() {
   const nombreMes = MESES[Number(periodo.slice(5, 7)) - 1]!;
   const todos = datos ?? [];
   const cuenta = (...e: EstadoVencimiento[]) => todos.filter((v) => e.includes(v.estado)).length;
+  // El número de cada tarjeta y las filas que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
+  const porTarjeta = contarPorTarjeta(todos, TARJETAS_PAGOS);
   const N = todos.length;
-  const pagados = cuenta("pagado", "pagado_con_inconsistencia");
+  const pagados = porTarjeta.pagados!;
   const pct = N ? Math.round((pagados / N) * 100) : 0;
-  const filas = filtros
-    .aplicar(todos)
+  const tocarTarjeta = (clave: string) => {
+    if (tarjetaActiva === clave) {
+      setPestana(pestanaPrevia);
+    } else {
+      if (tarjetaActiva === null) setPestanaPrevia(pestana);
+      setPestana(PESTANA_DE_TARJETA[clave]!);
+    }
+    alternarTarjeta(clave);
+  };
+  const filtroDe = (clave: string) => ({ activa: tarjetaActiva === clave, alTocar: () => tocarTarjeta(clave) });
+  const filas = filtrarPorTarjeta(filtros.aplicar(todos), TARJETAS_PAGOS, tarjetaActiva)
     .filter((v) => PESTANAS.find((p) => p.clave === pestana)!.estados?.includes(v.estado) ?? true)
     .sort((a, b) => ORDEN[a.estado] - ORDEN[b.estado] || a.fecha.localeCompare(b.fecha) || a.id - b.id);
 
@@ -106,18 +123,18 @@ export function PagosDelMes() {
       )}
 
       <section aria-label="Resumen del mes" className="mt-7 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
-        <Tarjeta titulo="Vencidos" acento="bg-rojo" detalle="Sin pago encontrado" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></Icono>}
-          insignia={<Insignia clase="bg-rojo text-fondo">Atender hoy</Insignia>}>{cuenta("vencido")}</Tarjeta>
-        <Tarjeta titulo="Por vencer" acento="bg-ambar" detalle="Dentro de los días de aviso" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></Icono>}
-          insignia={<Insignia clase="bg-ambar text-texto">Próximos</Insignia>}>{cuenta("por_vencer")}</Tarjeta>
-        <Tarjeta titulo="Pagados" acento="bg-acento" barra={pct} icono={<Icono><path d="M20 6L9 17l-5-5" /></Icono>} insignia={<Insignia clase="bg-acento text-sobre-acento">de {N}</Insignia>}>
+        <Tarjeta titulo="Vencidos" filtro={filtroDe("vencidos")} acento="bg-rojo" detalle="Sin pago encontrado" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></Icono>}
+          insignia={<Insignia clase="bg-rojo text-fondo">Atender hoy</Insignia>}>{porTarjeta.vencidos}</Tarjeta>
+        <Tarjeta titulo="Por vencer" filtro={filtroDe("por_vencer")} acento="bg-ambar" detalle="Dentro de los días de aviso" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></Icono>}
+          insignia={<Insignia clase="bg-ambar text-texto">Próximos</Insignia>}>{porTarjeta.por_vencer}</Tarjeta>
+        <Tarjeta titulo="Pagados" filtro={filtroDe("pagados")} acento="bg-acento" barra={pct} icono={<Icono><path d="M20 6L9 17l-5-5" /></Icono>} insignia={<Insignia clase="bg-acento text-sobre-acento">de {N}</Insignia>}>
           {pagados}
         </Tarjeta>
-        <Tarjeta titulo="Sin información" acento="bg-suave" detalle="Faltan estados de cuenta" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M9.5 9.2a2.6 2.6 0 1 1 3.7 2.4c-.8.4-1.2 1-1.2 1.9M12 17h.01" /></Icono>}
-          insignia={<Insignia clase="bg-ambar-fondo text-texto border border-dashed border-texto">Revisar datos</Insignia>}>{cuenta("sin_informacion")}</Tarjeta>
+        <Tarjeta titulo="Sin información" filtro={filtroDe("sin_informacion")} acento="bg-suave" detalle="Faltan estados de cuenta" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M9.5 9.2a2.6 2.6 0 1 1 3.7 2.4c-.8.4-1.2 1-1.2 1.9M12 17h.01" /></Icono>}
+          insignia={<Insignia clase="bg-ambar-fondo text-texto border border-dashed border-texto">Revisar datos</Insignia>}>{porTarjeta.sin_informacion}</Tarjeta>
       </section>
 
-      <section aria-label="Lista de pagos" className="mt-7">
+      <section ref={destinoTarjeta} aria-label="Lista de pagos" className="mt-7 scroll-mt-4">
         <div role="tablist" aria-label="Filtrar por estado" className="flex flex-wrap gap-1 border-b border-divisor">
           {PESTANAS.map((p) => {
             const n = p.estados ? cuenta(...p.estados) : N;
@@ -128,7 +145,7 @@ export function PagosDelMes() {
                 type="button"
                 role="tab"
                 aria-selected={activa}
-                onClick={() => setPestana(p.clave)}
+                onClick={() => (limpiarTarjeta(), setPestana(p.clave))}
                 className={`border-b-4 px-4 py-3 text-sm ${activa ? "border-acento font-bold text-texto" : "border-transparent font-medium text-suave"}`}
               >
                 {p.texto}
