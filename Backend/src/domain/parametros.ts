@@ -47,6 +47,18 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "12", unidad: "días", min: 0, max: 15, supuesto: false, visible: false,
   },
   {
+    clave: "selector_anios_atras",
+    etiqueta: "Años hacia atrás que permite el selector de fechas",
+    ayuda: "Hasta cuántos años antes de hoy se puede navegar en el selector de fechas. No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "5", unidad: "años", min: 1, max: 20, supuesto: true, visible: false,
+  },
+  {
+    clave: "selector_meses_adelante",
+    etiqueta: "Meses hacia adelante que permite el selector de fechas",
+    ayuda: "Hasta cuántos meses después de hoy se puede navegar en el selector de fechas. No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "12", unidad: "meses", min: 0, max: 60, supuesto: true, visible: false,
+  },
+  {
     clave: "historico_meses",
     etiqueta: "Meses que muestra el Histórico por defecto",
     ayuda: "Cuántos meses de calendario (contando el actual) abre el Histórico antes de que la persona elija otras fechas. No cambia ningún estado.",

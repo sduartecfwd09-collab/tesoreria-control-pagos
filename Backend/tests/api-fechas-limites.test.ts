@@ -73,3 +73,22 @@ describe("GET /api/fechas/limites", () => {
     expect(r.movimientos).toBeNull();
   });
 });
+
+describe("ventana del selector", () => {
+  it("no depende de los datos: 5 años atrás y 12 meses adelante, y sigue los parámetros", async () => {
+    const app = await crearApp({ reloj, modoPruebas: true });
+    const r = (await app.inject({ method: "GET", url: "/api/fechas/limites", headers: encabezado(jefa) })).json();
+    expect(r.ventana).toEqual({ primera: "2021-10-01", ultima: "2027-10-31" });
+    const clave = (c: string) => ({ clave_ambito_categoriaId: { clave: c, ambito: "global", categoriaId: 0 } });
+    const poner = (c: string, valor: string) => prisma.parametro.upsert({ where: clave(c), create: { clave: c, valor, tipo: "entero", ambito: "global", categoriaId: 0 }, update: { valor } });
+    await poner("selector_anios_atras", "2");
+    await poner("selector_meses_adelante", "3");
+    try {
+      const p = (await app.inject({ method: "GET", url: "/api/fechas/limites", headers: encabezado(ana) })).json();
+      expect(p.ventana).toEqual({ primera: "2024-10-01", ultima: "2027-01-31" });
+    } finally {
+      await poner("selector_anios_atras", "5");
+      await poner("selector_meses_adelante", "12");
+    }
+  });
+});

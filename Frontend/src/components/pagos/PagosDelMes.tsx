@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { MESES } from "@/lib/formato";
-import { textoEntre, type Rango } from "@/lib/fechas";
+import { primerDia, textoEntre, tipoDeVacio, ultimoDia, type Rango } from "@/lib/fechas";
 import { guardarPeriodo, leerPeriodo } from "@/lib/periodo-guardado";
 import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_PAGOS } from "@/lib/filtro-tarjetas";
 import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
@@ -33,7 +33,7 @@ export function PagosDelMes() {
   const [hoy, setHoy] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<string | null>(null);
   const [rango, setRango] = useState<Rango | null>(null);
-  const [limites, setLimites] = useState<LimitesFechas["vencimientos"]>(null);
+  const [limites, setLimites] = useState<LimitesFechas | null>(null);
   const [mes, setMes] = useState<{ clave: string; datos: Vencimiento[]; alcance: Alcance; calculado: string | null } | null>(null);
   const [pestana, setPestana] = useState<Pestana>("atencion");
   const [abierto, setAbierto] = useState<number | null>(null);
@@ -62,7 +62,7 @@ export function PagosDelMes() {
 
   useEffect(() => {
     let vigente = true;
-    api.limitesFechas().then((l) => vigente && setLimites(l.vencimientos)).catch(() => vigente && setLimites(null));
+    api.limitesFechas().then((l) => vigente && setLimites(l)).catch(() => vigente && setLimites(null));
     return () => {
       vigente = false;
     };
@@ -98,6 +98,8 @@ export function PagosDelMes() {
   const nombreMes = MESES[Number(periodo.slice(5, 7)) - 1]!;
   const cambiarMes = (nuevo: string) => (setPeriodo(nuevo), setRango(null)); // el día o rango es de un mes: al cambiar de mes se quita
   const todos = datos ?? [];
+  const vacioDe = tipoDeVacio(rango ?? { desde: primerDia(periodo), hasta: ultimoDia(periodo) }, hoy, limites?.movimientos ?? null);
+  const textoVacio = vacioDe === "futuro" ? "Todavía no hay vencimientos para estas fechas." : vacioDe === "sin_informacion" ? "Sin información: todavía no hay estados de cuenta de estas fechas." : rango ? `No hay vencimientos con fecha de vencimiento entre ${textoEntre(rango)}.` : `No hay pagos de ${nombreMes}.`;
   const cuenta = (...e: EstadoVencimiento[]) => todos.filter((v) => e.includes(v.estado)).length;
   // El número de cada tarjeta y las filas que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
   const porTarjeta = contarPorTarjeta(todos, TARJETAS_PAGOS);
@@ -125,12 +127,12 @@ export function PagosDelMes() {
           <span className="text-xs font-light uppercase tracking-[0.24em] text-suave">Hoy · {textoHoy(hoy)}</span>
           <h1 className="mt-1.5 text-[32px] font-extrabold">Pagos de {nombreMes}</h1>
         </div>
-        <SelectorFechas modo="mes" valor={periodo} onChange={cambiarMes} limites={limites} hoy={hoy} />
+        <SelectorFechas modo="mes" valor={periodo} onChange={cambiarMes} limites={limites?.ventana} hoy={hoy} />
       </header>
       <LineaAlcance alcance={mes?.alcance} estadosCalculadosEn={mes?.calculado} />
 
       <section aria-label="Afinar por día" className="mt-5">
-        <SelectorFechas modo="rango" valor={rango} onChange={setRango} limites={limites} hoy={hoy} atajos={["hoy", "semana"]} etiqueta="Vence entre" restringidoAMes={periodo} />
+        <SelectorFechas modo="rango" valor={rango} onChange={setRango} limites={limites?.ventana} hoy={hoy} atajos={["hoy", "semana"]} etiqueta="Vence entre" restringidoAMes={periodo} />
         {rango && (
           <div className="mt-2">
             <FiltroFechasActivo rotulo="Vence entre" rango={rango} alQuitar={() => setRango(null)} />
@@ -185,7 +187,7 @@ export function PagosDelMes() {
         {datos === null ? (
           <p className="mt-6 text-suave" role="status">Cargando pagos…</p>
         ) : (
-          <TablaPagos datos={filas} alGestionar={setAbierto} vacio={N === 0 ? (rango ? `No hay vencimientos con fecha de vencimiento entre ${textoEntre(rango)}.` : `No hay pagos de ${nombreMes}.`) : "No hay pagos que coincidan."} />
+          <TablaPagos datos={filas} alGestionar={setAbierto} vacio={N === 0 ? textoVacio : "No hay pagos que coincidan."} />
         )}
       </section>
       {abierto !== null && <DetallePago id={abierto} alCerrar={() => setAbierto(null)} />}

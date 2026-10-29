@@ -86,7 +86,7 @@ export function Historico() {
       <LineaAlcance alcance={lista.alcance} />
 
       <section aria-label="Filtros del histórico" className="mt-5">
-        <SelectorFechas modo="rango" valor={rango ?? aplicado} onChange={setRango} limites={limites?.vencimientos ?? null} hoy={limites?.hoy ?? aplicado?.hasta ?? ""}
+        <SelectorFechas modo="rango" valor={rango ?? aplicado} onChange={setRango} limites={limites?.ventana} hoy={limites?.hoy ?? aplicado?.hasta ?? ""}
           atajos={["mes", "mes_anterior", "ultimos_3_meses", "anio"]} etiqueta="Vence entre" />
         <div className="mt-2" aria-live="polite">
           {rango ? (
@@ -122,13 +122,7 @@ export function Historico() {
       {lista.datos === null ? (
         <p className="mt-8 text-suave" role="status">Cargando el histórico…</p>
       ) : vacio && meta?.cobertura.sinInformacion ? (
-        <section role="status" className="mt-6 max-w-3xl rounded-xl border-2 border-dashed border-texto bg-ambar-fondo p-4 text-texto">
-          <h2 className="font-bold">Sin información en este período</h2>
-          <p className="mt-1 text-sm">
-            No hay estados de cuenta cargados entre {textoEntre(aplicado)}
-            {meta.coberturaEstados ? `: los cargados cubren del ${aTextoDMA(meta.coberturaEstados.primera)} al ${aTextoDMA(meta.coberturaEstados.ultima)}` : ""}. Esto no significa que no se haya pagado: no hay datos para saberlo.
-          </p>
-        </section>
+        <p className="mt-8 text-suave" role="status">Sin información: todavía no hay estados de cuenta de estas fechas.</p>
       ) : vacio ? (
         <p className="mt-8 text-suave" role="status">
           No hay vencimientos con fecha de vencimiento entre {textoEntre(aplicado)}{hayFiltros ? " que coincidan con los filtros" : ""}.

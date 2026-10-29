@@ -111,7 +111,7 @@ export function validarRango(r: Rango, opciones: { limites?: Limites | null; mes
     return `Las fechas deben estar dentro de ${nombreDelPeriodo(opciones.mes)}.`;
   }
   const l = opciones.limites;
-  if (l && (r.desde < l.primera || r.hasta > l.ultima)) return `Hay datos entre ${aTextoDMA(l.primera)} y ${aTextoDMA(l.ultima)}. Elija fechas dentro de ese período.`;
+  if (l && (r.desde < l.primera || r.hasta > l.ultima)) return `Elija fechas entre ${aTextoDMA(l.primera)} y ${aTextoDMA(l.ultima)}.`;
   return null;
 }
 
@@ -123,3 +123,13 @@ export function mesDentroDeLimites(periodo: string, limites: Limites | null | un
 
 /** «15/10/2026 y 31/10/2026» para los mensajes («entre … y …»). */
 export const textoEntre = (r: Rango) => `${aTextoDMA(r.desde)} y ${aTextoDMA(r.hasta)}`;
+
+/**
+ * Qué decir cuando un período no tiene filas: «futuro» (empieza después de hoy), «sin_informacion» (ya pasó y ningún día tiene
+ * estados de cuenta cargados: una tabla vacía se leería como «no hubo pagos») o «normal» (hay estados de cuenta: de verdad no hay filas).
+ */
+export function tipoDeVacio(rango: Rango, hoy: string, cobertura: Limites | null): "futuro" | "sin_informacion" | "normal" {
+  if (rango.desde > hoy) return "futuro";
+  if (!cobertura || rango.hasta < cobertura.primera || rango.desde > cobertura.ultima) return "sin_informacion";
+  return "normal";
+}

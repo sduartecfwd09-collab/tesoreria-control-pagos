@@ -344,6 +344,8 @@ export interface RespuestaHistorico extends Pagina<FilaHistorico> {
 export interface LimitesFechas {
   alcance: Alcance;
   hoy: string;
+  /** por dónde se puede navegar en el selector de fechas (parámetros, no depende de los datos) */
+  ventana: { primera: string; ultima: string };
   vencimientos: { primera: string; ultima: string } | null;
   movimientos: { primera: string; ultima: string } | null;
 }

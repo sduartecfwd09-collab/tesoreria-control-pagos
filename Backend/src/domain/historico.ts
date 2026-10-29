@@ -38,3 +38,14 @@ export function coberturaDelPeriodo(rango: RangoDeDias, cobertura: { primera: st
   if (sinCruce) return { sinInformacion: true, parcial: false };
   return { sinInformacion: false, parcial: rango.desde < cobertura.primera || rango.hasta > cobertura.ultima };
 }
+
+export const SELECTOR_ANIOS_ATRAS_DEFECTO = 5;
+export const SELECTOR_MESES_ADELANTE_DEFECTO = 12;
+
+/** Ventana de navegación del selector de fechas: del día 1 del mes de hace N años al último día del mes de dentro de M meses. No depende de los datos. */
+export function ventanaDelSelector(hoy: string, aniosAtras: number, mesesAdelante: number): RangoDeDias {
+  const desde = `${Number(hoy.slice(0, 4)) - aniosAtras}-${hoy.slice(5, 7)}-01`;
+  const indice = Number(hoy.slice(0, 4)) * 12 + Number(hoy.slice(5, 7)) - 1 + mesesAdelante;
+  const mes = `${Math.floor(indice / 12)}-${String((indice % 12) + 1).padStart(2, "0")}-01`;
+  return { desde, hasta: finDeMes(mes) };
+}
