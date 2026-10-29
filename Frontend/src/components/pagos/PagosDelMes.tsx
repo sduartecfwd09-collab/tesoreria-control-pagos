@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { MESES } from "@/lib/formato";
 import { primerDia, textoEntre, tipoDeVacio, ultimoDia, type Rango } from "@/lib/fechas";
-import { guardarPeriodo, leerPeriodo } from "@/lib/periodo-guardado";
 import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_PAGOS } from "@/lib/filtro-tarjetas";
 import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
 import type { Alcance, AvisoDatos, EstadoVencimiento, LimitesFechas, Vencimiento } from "@/lib/tipos";
@@ -48,13 +47,7 @@ export function PagosDelMes() {
   // Abre en el mes de hoy según el reloj del servidor.
   useEffect(() => {
     let vigente = true;
-    api.hoy().then((h) => {
-      if (!vigente) return;
-      const guardado = leerPeriodo<{ periodo: string; rango: Rango | null }>("pagos");
-      setHoy(h);
-      setPeriodo((p) => p ?? guardado?.periodo ?? h.slice(0, 7));
-      setRango((r) => r ?? guardado?.rango ?? null);
-    }).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
+    api.hoy().then((h) => vigente && (setHoy(h), setPeriodo((p) => p ?? h.slice(0, 7)))).catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
     return () => {
       vigente = false;
     };
@@ -67,10 +60,6 @@ export function PagosDelMes() {
       vigente = false;
     };
   }, [intento]);
-
-  useEffect(() => {
-    if (periodo) guardarPeriodo("pagos", { periodo, rango });
-  }, [periodo, rango]);
 
   useEffect(() => {
     let vigente = true;

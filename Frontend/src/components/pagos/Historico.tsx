@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { aTextoDMA, textoEntre, type Rango } from "@/lib/fechas";
 import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
-import { guardarPeriodo, leerPeriodo } from "@/lib/periodo-guardado";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { Categoria, EstadoVencimiento, LimitesFechas, RespuestaHistorico, Sociedad } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
@@ -23,7 +22,6 @@ const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider
  * pagos»): se dice «Sin información en este período».
  */
 export function Historico() {
-  const [listo, setListo] = useState(false);
   const [rango, setRango] = useState<Rango | null>(null); // null = el período por defecto que define el servidor
   const [sociedad, setSociedad] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -36,19 +34,6 @@ export function Historico() {
   const [meta, setMeta] = useState<RespuestaHistorico | null>(null);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [intento, setIntento] = useState(0);
-
-  // el período vuelve a donde se dejó (solo en esta pestaña del navegador)
-  useEffect(() => {
-    // se lee después del primer pintado para que el servidor y el navegador muestren lo mismo al cargar la página
-    queueMicrotask(() => {
-      const guardado = leerPeriodo<{ rango: Rango | null }>("historico");
-      if (guardado?.rango) setRango(guardado.rango);
-      setListo(true);
-    });
-  }, []);
-  useEffect(() => {
-    if (listo) guardarPeriodo("historico", { rango });
-  }, [listo, rango]);
 
   useEffect(() => {
     api.limitesFechas().then(setLimites).catch(() => setLimites(null));
@@ -64,13 +49,11 @@ export function Historico() {
 
   const cargar = useMemo(
     () =>
-      listo
-        ? (pagina: number) =>
-            api
-              .historico({ desde: rango?.desde, hasta: rango?.hasta, sociedadId: sociedad ? Number(sociedad) : undefined, categoria: categoria ? Number(categoria) : undefined, estado, q, pagina, porPagina: POR_PAGINA })
-              .then((r) => (pagina === 1 && setMeta(r), r))
-        : null,
-    [listo, rango, sociedad, categoria, estado, q],
+      (pagina: number) =>
+        api
+          .historico({ desde: rango?.desde, hasta: rango?.hasta, sociedadId: sociedad ? Number(sociedad) : undefined, categoria: categoria ? Number(categoria) : undefined, estado, q, pagina, porPagina: POR_PAGINA })
+          .then((r) => (pagina === 1 && setMeta(r), r)),
+    [rango, sociedad, categoria, estado, q],
   );
   const lista = useListaInfinita(cargar, intento);
   const alAbrir = useCallback((id: number) => setAbierto(id), []);
