@@ -119,6 +119,7 @@ function SelectorRango({ valor, alCambiar, limites, hoy, atajos, etiqueta, restr
   };
   const alTeclear = (e: React.KeyboardEvent) => e.key === "Enter" && confirmar(desde, hasta);
   const usarAtajo = (idAtajo: IdAtajo) => {
+    if (!hoy) return;
     const r = recortarRango(rangoDeAtajo(idAtajo, hoy), opciones);
     if (!r) return setError(restringidoAMes ? `«${TEXTO_ATAJO[idAtajo]}» queda fuera de ${nombreDelPeriodo(restringidoAMes)}.` : `«${TEXTO_ATAJO[idAtajo]}» queda fuera del período con datos.`);
     setError(null);
@@ -142,10 +143,10 @@ function SelectorRango({ valor, alCambiar, limites, hoy, atajos, etiqueta, restr
         {atajos && atajos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 pb-1.5" role="group" aria-label="Atajos">
             {atajos.map((a) => {
-              const r = recortarRango(rangoDeAtajo(a, hoy), opciones);
+              const r = hoy ? recortarRango(rangoDeAtajo(a, hoy), opciones) : null; // sin «hoy» del servidor aún no se calculan los atajos
               const activo = Boolean(valor && r && valor.desde === r.desde && valor.hasta === r.hasta);
               return (
-                <button key={a} type="button" onClick={() => usarAtajo(a)} aria-pressed={activo} className={claseAtajo}>{TEXTO_ATAJO[a]}</button>
+                <button key={a} type="button" onClick={() => usarAtajo(a)} aria-pressed={activo} disabled={!hoy} className={claseAtajo}>{TEXTO_ATAJO[a]}</button>
               );
             })}
           </div>

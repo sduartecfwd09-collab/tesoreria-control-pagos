@@ -305,6 +305,41 @@ export interface AvisoDatos {
   texto: string;
 }
 
+/** Una fila del Histórico (GET /api/historico). */
+export interface FilaHistorico {
+  id: number;
+  sociedad: string;
+  proveedor: string;
+  categoria: string;
+  periodo: string;
+  fecha: string;
+  estado: EstadoVencimiento;
+  pago: PagoVencimiento | null;
+}
+
+export interface FiltroHistorico {
+  desde?: string;
+  hasta?: string;
+  sociedadId?: number;
+  categoria?: number;
+  /** estados separados por coma */
+  estado?: string;
+  q?: string;
+  pagina: number;
+  porPagina: number;
+}
+
+export interface RespuestaHistorico extends Pagina<FilaHistorico> {
+  alcance: Alcance;
+  /** el rango que se aplicó (el que se pidió o el de los últimos meses por defecto) */
+  rango: { desde: string; hasta: string };
+  porDefecto: boolean;
+  /** primera y última fecha con movimientos de los estados de cuenta cargados; null = ninguno */
+  coberturaEstados: { primera: string; ultima: string } | null;
+  cobertura: { sinInformacion: boolean; parcial: boolean };
+  resumen: Record<string, number>;
+}
+
 /** Primera y última fecha con datos (GET /api/fechas/limites), con el alcance de la persona; null = sin datos. */
 export interface LimitesFechas {
   alcance: Alcance;
