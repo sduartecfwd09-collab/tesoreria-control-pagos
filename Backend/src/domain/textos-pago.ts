@@ -95,6 +95,16 @@ function textoGrupo(g: ObligacionGrupoTexto[]): string | null {
   return `Ese número de servicio está en ${g.length} obligaciones de esta sociedad: ${listaTexto(g.map(una))}.`;
 }
 
+/** «Se pagó el 21 oct 2026 (1 día después del 20 oct).» / «antes» / «el mismo día». */
+function fraseDePagado(d: DatosTexto): string {
+  const pago = d.movimientos[0]?.fecha;
+  if (!pago) return "Se pagó.";
+  const dif = diasEntreFechas(d.fecha, pago);
+  const vence = fechaTexto(d.fecha).split(" ").slice(0, 2).join(" "); // «20 oct», sin el año
+  const cuando = dif === 0 ? "el mismo día" : `${plural(Math.abs(dif), "día", "días")} ${dif > 0 ? "después" : "antes"} del ${vence}`;
+  return `Se pagó el ${fechaTexto(pago)} (${cuando}).`;
+}
+
 export function textosDePago(d: DatosTexto): TextosPago {
   const movs = d.movimientos.slice(0, 5);
   switch (d.estado) {
@@ -118,7 +128,6 @@ export function textosDePago(d: DatosTexto): TextosPago {
       const donde = c && c.cuentas > 0 ? ` en ${c.cuentas === 1 ? "la cuenta" : `las ${c.cuentas} cuentas`} de la sociedad` : "";
       // Cuatro respuestas: qué se esperaba, qué se buscó, qué se encontró y qué hacer.
       const parrafos = [
-        `La fecha habitual de pago era el ${fechaTexto(d.fecha)}.`,
         `Se buscó un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}${donde}.`,
       ];
       const p = d.pagoCercano;
@@ -133,7 +142,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
       if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
       if (d.motivo === MOTIVOS.vencidoSinEstado) parrafos.push("Se muestra como vencido aunque ningún estado de cuenta lo confirma.");
       else parrafos.push(buscando ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.ventana.hasta)}.` : `No se encontró pago hasta el ${fechaTexto(d.ventana.hasta)}.`);
-      const resumen = d.proveedor && d.periodo ? `Sin pago registrado de ${d.proveedor} en ${mesTexto(d.periodo)}.` : "Sin pago registrado.";
+      const resumen = `Venció el ${fechaTexto(d.fecha)} y no aparece el pago en los estados de cuenta cargados.`;
       const queHacer = o
         ? `Qué hacer: confirmar con quien paga si ese pago era de ${o.proveedor} o de este servicio.`
         : p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo.";
@@ -178,11 +187,9 @@ export function textosDePago(d: DatosTexto): TextosPago {
       if (c?.estadosHasta) parrafos.push(`Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.`);
       return { resumen: "Todavía no se puede saber si se pagó.", parrafos, queHacer: "Qué hacer: cargar los estados de cuenta que faltan." };
     }
-    case "pagado": {
-      const parrafos = movs.map(lineaMovimiento);
-      if (d.diferenciaDias !== null && d.diferenciaDias !== 0) parrafos.push(`Se pagó ${plural(Math.abs(d.diferenciaDias), "día", "días")} ${d.diferenciaDias > 0 ? "después" : "antes"} del día habitual de pago.`);
-      return { resumen: "El pago aparece en el estado de cuenta.", parrafos, queHacer: null };
-    }
+    case "pagado":
+      // el movimiento del banco ya se ve en su tabla: aquí solo la frase
+      return { resumen: fraseDePagado(d), parrafos: [], queHacer: null };
     case "pagado_con_inconsistencia": {
       const otra = d.motivo === MOTIVOS.otraSociedad;
       const parrafos = movs.map((m) => (otra ? `${lineaMovimiento(m).replace(/\.$/, "")}, de la cuenta de ${m.sociedad}.` : lineaMovimiento(m)));
@@ -201,16 +208,12 @@ export function textosDePago(d: DatosTexto): TextosPago {
         };
       }
       return {
-        resumen: d.dias === 0 ? "Vence hoy." : `Vence en ${plural(Math.max(d.dias, 0), "día", "días")}.`,
-        parrafos: [`La fecha de pago es el ${fechaTexto(d.fecha)}. Está dentro de los ${plural(d.diasAviso, "día", "días")} de aviso.`],
+        resumen: `Vence el ${fechaTexto(d.fecha)} (${d.dias <= 0 ? "hoy" : `en ${plural(d.dias, "día", "días")}`}).`,
+        parrafos: [],
         queHacer: "Qué hacer: preparar el pago.",
       };
     case "proyectado":
-      return {
-        resumen: "Todavía falta tiempo para pagar.",
-        parrafos: [`La fecha de pago es el ${fechaTexto(d.fecha)}${d.dias > 0 ? `, dentro de ${plural(d.dias, "día", "días")}` : ""}. Se avisa ${plural(d.diasAviso, "día", "días")} antes.`],
-        queHacer: null,
-      };
+      return { resumen: `Programado para el ${fechaTexto(d.fecha)}.`, parrafos: [], queHacer: null };
     default:
       return { resumen: "Estado sin definir.", parrafos: [], queHacer: null };
   }

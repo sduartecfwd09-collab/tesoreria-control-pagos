@@ -84,18 +84,18 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     expect(v).toMatchObject({ estado: "vencido", motivo: MOTIVOS.vencidoBuscando });
     const d = await detalle(v.id);
     expect(d.textoEstado).toBe("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
-    expect(d.textos.resumen).toBe("Sin pago registrado de Luz Uno en octubre de 2026.");
+    expect(d.textos.resumen).toBe("Venció el 10 oct 2026 y no aparece el pago en los estados de cuenta cargados.");
     expect(d.textos.parrafos).toContain("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
   });
 
-  it("pago en F+8: Pagado, «Se pagó 8 días después del día habitual de pago.»", async () => {
+  it("pago en F+8: Pagado, «Se pagó el 18 oct 2026 (8 días después del 10 oct).»", async () => {
     const o = await obligacion("Luz Uno", "7771234", 10);
     await debito(dia(2026, 10, 18), "PAGO LUZ 7771234");
     hoy = new Date(2026, 9, 20, 10, 0);
     await actualizarVencimientos(reloj);
     const v = await vencimientoDe(o.id);
     expect(v).toMatchObject({ estado: "pagado", diferenciaDias: 8 });
-    expect((await detalle(v.id)).textos.parrafos).toContain("Se pagó 8 días después del día habitual de pago.");
+    expect((await detalle(v.id)).textos.resumen).toBe("Se pagó el 18 oct 2026 (8 días después del 10 oct).");
   });
 
   it("pasado F+12 sin pago: Vencido definitivo, «No se encontró pago hasta el 22 oct 2026.»", async () => {
@@ -116,7 +116,7 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     const v = await vencimientoDe(movistar.id);
     expect(v.estado).toBe("vencido");
     const t = (await detalle(v.id)).textos;
-    expect(t.resumen).toBe("Sin pago registrado de Movistar en octubre de 2026.");
+    expect(t.resumen).toMatch(/^Venció el \d+ oct 2026 y no aparece el pago/);
     expect(t.parrafos).toContain("El pago con este número se asignó a Cabletica.");
     expect(t.parrafos.find((p) => p.startsWith("Fue el 1 oct 2026, por "))).toBeDefined();
     expect(t.parrafos.join(" ")).not.toContain("Tampoco");
