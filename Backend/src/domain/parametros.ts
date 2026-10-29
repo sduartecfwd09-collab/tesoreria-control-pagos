@@ -47,6 +47,12 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "12", unidad: "días", min: 0, max: 15, supuesto: false, visible: false,
   },
   {
+    clave: "historico_meses",
+    etiqueta: "Meses que muestra el Histórico por defecto",
+    ayuda: "Cuántos meses de calendario (contando el actual) abre el Histórico antes de que la persona elija otras fechas. No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "12", unidad: "meses", min: 1, max: 120, supuesto: true, visible: false,
+  },
+  {
     clave: "diagnostico_dias_lejos",
     etiqueta: "Distancia máxima para el diagnóstico de pagos",
     ayuda:

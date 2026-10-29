@@ -66,6 +66,8 @@ export interface FiltroVencimientos {
   estados?: string[];
   /** con `periodo`: además de ese periodo, los pendientes (vencido, sin información, por revisar) de periodos anteriores */
   pendientesAnteriores?: boolean;
+  /** orden por fecha de vencimiento; por defecto ascendente */
+  orden?: "asc" | "desc";
   pagina: number;
   porPagina: number;
 }
@@ -110,7 +112,7 @@ export async function listarVencimientos(f: FiltroVencimientos) {
         // el pago que respalda el estado: solo fecha, monto y la cuenta (para su moneda, banco y últimos 4)
         movimiento: { select: { fecha: true, debito: true, cuenta: { select: { numero: true, banco: true, moneda: true } } } },
       },
-      orderBy: [{ fecha: "asc" }, { sociedad: { codigo: "asc" } }, { proveedor: "asc" }, { id: "asc" }],
+      orderBy: [{ fecha: f.orden ?? "asc" }, { sociedad: { codigo: "asc" } }, { proveedor: "asc" }, { id: f.orden ?? "asc" }],
       skip: (f.pagina - 1) * f.porPagina,
       take: f.porPagina,
     }),
