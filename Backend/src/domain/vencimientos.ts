@@ -10,6 +10,13 @@ export const ESTADOS_PAGADOS = ["pagado", "pagado_con_inconsistencia"];
 
 export const esPeriodo = (p: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(p);
 
+/** ¿Es una fecha real en formato AAAA-MM-DD? (rechaza 2026-02-30). */
+export function esFechaIso(f: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return false;
+  const d = new Date(`${f}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === f;
+}
+
 const aIndice = (p: string) => Number(p.slice(0, 4)) * 12 + Number(p.slice(5, 7)) - 1;
 const dePeriodoIndice = (i: number) => `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`;
 

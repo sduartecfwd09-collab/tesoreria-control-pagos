@@ -11,7 +11,7 @@ import { aNumero } from "../domain/montos.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { z } from "zod";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
-import { esPeriodo } from "../domain/vencimientos.js";
+import { esFechaIso, esPeriodo } from "../domain/vencimientos.js";
 import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { listarSociedades, sociedadesConObligacionesActivas } from "../repositories/obligaciones.js";
 import { diasDeAviso } from "../vencimientos/generar.js";
@@ -22,6 +22,8 @@ const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_in
 
 const periodo = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM)` }).refine(esPeriodo, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe tener el formato AAAA-MM (por ejemplo 2026-08)`);
 
+const fechaIso = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM-DD)` }).refine(esFechaIso, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe ser una fecha válida con el formato AAAA-MM-DD (por ejemplo 2026-08-15)`);
+
 const consulta = z.object({
   sociedad: z.string().trim().min(1).transform((s) => s.toUpperCase()).optional(),
   sociedadId: z.coerce.number({ error: "La sociedad debe ser un número" }).int().positive("La sociedad debe ser un número").optional(),
@@ -29,12 +31,14 @@ const consulta = z.object({
   periodo: periodo("el periodo").optional(),
   desde: periodo("el mes inicial").optional(),
   hasta: periodo("el mes final").optional(),
+  fechaDesde: fechaIso("la fecha inicial").optional(),
+  fechaHasta: fechaIso("la fecha final").optional(),
   q: z.string().trim().min(1).max(80, "La búsqueda admite como máximo 80 caracteres").optional(),
   estado: z.string().transform((t) => t.split(",").map((e) => e.trim()).filter(Boolean)).pipe(z.array(z.enum(ESTADOS)).max(ESTADOS.length, "Estado inválido")).optional(),
   pendientesAnteriores: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
   pagina: z.coerce.number().int().min(1, "La página debe ser 1 o más").default(1),
   porPagina: z.coerce.number().int().min(1).max(500, "Se pueden pedir como máximo 500 por página").default(50),
-});
+}).refine((c) => !c.fechaDesde || !c.fechaHasta || c.fechaDesde <= c.fechaHasta, { message: "La fecha inicial no puede ser posterior a la final" });
 
 export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
   // `hoy` sale del reloj del servidor (inyectable): la pantalla abre en el mes de hoy y calcula «Hace N días» con él

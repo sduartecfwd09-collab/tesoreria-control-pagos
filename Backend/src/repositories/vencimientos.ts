@@ -58,6 +58,9 @@ export interface FiltroVencimientos {
   periodo?: string;
   desde?: string;
   hasta?: string;
+  /** día exacto de la fecha de vencimiento (AAAA-MM-DD), ambos incluidos; se combina con periodo, desde y hasta */
+  fechaDesde?: string;
+  fechaHasta?: string;
   q?: string;
   /** estados a mostrar (vacío o ausente = todos) */
   estados?: string[];
@@ -79,9 +82,14 @@ export async function listarVencimientos(f: FiltroVencimientos) {
     f.periodo && f.pendientesAnteriores
       ? { OR: [{ periodo: f.periodo }, { periodo: { lt: f.periodo }, estado: { in: ESTADOS_PENDIENTES } }] }
       : Object.keys(periodo).length ? { periodo } : {};
+  const fecha: Prisma.DateTimeFilter = {
+    ...(f.fechaDesde ? { gte: new Date(`${f.fechaDesde}T00:00:00.000Z`) } : {}),
+    ...(f.fechaHasta ? { lte: new Date(`${f.fechaHasta}T00:00:00.000Z`) } : {}),
+  };
   const sinEstado: Prisma.VencimientoWhereInput = {
     AND: [
       dePeriodo,
+      Object.keys(fecha).length ? { fecha } : {},
       f.obligacionIds ? { obligacionId: { in: f.obligacionIds } } : {},
       // sociedad, categoría y proveedor salen de la copia del vencimiento: el Histórico no cambia si la obligación se edita
       {
