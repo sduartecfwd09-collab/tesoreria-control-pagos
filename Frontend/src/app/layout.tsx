@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { BarraIdentidad } from "@/components/BarraIdentidad";
+import { LineaHoy } from "@/components/LineaHoy";
 import { MenuLateral } from "@/components/MenuLateral";
 import { ProveedorAvisos } from "@/components/Avisos";
 
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ProveedorAvisos>
           <MenuLateral>
             <BarraIdentidad />
+            <LineaHoy />
             {children}
           </MenuLateral>
         </ProveedorAvisos>

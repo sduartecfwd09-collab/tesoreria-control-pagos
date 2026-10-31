@@ -107,6 +107,14 @@ describe("el selector puede navegar de 5 años atrás a 12 meses adelante", () =
   });
 });
 
+describe("GET /api/hoy", () => {
+  it("devuelve solo la fecha de hoy del servidor", async () => {
+    const app = await crearApp({ reloj, modoPruebas: true });
+    const r = await app.inject({ method: "GET", url: "/api/hoy" });
+    expect(r.json()).toEqual({ hoy: "2026-10-27" });
+  });
+});
+
 describe("ventana del selector", () => {
   it("no depende de los datos: 5 años atrás y 12 meses adelante, y sigue los parámetros", async () => {
     const app = await crearApp({ reloj, modoPruebas: true });

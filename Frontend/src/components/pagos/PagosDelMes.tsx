@@ -24,10 +24,6 @@ const PESTANAS: { clave: Pestana; texto: string; estados: EstadoVencimiento[] | 
   { clave: "todos", texto: "Todos", estados: null },
 ];
 
-/** «Hoy · lunes 27 de octubre de 2026», con la fecha de hoy del servidor. */
-const textoHoy = (hoy: string) =>
-  new Intl.DateTimeFormat("es-CR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${hoy}T00:00:00Z`));
-
 export function PagosDelMes() {
   const [hoy, setHoy] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<string | null>(null);
@@ -114,8 +110,7 @@ export function PagosDelMes() {
     <>
       <header className="mt-2 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <span className="text-xs font-light uppercase tracking-[0.24em] text-suave">Hoy · {textoHoy(hoy)}</span>
-          <h1 className="mt-1.5 text-[32px] font-extrabold">Pagos de {nombreMes}</h1>
+          <h1 className="text-[32px] font-extrabold">Pagos de {nombreMes}</h1>
         </div>
         <SelectorMes valor={periodo} alCambiar={cambiarMes} limites={navegable} />
       </header>

@@ -18,6 +18,9 @@ const entero = async (clave: string, respaldo: number) => {
 // Costa Rica), la ventana por la que se puede navegar en el selector de fechas (años hacia atrás y meses hacia adelante, parámetros)
 // y la primera y la última fecha con datos (para decir «sin información» o «todavía no hay vencimientos»). Solo fechas, nunca filas.
 export async function rutasFechas(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
+  // Solo la fecha de hoy (zona de Costa Rica), para la línea «Hoy» del encabezado: sin consultas a la base.
+  app.get("/api/hoy", async () => ({ hoy: hoyDe(opts.reloj).toISOString().slice(0, 10) }));
+
   app.get("/api/fechas/limites", async (req) => {
     const alcance = await alcanceDe(req, opts.modoPruebas);
     const hoy = hoyDe(opts.reloj).toISOString().slice(0, 10);

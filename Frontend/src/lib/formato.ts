@@ -105,3 +105,7 @@ export function textoEstadosCalculados(iso: string | null): string {
   const f = iso ? fechaHoraCR(iso) : null;
   return f ? `Estados calculados el ${f}` : "Estados sin calcular todavía";
 }
+
+/** «sábado, 31 de octubre de 2026» a partir de AAAA-MM-DD (solo día, sin zona horaria). */
+export const textoHoy = (hoy: string) =>
+  new Intl.DateTimeFormat("es-CR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${hoy}T00:00:00Z`));

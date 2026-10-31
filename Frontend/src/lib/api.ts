@@ -94,5 +94,5 @@ export const api = {
   /** Primera y última fecha con datos (límites del selector de fechas) y «hoy» del servidor. */
   limitesFechas: () => pedir<LimitesFechas>("/api/fechas/limites"),
   /** La fecha de hoy según el servidor (reloj inyectable). */
-  hoy: async () => (await pedir<{ datos: unknown; hoy: string }>("/api/vencimientos/periodos")).hoy,
+  hoy: async () => (await pedir<{ hoy: string }>("/api/hoy")).hoy,
 };
