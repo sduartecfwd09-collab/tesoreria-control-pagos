@@ -283,7 +283,7 @@ export interface Vencimiento {
   moneda: Moneda;
   estado: EstadoVencimiento;
   /** el de la obligación o, si falta, el tesorero de la sociedad */
-  responsableEfectivo: string | null;
+  responsableEfectivo?: string | null; // solo lo recibe Jefatura
   /** días de hoy a la fecha vigente (negativo = ya pasó); se calcula en el servidor con su reloj */
   dias: number;
   motivo: string | null;

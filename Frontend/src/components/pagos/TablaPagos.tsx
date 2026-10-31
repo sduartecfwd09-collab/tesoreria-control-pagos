@@ -54,6 +54,8 @@ export function useFiltrosPagos(datos: Vencimiento[]) {
 
 export function TablaPagos({ datos, vacio, alGestionar }: { datos: Vencimiento[]; vacio: string; alGestionar: (id: number) => void }) {
   const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
+  // el servidor solo envía el responsable a Jefatura: sin ese dato no hay columna
+  const conResponsable = datos.some((v) => v.responsableEfectivo !== undefined);
   return (
     <div className="mt-4 overflow-x-auto">
       <table className="w-full min-w-[1000px] border-collapse text-sm">
@@ -65,7 +67,7 @@ export function TablaPagos({ datos, vacio, alGestionar }: { datos: Vencimiento[]
             <th scope="col" className={th}>Proveedor</th>
             <th scope="col" className={th}>Sociedad</th>
             <th scope="col" className={th}>Servicio</th>
-            <th scope="col" className={th}>Responsable</th>
+            {conResponsable && <th scope="col" className={th}>Responsable</th>}
             <th scope="col" className={`${th} text-right`}>Monto pagado</th>
             <th scope="col" className={th}><span className="sr-only">Acciones</span></th>
           </tr>
@@ -99,7 +101,7 @@ export function TablaPagos({ datos, vacio, alGestionar }: { datos: Vencimiento[]
                 </td>
                 <td className="px-3.5 py-4 align-top"><span title={v.sociedad} className="line-clamp-3 max-w-64 text-xs">{v.sociedad}</span></td>
                 <td className="px-3.5 py-4 align-top font-mono text-[13px] text-suave whitespace-nowrap">{v.identificador}</td>
-                <td className={`px-3.5 py-4 align-top ${v.responsableEfectivo ? "" : "text-suave"}`}>{v.responsableEfectivo ?? "—"}</td>
+                {conResponsable && <td className={`px-3.5 py-4 align-top ${v.responsableEfectivo ? "" : "text-suave"}`}>{v.responsableEfectivo ?? "—"}</td>}
                 <td className="px-3.5 py-4 align-top text-right whitespace-nowrap tabular-nums">
                   {v.pago ? <b>{montoPagado(v.pago.monto, v.pago.moneda)}</b> : <span className="text-suave">—</span>}
                 </td>

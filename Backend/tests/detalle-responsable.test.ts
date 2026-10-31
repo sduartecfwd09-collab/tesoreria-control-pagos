@@ -37,4 +37,13 @@ describe("Detalle del pago: Responsable", () => {
     const tesorero = (await app.inject({ method: "GET", url: `/api/vencimientos/${vencimientoId}`, headers: encabezado(ana) })).json();
     expect(tesorero.datos).not.toHaveProperty("responsableEfectivo");
   });
+
+  it("la lista de pagos tampoco lo envía a un tesorero", async () => {
+    const app = await crearApp({ reloj, modoPruebas: true });
+    const jefatura = (await app.inject({ method: "GET", url: "/api/vencimientos?porPagina=50", headers: encabezado(jefa) })).json();
+    expect(jefatura.datos[0].responsableEfectivo).toBe("Ana Uno");
+    const tesorero = (await app.inject({ method: "GET", url: "/api/vencimientos?porPagina=50", headers: encabezado(ana) })).json();
+    expect(tesorero.datos).toHaveLength(1);
+    expect(tesorero.datos[0]).not.toHaveProperty("responsableEfectivo");
+  });
 });

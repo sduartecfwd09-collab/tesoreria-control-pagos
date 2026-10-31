@@ -98,7 +98,8 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         proveedor: v.proveedor,
         identificador: v.obligacion.identificador,
         frecuencia: v.obligacion.frecuencia,
-        responsableEfectivo: responsableEfectivo(v.obligacion).nombre, // el de la obligación o, si falta, el tesorero de la sociedad
+        // el de la obligación o, si falta, el tesorero de la sociedad; solo se informa a Jefatura (a un tesorero le repetiría que es él)
+        ...(alcance.tipo === "todo" ? { responsableEfectivo: responsableEfectivo(v.obligacion).nombre } : {}),
         periodo: v.periodo,
         // pendiente de un periodo anterior al que se está viendo (se etiqueta «Mes anterior»)
         mesAnterior: Boolean(q.data.pendientesAnteriores && q.data.periodo && v.periodo < q.data.periodo),
