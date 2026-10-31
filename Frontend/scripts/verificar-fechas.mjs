@@ -132,3 +132,14 @@ test("límites de navegación: la ventana del servidor, y el Histórico cerrado 
   assert.deepEqual(f.limitesDeNavegacion(r), { primera: "2021-10-01", ultima: "2027-10-31" });
   assert.deepEqual(f.limitesDeNavegacion(r, true), { primera: "2021-10-01", ultima: "2026-10-27" });
 });
+
+test("columnas de fecha: el año solo si no es del año en curso", async () => {
+  const fmt = await import("../src/lib/formato.ts");
+  fmt.fijarAnioEnCurso("2026-10-31");
+  assert.equal(fmt.nombreFecha("2026-10-20"), "20 oct");
+  assert.equal(fmt.nombreFecha("2025-10-20"), "20 oct 2025");
+  assert.equal(fmt.nombreFecha("2027-01-05"), "5 ene 2027");
+  fmt.fijarAnioEnCurso("2027-01-02");
+  assert.equal(fmt.nombreFecha("2026-10-20"), "20 oct 2026");
+  assert.equal(fmt.nombreFecha("2027-01-05"), "5 ene");
+});

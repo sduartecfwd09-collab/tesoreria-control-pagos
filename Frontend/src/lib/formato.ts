@@ -46,8 +46,17 @@ export function aTextoMonto(centavos: number | null): string {
 /** "2026-08" -> "agosto 2026". */
 export const nombrePeriodo = (p: string) => `${MESES[Number(p.slice(5, 7)) - 1] ?? p} ${p.slice(0, 4)}`;
 
-/** "2026-08-15" -> "15 ago 2026". */
-export const nombreFecha = (f: string) => `${Number(f.slice(8, 10))} ${MESES_CORTOS[Number(f.slice(5, 7)) - 1]} ${f.slice(0, 4)}`;
+// Año en curso según el servidor (lo fija la línea «Hoy»); mientras no se conoce, el del reloj del navegador.
+let anioEnCurso = String(new Date().getFullYear());
+export const fijarAnioEnCurso = (hoy: string) => {
+  anioEnCurso = hoy.slice(0, 4);
+};
+
+/** "2026-08-15" -> "15 ago" si es del año en curso; de otro año, con año: "15 ago 2025". */
+export const nombreFecha = (f: string, anio: string = anioEnCurso) => {
+  const dia = `${Number(f.slice(8, 10))} ${MESES_CORTOS[Number(f.slice(5, 7)) - 1]}`;
+  return f.slice(0, 4) === anio ? dia : `${dia} ${f.slice(0, 4)}`;
+};
 
 /** Periodo AAAA-MM desplazado n meses. */
 export function sumarMeses(p: string, n: number): string {

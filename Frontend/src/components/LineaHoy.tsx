@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { textoHoy } from "@/lib/formato";
+import { fijarAnioEnCurso, textoHoy } from "@/lib/formato";
 
 const CADA_MS = 5 * 60 * 1000; // SUPUESTO: se refresca cada 5 minutos y al volver a la pestaña
 
@@ -11,7 +11,7 @@ export function LineaHoy() {
 
   useEffect(() => {
     let vigente = true;
-    const cargar = () => api.hoy().then((h) => vigente && setHoy(h)).catch(() => undefined);
+    const cargar = () => api.hoy().then((h) => (fijarAnioEnCurso(h), vigente && setHoy(h))).catch(() => undefined);
     cargar();
     const reloj = setInterval(cargar, CADA_MS);
     const alVolver = () => document.visibilityState === "visible" && cargar();
