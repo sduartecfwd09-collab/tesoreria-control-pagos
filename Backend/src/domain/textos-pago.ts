@@ -95,14 +95,16 @@ function textoGrupo(g: ObligacionGrupoTexto[]): string | null {
   return `Ese número de servicio está en ${g.length} obligaciones de esta sociedad: ${listaTexto(g.map(una))}.`;
 }
 
-/** «Se pagó el 21 oct 2026 (1 día después del 20 oct).» / «antes» / «el mismo día». */
+/** «20 oct», sin el año. */
+const fechaCorta = (iso: string) => fechaTexto(iso).split(" ").slice(0, 2).join(" ");
+
+/** «Vencía el 20 oct y se pagó el 21 oct (1 día después).» / «(2 días antes)» / «Vencía el 1 oct y se pagó ese mismo día.» */
 function fraseDePagado(d: DatosTexto): string {
   const pago = d.movimientos[0]?.fecha;
-  if (!pago) return "Se pagó.";
+  if (!pago) return `Vencía el ${fechaCorta(d.fecha)} y se pagó.`;
   const dif = diasEntreFechas(d.fecha, pago);
-  const vence = fechaTexto(d.fecha).split(" ").slice(0, 2).join(" "); // «20 oct», sin el año
-  const cuando = dif === 0 ? "el mismo día" : `${plural(Math.abs(dif), "día", "días")} ${dif > 0 ? "después" : "antes"} del ${vence}`;
-  return `Se pagó el ${fechaTexto(pago)} (${cuando}).`;
+  if (dif === 0) return `Vencía el ${fechaCorta(d.fecha)} y se pagó ese mismo día.`;
+  return `Vencía el ${fechaCorta(d.fecha)} y se pagó el ${fechaCorta(pago)} (${plural(Math.abs(dif), "día", "días")} ${dif > 0 ? "después" : "antes"}).`;
 }
 
 export function textosDePago(d: DatosTexto): TextosPago {
@@ -142,7 +144,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
       if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
       if (d.motivo === MOTIVOS.vencidoSinEstado) parrafos.push("Se muestra como vencido aunque ningún estado de cuenta lo confirma.");
       else parrafos.push(buscando ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.ventana.hasta)}.` : `No se encontró pago hasta el ${fechaTexto(d.ventana.hasta)}.`);
-      const resumen = `Venció el ${fechaTexto(d.fecha)} y no aparece el pago en los estados de cuenta cargados.`;
+      const resumen = `Venció el ${fechaCorta(d.fecha)} y no aparece el pago en los estados de cuenta cargados.`;
       const queHacer = o
         ? `Qué hacer: confirmar con quien paga si ese pago era de ${o.proveedor} o de este servicio.`
         : p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo.";
@@ -208,12 +210,12 @@ export function textosDePago(d: DatosTexto): TextosPago {
         };
       }
       return {
-        resumen: `Vence el ${fechaTexto(d.fecha)} (${d.dias <= 0 ? "hoy" : `en ${plural(d.dias, "día", "días")}`}).`,
+        resumen: `Vence el ${fechaCorta(d.fecha)} (${d.dias <= 0 ? "hoy" : `en ${plural(d.dias, "día", "días")}`}).`,
         parrafos: [],
         queHacer: "Qué hacer: preparar el pago.",
       };
     case "proyectado":
-      return { resumen: `Programado para el ${fechaTexto(d.fecha)}.`, parrafos: [], queHacer: null };
+      return { resumen: `Vence el ${fechaCorta(d.fecha)}.`, parrafos: [], queHacer: null };
     default:
       return { resumen: "Estado sin definir.", parrafos: [], queHacer: null };
   }

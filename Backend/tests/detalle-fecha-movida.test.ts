@@ -49,6 +49,6 @@ describe("detalle del pago: fecha movida", () => {
   });
 
   it("un vencimiento programado se resume con su fecha", async () => {
-    expect((await detalle(normal)).textos.resumen).toBe("Programado para el 10 dic 2026.");
+    expect((await detalle(normal)).textos.resumen).toBe("Vence el 10 dic.");
   });
 });

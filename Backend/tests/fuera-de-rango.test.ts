@@ -113,7 +113,7 @@ describe("detalle de Vencido: pago con el mismo número fuera del rango", () => 
 
   it("dice que sí hay un pago con el número, cuántos días después y el margen", async () => {
     const t = await textoDe("Luz Uno");
-    expect(t).toContain("Venció el 10 oct 2026 y no aparece el pago en los estados de cuenta cargados.");
+    expect(t).toContain("Venció el 10 oct y no aparece el pago en los estados de cuenta cargados.");
     expect(t).toContain("Se buscó un pago entre el 7 oct 2026 y el 13 oct 2026 en la cuenta de la sociedad.");
     expect(t).toContain("Sí hay un pago con este número el 15 oct 2026, 5 días después del día habitual de pago; está fuera del margen de 3 días.");
     expect(t).not.toContain("no hay un pago con este número de servicio");

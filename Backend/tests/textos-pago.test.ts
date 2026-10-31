@@ -41,7 +41,7 @@ describe("textos del detalle", () => {
 
   it("vencido: dónde y hasta cuándo se buscó, en cuántas cuentas y hasta qué fecha hay estados", () => {
     const t = textosDePago({ ...base, estado: "vencido", motivo: MOTIVOS.vencido, proveedor: "Luz Uno", periodo: "2026-10", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 3, sinCobertura: [] } });
-    expect(t.resumen).toBe("Venció el 15 oct 2026 y no aparece el pago en los estados de cuenta cargados.");
+    expect(t.resumen).toBe("Venció el 15 oct y no aparece el pago en los estados de cuenta cargados.");
     expect(t.parrafos).toEqual([
       "Se buscó un pago entre el 12 oct 2026 y el 18 oct 2026 en las 3 cuentas de la sociedad.",
       "No se encontró ningún pago con este número en los estados de cuenta cargados.",
@@ -53,15 +53,15 @@ describe("textos del detalle", () => {
 
   it("frase resumen de Pagado, Por vencer, Programado: una sola línea con las fechas, sin repetir el detalle", () => {
     const pagado = (pago: string) => textosDePago({ ...base, estado: "pagado", motivo: null, fecha: "2026-10-20", movimientos: [mov({ fecha: pago })] });
-    expect(pagado("2026-10-21")).toMatchObject({ resumen: "Se pagó el 21 oct 2026 (1 día después del 20 oct).", parrafos: [], queHacer: null });
-    expect(pagado("2026-10-18").resumen).toBe("Se pagó el 18 oct 2026 (2 días antes del 20 oct).");
-    expect(pagado("2026-10-20").resumen).toBe("Se pagó el 20 oct 2026 (el mismo día).");
+    expect(pagado("2026-10-21")).toMatchObject({ resumen: "Vencía el 20 oct y se pagó el 21 oct (1 día después).", parrafos: [], queHacer: null });
+    expect(pagado("2026-10-18").resumen).toBe("Vencía el 20 oct y se pagó el 18 oct (2 días antes).");
+    expect(pagado("2026-10-20").resumen).toBe("Vencía el 20 oct y se pagó ese mismo día.");
     const futuro = (dias: number, fecha: string) => textosDePago({ ...base, estado: "por_vencer", motivo: null, fecha, dias, diasAviso: 5 });
-    expect(futuro(14, "2026-11-12").resumen).toBe("Vence el 12 nov 2026 (en 14 días).");
-    expect(futuro(1, "2026-11-12").resumen).toBe("Vence el 12 nov 2026 (en 1 día).");
-    expect(futuro(0, "2026-11-12").resumen).toBe("Vence el 12 nov 2026 (hoy).");
+    expect(futuro(14, "2026-11-12").resumen).toBe("Vence el 12 nov (en 14 días).");
+    expect(futuro(1, "2026-11-12").resumen).toBe("Vence el 12 nov (en 1 día).");
+    expect(futuro(0, "2026-11-12").resumen).toBe("Vence el 12 nov (hoy).");
     expect(futuro(14, "2026-11-12").parrafos).toEqual([]);
-    expect(textosDePago({ ...base, estado: "proyectado", motivo: null, fecha: "2026-12-20", dias: 50 })).toMatchObject({ resumen: "Programado para el 20 dic 2026.", parrafos: [] });
+    expect(textosDePago({ ...base, estado: "proyectado", motivo: null, fecha: "2026-12-20", dias: 50 })).toMatchObject({ resumen: "Vence el 20 dic.", parrafos: [] });
   });
 
   it("vencido con el mismo número usado por otra obligación: dice a quién se asignó el pago, con fecha y monto, y no dice «tampoco hay un pago»", () => {
