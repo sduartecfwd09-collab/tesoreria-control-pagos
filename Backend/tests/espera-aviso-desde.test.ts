@@ -85,7 +85,7 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     const d = await detalle(v.id);
     expect(d.textoEstado).toBe("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
     expect(d.textos.resumen).toBe("Venció el 10 oct y no aparece el pago en los estados de cuenta cargados.");
-    expect(d.textos.parrafos).toContain("El pago no aparece todavía; se sigue buscando hasta el 22 oct 2026.");
+    expect(d.textos.parrafos).toContain("El pago no aparece todavía; se sigue buscando hasta el 22 oct.");
   });
 
   it("pago en F+8: Pagado, «Vencía el 10 oct y se pagó el 18 oct (8 días después).»", async () => {
@@ -98,7 +98,7 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     expect((await detalle(v.id)).textos.resumen).toBe("Vencía el 10 oct y se pagó el 18 oct (8 días después).");
   });
 
-  it("pasado F+12 sin pago: Vencido definitivo, «No se encontró pago hasta el 22 oct 2026.»", async () => {
+  it("pasado F+12 sin pago: Vencido definitivo, «No se encontró pago hasta el 22 oct.»", async () => {
     const o = await obligacion("Luz Uno", "7771234", 10);
     hoy = new Date(2026, 9, 25, 10, 0);
     await actualizarVencimientos(reloj);
@@ -118,7 +118,7 @@ describe("Vencido con días de espera (F = 10 de octubre, espera 3, después 12)
     const t = (await detalle(v.id)).textos;
     expect(t.resumen).toMatch(/^Venció el \d+ oct y no aparece el pago/);
     expect(t.parrafos).toContain("El pago con este número se asignó a Cabletica.");
-    expect(t.parrafos.find((p) => p.startsWith("Fue el 1 oct 2026, por "))).toBeDefined();
+    expect(t.parrafos.find((p) => p.startsWith("Fue el 1 oct, por "))).toBeDefined();
     expect(t.parrafos.join(" ")).not.toContain("Tampoco");
   });
 

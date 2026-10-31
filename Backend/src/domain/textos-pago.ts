@@ -44,6 +44,8 @@ export interface DatosTexto {
   periodo?: string;
   /** un pago con este mismo número que se asignó a otra obligación (mismo número usado por dos servicios) */
   asignadoAOtro?: { fecha: string; proveedor: string; monto: number; moneda: string | null } | null;
+  /** año de hoy ("2026"): las fechas de ese año se muestran sin año; sin dato, siempre con año */
+  anioActual?: string;
   /** primera fecha con estados de cuenta cargados de la sociedad (para «Sin información» por inicio de datos) */
   datosDesde?: string | null;
 }
@@ -73,11 +75,11 @@ const nombreEstado = (e: string | null) => (e === null ? "sin vencimiento este m
 /** «Banco Uno cuenta ****1111» (o solo la cuenta si no se sabe el banco). */
 const cuentaTexto = (banco: string | null, cuenta: string) => (banco ? `${banco} cuenta ${cuenta}` : `cuenta ${cuenta}`);
 
-function lineaMovimiento(m: MovimientoTexto): string {
+function lineaMovimiento(m: MovimientoTexto, d: { anioActual?: string }): string {
   const donde = `${cuentaTexto(m.banco, m.cuenta)}, ${montoTexto(m.monto, m.moneda)}`;
   return m.descripcion
-    ? `El ${fechaTexto(m.fecha)} el banco registró un pago que dice «${m.descripcion}» (${donde}).`
-    : `El ${fechaTexto(m.fecha)} el banco registró un pago (${donde}).`;
+    ? `El ${ft(m.fecha, d)} el banco registró un pago que dice «${m.descripcion}» (${donde}).`
+    : `El ${ft(m.fecha, d)} el banco registró un pago (${donde}).`;
 }
 
 function porQueNoSeSabe(m: MovimientoTexto): string | null {
@@ -95,16 +97,16 @@ function textoGrupo(g: ObligacionGrupoTexto[]): string | null {
   return `Ese número de servicio está en ${g.length} obligaciones de esta sociedad: ${listaTexto(g.map(una))}.`;
 }
 
-/** «20 oct», sin el año. */
-const fechaCorta = (iso: string) => fechaTexto(iso).split(" ").slice(0, 2).join(" ");
+/** Una fecha con año solo si no es del año en curso ("20 oct" este año, "20 oct 2025" otro año). */
+const ft = (iso: string, d: { anioActual?: string }) => fechaTexto(iso, d.anioActual);
 
 /** «Vencía el 20 oct y se pagó el 21 oct (1 día después).» / «(2 días antes)» / «Vencía el 1 oct y se pagó ese mismo día.» */
 function fraseDePagado(d: DatosTexto): string {
   const pago = d.movimientos[0]?.fecha;
-  if (!pago) return `Vencía el ${fechaCorta(d.fecha)} y se pagó.`;
+  if (!pago) return `Vencía el ${ft(d.fecha, d)} y se pagó.`;
   const dif = diasEntreFechas(d.fecha, pago);
-  if (dif === 0) return `Vencía el ${fechaCorta(d.fecha)} y se pagó ese mismo día.`;
-  return `Vencía el ${fechaCorta(d.fecha)} y se pagó el ${fechaCorta(pago)} (${plural(Math.abs(dif), "día", "días")} ${dif > 0 ? "después" : "antes"}).`;
+  if (dif === 0) return `Vencía el ${ft(d.fecha, d)} y se pagó ese mismo día.`;
+  return `Vencía el ${ft(d.fecha, d)} y se pagó el ${ft(pago, d)} (${plural(Math.abs(dif), "día", "días")} ${dif > 0 ? "después" : "antes"}).`;
 }
 
 export function textosDePago(d: DatosTexto): TextosPago {
@@ -112,7 +114,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
   switch (d.estado) {
     case "por_revisar": {
       const compartido = d.motivo === MOTIVOS.compartido;
-      const parrafos = movs.flatMap((m) => [lineaMovimiento(m), ...(compartido ? [porQueNoSeSabe(m)].filter((x): x is string => x !== null) : [])]);
+      const parrafos = movs.flatMap((m) => [lineaMovimiento(m, d), ...(compartido ? [porQueNoSeSabe(m)].filter((x): x is string => x !== null) : [])]);
       const grupo = compartido ? textoGrupo(d.grupo) : null;
       if (grupo) parrafos.push(grupo);
       if (!compartido && d.motivo !== MOTIVOS.empate && d.motivo) parrafos.push(d.motivo);
@@ -130,21 +132,21 @@ export function textosDePago(d: DatosTexto): TextosPago {
       const donde = c && c.cuentas > 0 ? ` en ${c.cuentas === 1 ? "la cuenta" : `las ${c.cuentas} cuentas`} de la sociedad` : "";
       // Cuatro respuestas: qué se esperaba, qué se buscó, qué se encontró y qué hacer.
       const parrafos = [
-        `Se buscó un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}${donde}.`,
+        `Se buscó un pago entre el ${ft(d.ventana.desde, d)} y el ${ft(d.ventana.hasta, d)}${donde}.`,
       ];
       const p = d.pagoCercano;
       const o = d.asignadoAOtro;
       if (o) {
-        parrafos.push(`El pago con este número se asignó a ${o.proveedor}.`, `Fue el ${fechaTexto(o.fecha)}, por ${montoTexto(o.monto, o.moneda)}.`);
+        parrafos.push(`El pago con este número se asignó a ${o.proveedor}.`, `Fue el ${ft(o.fecha, d)}, por ${montoTexto(o.monto, o.moneda)}.`);
       } else if (p) {
-        parrafos.push(`Sí hay un pago con este número el ${fechaTexto(p.fecha)}, ${plural(Math.abs(p.dias), "día", "días")} ${p.dias > 0 ? "después" : "antes"} del día habitual de pago; está fuera del margen de ${plural(p.margen, "día", "días")}.`);
+        parrafos.push(`Sí hay un pago con este número el ${ft(p.fecha, d)}, ${plural(Math.abs(p.dias), "día", "días")} ${p.dias > 0 ? "después" : "antes"} del día habitual de pago; está fuera del margen de ${plural(p.margen, "día", "días")}.`);
       } else {
         parrafos.push("No se encontró ningún pago con este número en los estados de cuenta cargados.");
       }
-      if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
+      if (c) parrafos.push(c.estadosHasta ? `Hay estados de cuenta cargados hasta el ${ft(c.estadosHasta, d)}.` : "Todavía no hay estados de cuenta cargados de esta sociedad.");
       if (d.motivo === MOTIVOS.vencidoSinEstado) parrafos.push("Se muestra como vencido aunque ningún estado de cuenta lo confirma.");
-      else parrafos.push(buscando ? `El pago no aparece todavía; se sigue buscando hasta el ${fechaTexto(d.ventana.hasta)}.` : `No se encontró pago hasta el ${fechaTexto(d.ventana.hasta)}.`);
-      const resumen = `Venció el ${fechaCorta(d.fecha)} y no aparece el pago en los estados de cuenta cargados.`;
+      else parrafos.push(buscando ? `El pago no aparece todavía; se sigue buscando hasta el ${ft(d.ventana.hasta, d)}.` : `No se encontró pago hasta el ${ft(d.ventana.hasta, d)}.`);
+      const resumen = `Venció el ${ft(d.fecha, d)} y no aparece el pago en los estados de cuenta cargados.`;
       const queHacer = o
         ? `Qué hacer: confirmar con quien paga si ese pago era de ${o.proveedor} o de este servicio.`
         : p ? "Qué hacer: confirmar con quien paga si ese pago corresponde a este vencimiento." : "Qué hacer: confirmar con quien paga si el pago se hizo.";
@@ -156,7 +158,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
           resumen: "Todavía no se puede saber si se pagó.",
           parrafos: [
             textoSinEstadosAnteriores(d.datosDesde ?? null) + ".",
-            `Se buscaba un pago desde el ${fechaTexto(d.ventana.desde)}; la fecha de pago era el ${fechaTexto(d.fecha)}.`,
+            `Se buscaba un pago desde el ${ft(d.ventana.desde, d)}; la fecha de pago era el ${ft(d.fecha, d)}.`,
           ],
           queHacer: "Qué hacer: cargar los estados de cuenta anteriores a esa fecha.",
         };
@@ -166,7 +168,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
           resumen: "Todavía no se puede saber si se pagó.",
           parrafos: [
             "Un estado de cuenta de esta sociedad no cuadra con su saldo, así que no se usa para confirmar pagos.",
-            `Se buscaba un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}; la fecha de pago era el ${fechaTexto(d.fecha)}.`,
+            `Se buscaba un pago entre el ${ft(d.ventana.desde, d)} y el ${ft(d.ventana.hasta, d)}; la fecha de pago era el ${ft(d.fecha, d)}.`,
           ],
           queHacer: "Qué hacer: revisar el estado de cuenta cuyo saldo no cuadra o cargar uno corregido.",
         };
@@ -176,17 +178,17 @@ export function textosDePago(d: DatosTexto): TextosPago {
           resumen: "Todavía no se puede saber si se pagó.",
           parrafos: [
             "Un estado de cuenta de esta sociedad trae los movimientos como imagen y el sistema no puede leerlos.",
-            `Se buscaba un pago entre el ${fechaTexto(d.ventana.desde)} y el ${fechaTexto(d.ventana.hasta)}; la fecha de pago era el ${fechaTexto(d.fecha)}.`,
+            `Se buscaba un pago entre el ${ft(d.ventana.desde, d)} y el ${ft(d.ventana.hasta, d)}; la fecha de pago era el ${ft(d.fecha, d)}.`,
           ],
           queHacer: "Qué hacer: pedir al banco el estado en Excel o CSV.",
         };
       }
       const c = d.cobertura;
-      const cuentas = (c?.sinCobertura ?? []).map((x) => `${x.banco ? `${x.banco} ` : ""}${x.cuenta}${x.hasta ? ` desde el ${fechaTexto(sumarDia(x.hasta))}` : ""}`);
+      const cuentas = (c?.sinCobertura ?? []).map((x) => `${x.banco ? `${x.banco} ` : ""}${x.cuenta}${x.hasta ? ` desde el ${ft(sumarDia(x.hasta), d)}` : ""}`);
       const faltan = cuentas.length > 0 ? `Faltan los estados de cuenta de ${listaTexto(cuentas)}.` : c && c.cuentas === 0 ? "No hay estados de cuenta cargados de esta sociedad." : "Faltan los estados de cuenta posteriores.";
       const parrafos = [faltan];
-      parrafos.push(`La fecha de pago era el ${fechaTexto(d.fecha)}.`);
-      if (c?.estadosHasta) parrafos.push(`Hay estados de cuenta cargados hasta el ${fechaTexto(c.estadosHasta)}.`);
+      parrafos.push(`La fecha de pago era el ${ft(d.fecha, d)}.`);
+      if (c?.estadosHasta) parrafos.push(`Hay estados de cuenta cargados hasta el ${ft(c.estadosHasta, d)}.`);
       return { resumen: "Todavía no se puede saber si se pagó.", parrafos, queHacer: "Qué hacer: cargar los estados de cuenta que faltan." };
     }
     case "pagado":
@@ -194,7 +196,7 @@ export function textosDePago(d: DatosTexto): TextosPago {
       return { resumen: fraseDePagado(d), parrafos: [], queHacer: null };
     case "pagado_con_inconsistencia": {
       const otra = d.motivo === MOTIVOS.otraSociedad;
-      const parrafos = movs.map((m) => (otra ? `${lineaMovimiento(m).replace(/\.$/, "")}, de la cuenta de ${m.sociedad}.` : lineaMovimiento(m)));
+      const parrafos = movs.map((m) => (otra ? `${lineaMovimiento(m, d).replace(/\.$/, "")}, de la cuenta de ${m.sociedad}.` : lineaMovimiento(m, d)));
       return {
         resumen: otra ? "Se pagó, pero desde una cuenta de otra sociedad." : "Se pagó más de una vez.",
         parrafos,
@@ -205,17 +207,17 @@ export function textosDePago(d: DatosTexto): TextosPago {
       if (d.motivo === MOTIVOS.esperaPago) {
         return {
           resumen: textoEsperaPago(-d.dias),
-          parrafos: [`La fecha de pago era el ${fechaTexto(d.fecha)}. Se sigue buscando el pago hasta el ${fechaTexto(d.ventana.hasta)}.`],
+          parrafos: [`La fecha de pago era el ${ft(d.fecha, d)}. Se sigue buscando el pago hasta el ${ft(d.ventana.hasta, d)}.`],
           queHacer: "Qué hacer: confirmar con quien paga si el pago ya se hizo.",
         };
       }
       return {
-        resumen: `Vence el ${fechaCorta(d.fecha)} (${d.dias <= 0 ? "hoy" : `en ${plural(d.dias, "día", "días")}`}).`,
+        resumen: `Vence el ${ft(d.fecha, d)} (${d.dias <= 0 ? "hoy" : `en ${plural(d.dias, "día", "días")}`}).`,
         parrafos: [],
         queHacer: "Qué hacer: preparar el pago.",
       };
     case "proyectado":
-      return { resumen: `Vence el ${fechaCorta(d.fecha)}.`, parrafos: [], queHacer: null };
+      return { resumen: `Vence el ${ft(d.fecha, d)}.`, parrafos: [], queHacer: null };
     default:
       return { resumen: "Estado sin definir.", parrafos: [], queHacer: null };
   }

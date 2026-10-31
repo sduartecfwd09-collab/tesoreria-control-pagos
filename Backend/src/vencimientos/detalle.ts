@@ -119,7 +119,7 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     ventana: { desde: iso(desde), hasta: iso(hasta) },
     cobertura: cobertura && { estadosHasta: cobertura.estadosHasta, cuentas: cobertura.cuentas, sinCobertura: cobertura.cuentasSinCobertura },
     proveedor: v.proveedor, periodo: v.periodo, asignadoAOtro,
-    movimientos, grupo, pagoCercano, datosDesde: datosDesde ? iso(datosDesde) : null,
+    movimientos, grupo, pagoCercano, datosDesde: datosDesde ? iso(datosDesde) : null, anioActual: iso(hoy).slice(0, 4),
   });
   return {
     id: v.id,

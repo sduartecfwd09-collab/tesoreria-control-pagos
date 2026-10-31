@@ -19,7 +19,7 @@ const mov = (extra: Partial<MovimientoTexto> = {}): MovimientoTexto => ({
   descripcion: "PAGO MOVIS ****5678", porNombre: ["Movistar"], porFecha: ["Cabletica"], ...extra,
 });
 const base: DatosTexto = {
-  estado: "por_revisar", motivo: MOTIVOS.compartido, fecha: "2026-10-15", dias: -12, diasAviso: 3, diferenciaDias: null,
+  anioActual: "2026", estado: "por_revisar", motivo: MOTIVOS.compartido, fecha: "2026-10-15", dias: -12, diasAviso: 3, diferenciaDias: null,
   ventana: { desde: "2026-10-12", hasta: "2026-10-18" }, cobertura: null, movimientos: [mov()],
   grupo: [
     { proveedor: "Cabletica", categoria: "Cable", diaPago: 15, estado: "por_revisar" },
@@ -32,7 +32,7 @@ describe("textos del detalle", () => {
     const t = textosDePago(base);
     expect(t.resumen).toBe("No se pudo saber con certeza a cuál servicio corresponde este pago.");
     expect(t.parrafos).toEqual([
-      "El 13 oct 2026 el banco registró un pago que dice «PAGO MOVIS ****5678» (Banco Uno cuenta ****1111, ₡15 000,50).",
+      "El 13 oct el banco registró un pago que dice «PAGO MOVIS ****5678» (Banco Uno cuenta ****1111, ₡15 000,50).",
       "Coincide por nombre con Movistar y por fecha con Cabletica.",
       "Ese número de servicio está en 2 obligaciones de esta sociedad: Cabletica (Cable, día 15, Por revisar) y Movistar (Teléfono, día 20, Por revisar).",
     ]);
@@ -43,12 +43,25 @@ describe("textos del detalle", () => {
     const t = textosDePago({ ...base, estado: "vencido", motivo: MOTIVOS.vencido, proveedor: "Luz Uno", periodo: "2026-10", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 3, sinCobertura: [] } });
     expect(t.resumen).toBe("Venció el 15 oct y no aparece el pago en los estados de cuenta cargados.");
     expect(t.parrafos).toEqual([
-      "Se buscó un pago entre el 12 oct 2026 y el 18 oct 2026 en las 3 cuentas de la sociedad.",
+      "Se buscó un pago entre el 12 oct y el 18 oct en las 3 cuentas de la sociedad.",
       "No se encontró ningún pago con este número en los estados de cuenta cargados.",
-      "Hay estados de cuenta cargados hasta el 26 oct 2026.",
-      "No se encontró pago hasta el 18 oct 2026.",
+      "Hay estados de cuenta cargados hasta el 26 oct.",
+      "No se encontró pago hasta el 18 oct.",
     ]);
     expect(textosDePago({ ...base, estado: "vencido", movimientos: [], cobertura: { estadosHasta: "2026-10-26", cuentas: 1, sinCobertura: [] } }).parrafos[0]).toContain("en la cuenta de la sociedad");
+  });
+
+  it("el año solo se muestra cuando la fecha no es del año en curso", () => {
+    const pagado = (fecha: string, pago: string, anioActual?: string) => textosDePago({ ...base, anioActual, estado: "pagado", motivo: null, fecha, movimientos: [mov({ fecha: pago })] }).resumen;
+    expect(pagado("2025-10-20", "2025-10-21", "2026")).toBe("Vencía el 20 oct 2025 y se pagó el 21 oct 2025 (1 día después).");
+    expect(pagado("2026-10-20", "2026-10-21", "2026")).toBe("Vencía el 20 oct y se pagó el 21 oct (1 día después).");
+    // cada fecha por su cuenta: vencía el año pasado y se pagó este año
+    expect(pagado("2025-12-30", "2026-01-02", "2026")).toBe("Vencía el 30 dic 2025 y se pagó el 2 ene (3 días después).");
+    // sin saber el año de hoy, siempre con año
+    expect(pagado("2026-10-20", "2026-10-20", undefined)).toBe("Vencía el 20 oct 2026 y se pagó ese mismo día.");
+    const vencido = textosDePago({ ...base, anioActual: "2026", estado: "vencido", motivo: MOTIVOS.vencido, fecha: "2025-10-15", ventana: { desde: "2025-10-05", hasta: "2025-10-27" } });
+    expect(vencido.resumen).toBe("Venció el 15 oct 2025 y no aparece el pago en los estados de cuenta cargados.");
+    expect(vencido.parrafos.join(" ")).toContain("entre el 5 oct 2025 y el 27 oct 2025");
   });
 
   it("frase resumen de Pagado, Por vencer, Programado: una sola línea con las fechas, sin repetir el detalle", () => {
@@ -71,7 +84,7 @@ describe("textos del detalle", () => {
       asignadoAOtro: { fecha: "2026-10-13", proveedor: "Cabletica", monto: 4500000, moneda: "CRC" },
     });
     expect(t.parrafos).toContain("El pago con este número se asignó a Cabletica.");
-    expect(t.parrafos.find((p) => p.startsWith("Fue el 13 oct 2026, por "))).toContain("45");
+    expect(t.parrafos.find((p) => p.startsWith("Fue el 13 oct, por "))).toContain("45");
     expect(t.parrafos.join(" ")).not.toMatch(/Tampoco|No se encontró ningún pago/);
     expect(t.queHacer).toContain("Cabletica");
   });
@@ -82,7 +95,7 @@ describe("textos del detalle", () => {
       cobertura: { estadosHasta: "2026-10-15", cuentas: 2, sinCobertura: [{ cuenta: "****2222", banco: "Banco Dos", hasta: "2026-10-15" }, { cuenta: "****3333", banco: null, hasta: null }] },
     });
     expect(t.resumen).toBe("Todavía no se puede saber si se pagó.");
-    expect(t.parrafos[0]).toBe("Faltan los estados de cuenta de Banco Dos ****2222 desde el 16 oct 2026 y ****3333.");
+    expect(t.parrafos[0]).toBe("Faltan los estados de cuenta de Banco Dos ****2222 desde el 16 oct y ****3333.");
     expect(textoFaltanEstados("2026-10-15")).toBe("Faltan estados de cuenta desde el 16 oct 2026");
   });
 
