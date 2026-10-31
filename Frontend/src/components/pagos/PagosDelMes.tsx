@@ -7,7 +7,7 @@ import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_PAGOS } from "@/lib/filtr
 import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
 import type { Alcance, AvisoDatos, EstadoVencimiento, LimitesFechas, Vencimiento } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
-import { FiltroFechasActivo, SelectorFechas } from "../SelectorFechas";
+import { SelectorFechas } from "../SelectorFechas";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { Icono, Insignia, Tarjeta } from "./TarjetaEstado";
@@ -123,9 +123,7 @@ export function PagosDelMes() {
       <section aria-label="Afinar por día" className="mt-5">
         <SelectorFechas modo="rango" valor={rango} onChange={setRango} limites={limites?.ventana} hoy={hoy} atajos={["hoy", "semana"]} etiqueta="Vence entre" restringidoAMes={periodo} />
         {rango && (
-          <div className="mt-2">
-            <FiltroFechasActivo rotulo="Vence entre" rango={rango} alQuitar={() => setRango(null)} />
-          </div>
+          <button type="button" onClick={() => setRango(null)} className="mt-2 text-sm font-semibold underline">Quitar filtro</button>
         )}
       </section>
 

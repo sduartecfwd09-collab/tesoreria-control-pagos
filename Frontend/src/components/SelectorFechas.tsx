@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  aTextoDMA, deTextoDMA, mesDentroDeLimites, nombreDelPeriodo, rangoDeAtajo, recortarRango, sumarMeses, TEXTO_ATAJO, textoEntre, validarRango,
+  aTextoDMA, deTextoDMA, mesDentroDeLimites, nombreDelPeriodo, rangoDeAtajo, recortarRango, sumarMeses, TEXTO_ATAJO, validarRango,
   type IdAtajo, type Limites, type Rango,
 } from "@/lib/fechas";
 
@@ -168,14 +168,4 @@ type Props = Comunes & { hoy: string } & (
 export function SelectorFechas(props: Props) {
   if (props.modo === "mes") return <SelectorMes valor={props.valor} alCambiar={props.onChange} limites={props.limites} />;
   return <SelectorRango valor={props.valor} alCambiar={props.onChange} limites={props.limites} hoy={props.hoy} atajos={props.atajos} etiqueta={props.etiqueta} restringidoAMes={props.restringidoAMes} />;
-}
-
-/** Filtro de fechas activo, como etiqueta con «Quitar» («Vence entre 01/10/2026 y 15/10/2026»). */
-export function FiltroFechasActivo({ rotulo, rango, alQuitar }: { rotulo: string; rango: Rango; alQuitar: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-control bg-fondo-suave px-3 py-1 text-sm">
-      <span>{rotulo} <b>{textoEntre(rango)}</b></span>
-      <button type="button" onClick={alQuitar} aria-label={`Quitar el filtro: ${rotulo} ${textoEntre(rango)}`} className="font-semibold underline">Quitar</button>
-    </span>
-  );
 }

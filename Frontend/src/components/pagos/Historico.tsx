@@ -6,7 +6,7 @@ import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { Categoria, EstadoVencimiento, LimitesFechas, RespuestaHistorico, Sociedad } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
-import { FiltroFechasActivo, SelectorFechas } from "../SelectorFechas";
+import { SelectorFechas } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { CajaError, claseControl, FinDeLista, NombreSociedad } from "../ui";
 import { DetallePago } from "./DetallePago";
@@ -73,11 +73,6 @@ export function Historico() {
       <section aria-label="Filtros del histórico" className="mt-5">
         <SelectorFechas modo="rango" valor={rango ?? aplicado} onChange={setRango} limites={limitesHistorico} hoy={limites?.hoy ?? aplicado?.hasta ?? ""}
           atajos={["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"]} etiqueta="Vence entre" />
-        {rango && (
-          <div className="mt-2">
-            <FiltroFechasActivo rotulo="Vence entre" rango={rango} alQuitar={() => setRango(null)} />
-          </div>
-        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="flex min-w-60 max-w-sm flex-1 items-center gap-2 rounded-[10px] border border-control px-3 py-1.5 text-suave">
