@@ -364,7 +364,6 @@ export function FormularioObligacion({
           <button type="button" onClick={intentarCerrar} className={claseBotonSecundario}>
             Cancelar
           </button>
-          {!nueva && !isDirty && <span className="text-sm text-suave">Cambie algún dato para poder guardar.</span>}
         </div>
       </form>
       {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
