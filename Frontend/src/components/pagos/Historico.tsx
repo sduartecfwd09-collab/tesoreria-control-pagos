@@ -1,12 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { textoEntre, type Rango } from "@/lib/fechas";
+import { limitesDeNavegacion, opcionesDePeriodo, textoEntre, type IdAtajo, type Rango } from "@/lib/fechas";
 import { montoPagado, nombreFecha, nombrePeriodo } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { Categoria, EstadoVencimiento, LimitesFechas, RespuestaHistorico, Sociedad } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
-import { SelectorFechas } from "../SelectorFechas";
+import { SelectorPeriodo } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { CajaError, claseControl, FinDeLista, NombreSociedad } from "../ui";
 import { DetallePago } from "./DetallePago";
@@ -14,6 +14,7 @@ import { ESTADO, EstadoPago, ORDEN } from "./EstadoPago";
 
 const POR_PAGINA = 50;
 const ESTADOS = (Object.keys(ESTADO) as EstadoVencimiento[]).sort((a, b) => ORDEN[a] - ORDEN[b]);
+const OPCIONES: IdAtajo[] = ["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"];
 const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
 
 /**
@@ -62,7 +63,7 @@ export function Historico() {
 
   const aplicado = meta?.rango ?? null;
   // el Histórico es el pasado: no se elige después de hoy
-  const limitesHistorico = limites ? { primera: limites.ventana.primera, ultima: limites.hoy } : undefined;
+  const limitesHistorico = limites ? limitesDeNavegacion(limites, true) : undefined;
   const hayFiltros = Boolean(sociedad || categoria || estado || q);
   const vacio = lista.datos !== null && lista.datos.length === 0 && aplicado;
 
@@ -71,8 +72,9 @@ export function Historico() {
       <LineaAlcance alcance={lista.alcance} />
 
       <section aria-label="Filtros del histórico" className="mt-5">
-        <SelectorFechas modo="rango" valor={rango ?? aplicado} onChange={setRango} limites={limitesHistorico} hoy={limites?.hoy ?? aplicado?.hasta ?? ""}
-          atajos={["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"]} etiqueta="Vence entre" />
+        {limites && (
+          <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites.hoy, limitesHistorico)} inicial="ultimos_12_meses" rangoActual={rango ?? aplicado} limites={limitesHistorico} alCambiar={setRango} />
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="flex min-w-60 max-w-sm flex-1 items-center gap-2 rounded-[10px] border border-control px-3 py-1.5 text-suave">

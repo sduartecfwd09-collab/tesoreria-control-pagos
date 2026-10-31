@@ -183,6 +183,28 @@ describe("Movimientos sin obligación", () => {
     expect(r.totalPagos).toBe(1);
   });
 
+  it("filtra por fecha del movimiento (desde y hasta, ambos incluidos) en la lista y en el detalle, y rechaza fechas inválidas", async () => {
+    await movimiento(cuentaE1, archivoE1, dia(2026, 9, 30), "Pago:TIGO 55500055", 1000n);
+    await movimiento(cuentaE1, archivoE1, dia(2026, 10, 3), "Pago:TIGO 55500055", 1000n);
+    await movimiento(cuentaE1, archivoE1, dia(2026, 10, 20), "Pago:TIGO 55500055", 1000n);
+    const app = await crearApp({ reloj });
+    try {
+      const pedir = async (consulta: string) => (await app.inject(`/api/movimientos-sin-obligacion${consulta}`)).json() as { totalPagos: number; datos: { clave: string; primeraFecha: string; ultimaFecha: string }[]; error?: string };
+      expect((await pedir("")).totalPagos).toBe(3);
+      const octubre = await pedir("?desde=2026-10-01&hasta=2026-10-31");
+      expect(octubre.totalPagos).toBe(2);
+      expect(octubre.datos[0]).toMatchObject({ primeraFecha: "2026-10-03", ultimaFecha: "2026-10-20" });
+      expect((await pedir("?desde=2026-10-03&hasta=2026-10-03")).totalPagos).toBe(1);
+      expect((await pedir("?desde=2026-11-01")).totalPagos).toBe(0);
+      const detalle = (await app.inject(`/api/movimientos-sin-obligacion/detalle?clave=${encodeURIComponent(octubre.datos[0]!.clave)}&desde=2026-10-01&hasta=2026-10-31`)).json() as { datos: { pagos: unknown[] } };
+      expect(detalle.datos.pagos).toHaveLength(2);
+      expect((await app.inject("/api/movimientos-sin-obligacion?desde=2026-13-01")).statusCode).toBe(400);
+      expect((await app.inject("/api/movimientos-sin-obligacion?desde=2026-10-31&hasta=2026-10-01")).statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("un servicio desactivado sigue siendo del catálogo; la lista vacía se informa con ceros; no escribe nada", async () => {
     const o = await crearObligacion(sociedadA, "Luz Ana", "7771234");
     await prisma.obligacion.update({ where: { id: o.id }, data: { activa: false } });

@@ -101,3 +101,34 @@ test("frases de Mi configuración", () => {
   assert.equal(f.fraseDeEspera(15, pago), "Si el pago del 20 no aparece en el banco, se espera hasta el 4 de noviembre y desde el 5 de noviembre se marca Vencido.");
   assert.equal(f.fraseDeEspera(11, "2026-12-20"), "Si el pago del 20 no aparece en el banco, se espera hasta el 31 y desde el 1 de enero se marca Vencido.");
 });
+
+test("opciones del período: solo las válidas, recortadas a lo que se puede elegir", () => {
+  const ids = ["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"];
+  const textos = (l) => l.map((o) => o.texto);
+  // Histórico: el tope es hoy, así que «Este mes» y «Este año» terminan hoy
+  const historico = f.opcionesDePeriodo(ids, "2026-10-27", { primera: "2021-10-01", ultima: "2026-10-27" });
+  assert.deepEqual(textos(historico), ["Últimos 12 meses", "Este mes", "Mes anterior", "Últimos 3 meses", "Este año", "Elegir fechas"]);
+  assert.deepEqual(historico[1].rango, { desde: "2026-10-01", hasta: "2026-10-27" });
+  assert.deepEqual(historico[0].rango, { desde: "2025-11-01", hasta: "2026-10-27" });
+  // con una ventana que no llega al mes anterior, esa opción no se ofrece (nunca queda una opción que dé error)
+  const corta = f.opcionesDePeriodo(ids, "2026-10-27", { primera: "2026-10-01", ultima: "2026-10-27" });
+  assert.equal(textos(corta).includes("Mes anterior"), false);
+  assert.ok(corta.every((o) => o.id === "elegir" || o.rango));
+  // «Todas las fechas» solo si se pide y va primero, sin rango
+  const conTodo = f.opcionesDePeriodo(ids, "2026-10-27", null, true);
+  assert.deepEqual(conTodo[0], { id: "todo", texto: "Todas las fechas", rango: null });
+});
+
+test("opciones de Pagos del mes: Hoy y Esta semana solo en el mes actual", () => {
+  const actual = f.opcionesDelMes("2026-10", "2026-10-31");
+  assert.deepEqual(actual.map((o) => o.texto), ["Todo el mes", "Hoy", "Esta semana", "Elegir fechas"]);
+  assert.deepEqual(actual[2].rango, { desde: "2026-10-26", hasta: "2026-10-31" }); // la semana llega al 1 de nov: se recorta al mes
+  assert.deepEqual(f.opcionesDelMes("2026-09", "2026-10-31").map((o) => o.texto), ["Todo el mes", "Elegir fechas"]);
+  assert.deepEqual(f.opcionesDelMes("2026-11", "2026-10-31").map((o) => o.texto), ["Todo el mes", "Elegir fechas"]);
+});
+
+test("límites de navegación: la ventana del servidor, y el Histórico cerrado en hoy", () => {
+  const r = { hoy: "2026-10-27", ventana: { primera: "2021-10-01", ultima: "2027-10-31" } };
+  assert.deepEqual(f.limitesDeNavegacion(r), { primera: "2021-10-01", ultima: "2027-10-31" });
+  assert.deepEqual(f.limitesDeNavegacion(r, true), { primera: "2021-10-01", ultima: "2026-10-27" });
+});

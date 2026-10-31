@@ -1,22 +1,23 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  aTextoDMA, deTextoDMA, mesDentroDeLimites, nombreDelPeriodo, rangoDeAtajo, recortarRango, sumarMeses, TEXTO_ATAJO, validarRango,
-  type IdAtajo, type Limites, type Rango,
+  aTextoDMA, deTextoDMA, mesDentroDeLimites, nombreDelPeriodo, OPCION_ELEGIR, sumarMeses, validarRango,
+  type Limites, type OpcionPeriodo, type Rango,
 } from "@/lib/fechas";
+import { claseControl } from "./ui";
 
-// Selector de fechas único y reutilizable. Modo «mes»: flechas, y un panel para saltar de mes y de año. Modo «rango»: «Desde» y «Hasta»
-// en día/mes/año, con atajos opcionales. La lógica (validación, atajos, límites) está en lib/fechas.ts y se prueba con `npm run fechas`.
+// Selectores de fechas. «Mes»: flechas y un panel para saltar de mes y de año. «Período»: lista desplegable con opciones válidas y, solo con «Elegir fechas»,
+// «Desde» y «Hasta». La lógica (validación, opciones, límites) está en lib/fechas.ts y se prueba con `npm run fechas`.
 
 const MESES_PANEL = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const claseFlecha = "flex px-3.5 py-2.5 disabled:cursor-not-allowed disabled:text-suave disabled:opacity-50";
 
 interface Comunes {
-  /** primera y última fecha con datos; null mientras no se conocen o si no hay datos (no limita) */
+  /** fechas que se pueden elegir; null o ausente = sin límite */
   limites?: Limites | null;
 }
 
-function SelectorMes({ valor, alCambiar, limites }: { valor: string; alCambiar: (mes: string) => void } & Comunes) {
+export function SelectorMes({ valor, alCambiar, limites }: { valor: string; alCambiar: (mes: string) => void } & Comunes) {
   const [abierto, setAbierto] = useState(false);
   const [anio, setAnio] = useState(Number(valor.slice(0, 4)));
   const raiz = useRef<HTMLDivElement>(null);
@@ -87,85 +88,80 @@ function SelectorMes({ valor, alCambiar, limites }: { valor: string; alCambiar: 
 }
 
 const claseEntrada = "w-36 rounded border-2 border-control bg-fondo px-3 py-2 text-sm";
-const claseAtajo = "rounded-full border border-control px-3 py-1 text-xs font-semibold hover:bg-fondo-suave aria-pressed:bg-acento aria-pressed:text-sobre-acento";
 
-function SelectorRango({ valor, alCambiar, limites, hoy, atajos, etiqueta, restringidoAMes }: {
-  valor: Rango | null; alCambiar: (r: Rango | null) => void; hoy: string; atajos?: IdAtajo[]; etiqueta?: string; restringidoAMes?: string;
-} & Comunes) {
-  const [desde, setDesde] = useState(valor ? aTextoDMA(valor.desde) : "");
-  const [hasta, setHasta] = useState(valor ? aTextoDMA(valor.hasta) : "");
+/**
+ * Lista desplegable de período. Las opciones ya vienen filtradas (solo válidas). Solo «Elegir fechas» muestra «Desde» y «Hasta»
+ * (día/mes/año) y las comprueba contra `limites` y, si se indica, contra un mes. Al elegir una opción con rango, o al escribir fechas válidas,
+ * avisa con `alCambiar(rango)`; `null` = sin filtro de fechas. El padre cambia la `key` para reiniciarla (p. ej. al cambiar de mes).
+ */
+export function SelectorPeriodo({ etiqueta, opciones, inicial, rangoActual, limites, mes, alCambiar }: {
+  etiqueta: string;
+  opciones: OpcionPeriodo[];
+  inicial: string;
+  /** rango que se ve ahora; sirve de punto de partida al elegir fechas */
+  rangoActual: Rango | null;
+  limites?: Limites | null;
+  mes?: string;
+  alCambiar: (rango: Rango | null) => void;
+}) {
+  const [elegida, setElegida] = useState(opciones.some((o) => o.id === inicial) ? inicial : opciones[0]!.id);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [error, setError] = useState<string | null>(null);
   const id = useId();
+  // si la opción elegida deja de ofrecerse (cambió «hoy» o la ventana), se vuelve a la primera
+  const vigente = opciones.some((o) => o.id === elegida) ? elegida : opciones[0]!.id;
+  const pidiendoFechas = vigente === OPCION_ELEGIR.id;
 
-  // el valor puede cambiar desde afuera (un atajo, «Quitar», otro mes): los campos lo siguen
-  const clave = valor ? `${valor.desde}|${valor.hasta}` : "";
-  const [claveVista, setClaveVista] = useState(clave);
-  if (clave !== claveVista) {
-    setClaveVista(clave);
-    setDesde(valor ? aTextoDMA(valor.desde) : "");
-    setHasta(valor ? aTextoDMA(valor.hasta) : "");
+  const elegir = (nueva: string) => {
+    const opcion = opciones.find((o) => o.id === nueva)!;
+    setElegida(nueva);
     setError(null);
-  }
+    if (nueva === OPCION_ELEGIR.id) {
+      setDesde(rangoActual ? aTextoDMA(rangoActual.desde) : "");
+      setHasta(rangoActual ? aTextoDMA(rangoActual.hasta) : "");
+    } else {
+      alCambiar(opcion.rango);
+    }
+  };
 
-  const opciones = { limites, mes: restringidoAMes };
   const confirmar = (d: string, h: string) => {
-    if (d.trim() === "" && h.trim() === "") return setError(null), alCambiar(null);
+    if (d.trim() === "" || h.trim() === "") return setError(d.trim() === "" && h.trim() === "" ? null : "Complete «Desde» y «Hasta».");
     const a = deTextoDMA(d);
     const b = deTextoDMA(h);
-    if (d.trim() === "" || h.trim() === "") return setError("Complete «Desde» y «Hasta».");
-    const mensaje = a && b ? validarRango({ desde: a, hasta: b }, opciones) : "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
+    const mensaje = a && b ? validarRango({ desde: a, hasta: b }, { limites, mes }) : "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
     setError(mensaje);
     if (!mensaje && a && b) alCambiar({ desde: a, hasta: b });
   };
   const alTeclear = (e: React.KeyboardEvent) => e.key === "Enter" && confirmar(desde, hasta);
-  const usarAtajo = (idAtajo: IdAtajo) => {
-    if (!hoy) return;
-    const r = recortarRango(rangoDeAtajo(idAtajo, hoy), opciones);
-    if (!r) return setError(restringidoAMes ? `«${TEXTO_ATAJO[idAtajo]}» queda fuera de ${nombreDelPeriodo(restringidoAMes)}.` : `«${TEXTO_ATAJO[idAtajo]}» queda fuera de las fechas que se pueden elegir.`);
-    setError(null);
-    alCambiar(r);
-  };
 
   return (
-    <div role="group" aria-label={etiqueta ?? "Rango de fechas"}>
+    <div role="group" aria-label={etiqueta}>
       <div className="flex flex-wrap items-end gap-3">
-        {etiqueta && <span className="pb-2.5 text-sm font-semibold">{etiqueta}</span>}
         <div>
-          <label htmlFor={`${id}-desde`} className="block text-xs font-semibold text-suave">Desde</label>
-          <input id={`${id}-desde`} value={desde} onChange={(e) => setDesde(e.target.value)} onBlur={() => confirmar(desde, hasta)} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
-            placeholder="dd/mm/aaaa" aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className={claseEntrada} />
+          <label htmlFor={`${id}-lista`} className="block text-xs font-semibold text-suave">{etiqueta}</label>
+          <select id={`${id}-lista`} value={vigente} onChange={(e) => elegir(e.target.value)} className={`${claseControl} text-sm`}>
+            {opciones.map((o) => (
+              <option key={o.id} value={o.id}>{o.texto}</option>
+            ))}
+          </select>
         </div>
-        <div>
-          <label htmlFor={`${id}-hasta`} className="block text-xs font-semibold text-suave">Hasta</label>
-          <input id={`${id}-hasta`} value={hasta} onChange={(e) => setHasta(e.target.value)} onBlur={() => confirmar(desde, hasta)} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
-            placeholder="dd/mm/aaaa" aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className={claseEntrada} />
-        </div>
-        {atajos && atajos.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 pb-1.5" role="group" aria-label="Atajos">
-            {atajos.map((a) => {
-              const r = hoy ? recortarRango(rangoDeAtajo(a, hoy), opciones) : null; // sin «hoy» del servidor aún no se calculan los atajos
-              const activo = Boolean(valor && r && valor.desde === r.desde && valor.hasta === r.hasta);
-              return (
-                <button key={a} type="button" onClick={() => usarAtajo(a)} aria-pressed={activo} disabled={!hoy} className={`${claseAtajo} ${activo ? "inline-flex items-center gap-1" : ""}`}>
-                  {activo && <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 8.5 3.2 3.2L13 4.5" /></svg>}
-                  {TEXTO_ATAJO[a]}
-                </button>
-              );
-            })}
-          </div>
+        {pidiendoFechas && (
+          <>
+            <div>
+              <label htmlFor={`${id}-desde`} className="block text-xs font-semibold text-suave">Desde</label>
+              <input id={`${id}-desde`} value={desde} onChange={(e) => setDesde(e.target.value)} onBlur={() => confirmar(desde, hasta)} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
+                placeholder="dd/mm/aaaa" aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className={claseEntrada} />
+            </div>
+            <div>
+              <label htmlFor={`${id}-hasta`} className="block text-xs font-semibold text-suave">Hasta</label>
+              <input id={`${id}-hasta`} value={hasta} onChange={(e) => setHasta(e.target.value)} onBlur={() => confirmar(desde, hasta)} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
+                placeholder="dd/mm/aaaa" aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className={claseEntrada} />
+            </div>
+          </>
         )}
       </div>
       {error && <p id={`${id}-error`} role="alert" className="mt-2 text-sm font-semibold text-rojo">{error}</p>}
     </div>
   );
-}
-
-type Props = Comunes & { hoy: string } & (
-  | { modo: "mes"; valor: string; onChange: (mes: string) => void }
-  | { modo: "rango"; valor: Rango | null; onChange: (rango: Rango | null) => void; atajos?: IdAtajo[]; etiqueta?: string; restringidoAMes?: string }
-);
-
-export function SelectorFechas(props: Props) {
-  if (props.modo === "mes") return <SelectorMes valor={props.valor} alCambiar={props.onChange} limites={props.limites} />;
-  return <SelectorRango valor={props.valor} alCambiar={props.onChange} limites={props.limites} hoy={props.hoy} atajos={props.atajos} etiqueta={props.etiqueta} restringidoAMes={props.restringidoAMes} />;
 }

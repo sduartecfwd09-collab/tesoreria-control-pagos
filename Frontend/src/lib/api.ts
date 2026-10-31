@@ -51,10 +51,10 @@ export const api = {
   listarParametros: async () => (await pedir<{ datos: Parametro[] }>("/api/parametros")).datos,
 
   obtenerAvisos: () => pedir<Avisos>("/api/avisos"),
-  movimientosSinObligacion: () => pedir<MovimientosSinObligacion>("/api/movimientos-sin-obligacion"),
+  movimientosSinObligacion: (p: { desde?: string; hasta?: string } = {}) => pedir<MovimientosSinObligacion>(`/api/movimientos-sin-obligacion${consulta(p)}`),
 
-  movimientoSinObligacionDetalle: async (clave: string) =>
-    (await pedir<{ datos: DetalleMovimientoSinObligacion }>(`/api/movimientos-sin-obligacion/detalle?clave=${encodeURIComponent(clave)}`)).datos,
+  movimientoSinObligacionDetalle: async (clave: string, p: { desde?: string; hasta?: string } = {}) =>
+    (await pedir<{ datos: DetalleMovimientoSinObligacion }>(`/api/movimientos-sin-obligacion/detalle${consulta({ clave, ...p })}`)).datos,
   informacionArchivo: async (id: number) => (await pedir<{ datos: InfoArchivo }>(`/api/archivos/${id}`)).datos,
   obtenerIdentidad: () => pedir<Identidad>("/api/identidad"),
   obtenerMiConfiguracion: async () => (await pedir<{ datos: MiConfiguracion }>("/api/mi-configuracion")).datos,

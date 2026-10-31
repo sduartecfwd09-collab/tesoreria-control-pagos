@@ -2,12 +2,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { MESES } from "@/lib/formato";
-import { primerDia, textoEntre, tipoDeVacio, ultimoDia, type Rango } from "@/lib/fechas";
+import { limitesDeNavegacion, opcionesDelMes, primerDia, textoEntre, tipoDeVacio, ultimoDia, type Rango } from "@/lib/fechas";
 import { contarPorTarjeta, filtrarPorTarjeta, TARJETAS_PAGOS } from "@/lib/filtro-tarjetas";
 import { useFiltroTarjeta } from "@/lib/useFiltroTarjeta";
 import type { Alcance, AvisoDatos, EstadoVencimiento, LimitesFechas, Vencimiento } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
-import { SelectorFechas } from "../SelectorFechas";
+import { SelectorMes, SelectorPeriodo } from "../SelectorFechas";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { Icono, Insignia, Tarjeta } from "./TarjetaEstado";
@@ -84,6 +84,7 @@ export function PagosDelMes() {
   if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), setIntento((n) => n + 1))} />;
   if (!hoy || !periodo) return <p className="mt-8 text-suave" role="status">Cargando pagos…</p>;
 
+  const navegable = limites ? limitesDeNavegacion(limites) : undefined;
   const nombreMes = MESES[Number(periodo.slice(5, 7)) - 1]!;
   const cambiarMes = (nuevo: string) => (setPeriodo(nuevo), setRango(null)); // el día o rango es de un mes: al cambiar de mes se quita
   const todos = datos ?? [];
@@ -116,15 +117,12 @@ export function PagosDelMes() {
           <span className="text-xs font-light uppercase tracking-[0.24em] text-suave">Hoy · {textoHoy(hoy)}</span>
           <h1 className="mt-1.5 text-[32px] font-extrabold">Pagos de {nombreMes}</h1>
         </div>
-        <SelectorFechas modo="mes" valor={periodo} onChange={cambiarMes} limites={limites?.ventana} hoy={hoy} />
+        <SelectorMes valor={periodo} alCambiar={cambiarMes} limites={navegable} />
       </header>
       <LineaAlcance alcance={mes?.alcance} estadosCalculadosEn={mes?.calculado} />
 
       <section aria-label="Afinar por día" className="mt-5">
-        <SelectorFechas modo="rango" valor={rango} onChange={setRango} limites={limites?.ventana} hoy={hoy} atajos={["hoy", "semana"]} etiqueta="Vence entre" restringidoAMes={periodo} />
-        {rango && (
-          <button type="button" onClick={() => setRango(null)} className="mt-2 text-sm font-semibold underline">Quitar filtro</button>
-        )}
+        <SelectorPeriodo key={periodo} etiqueta="Mostrar" opciones={opcionesDelMes(periodo, hoy)} inicial="todo_el_mes" rangoActual={rango} limites={navegable} mes={periodo} alCambiar={setRango} />
       </section>
 
       {avisos.length > 0 && (

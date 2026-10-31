@@ -2,22 +2,23 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { montoPagado, nombreFecha } from "@/lib/formato";
+import type { Rango } from "@/lib/fechas";
 import type { DetalleMovimientoSinObligacion } from "@/lib/tipos";
 import { Ficha } from "../Ficha";
 import { AccionesArchivo } from "./AccionesArchivo";
 
 /** Detalle de un pago sin obligación (solo lectura): cada pago del grupo con lo que dice el banco y su archivo de origen. */
-export function FichaMovimiento({ clave, proveedor, alCerrar }: { clave: string; proveedor: string; alCerrar: () => void }) {
+export function FichaMovimiento({ clave, proveedor, periodo, alCerrar }: { clave: string; proveedor: string; periodo?: Rango | null; alCerrar: () => void }) {
   const [d, setD] = useState<DetalleMovimientoSinObligacion | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let vigente = true;
-    api.movimientoSinObligacionDetalle(clave).then((r) => vigente && setD(r)).catch((e) => vigente && setError(e instanceof Error ? e.message : "No se pudo cargar la información del pago"));
+    api.movimientoSinObligacionDetalle(clave, { desde: periodo?.desde, hasta: periodo?.hasta }).then((r) => vigente && setD(r)).catch((e) => vigente && setError(e instanceof Error ? e.message : "No se pudo cargar la información del pago"));
     return () => {
       vigente = false;
     };
-  }, [clave]);
+  }, [clave, periodo?.desde, periodo?.hasta]);
 
   const fila = (k: string, v: ReactNode) => (
     <>

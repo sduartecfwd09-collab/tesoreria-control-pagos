@@ -168,3 +168,35 @@ export function fraseDeEspera(diasEspera: number, pago: string): string {
   if (diasEspera === 0) return `Si el pago del ${dia} no aparece en el banco, desde el ${diaConMes(sumarDias(pago, 1), mes)} se marca Vencido.`;
   return `Si el pago del ${dia} no aparece en el banco, se espera hasta el ${diaConMes(sumarDias(pago, diasEspera), mes)} y desde el ${diaConMes(sumarDias(pago, diasEspera + 1), mes)} se marca Vencido.`;
 }
+
+// Opciones de la lista «Período» (Histórico, Vencidos, Movimientos sin obligación) y «Mostrar» (Pagos del mes). Solo se ofrecen las válidas.
+
+/** `rango` null = sin filtro de fechas (todo el período). «elegir» no lleva rango: la persona escribe Desde y Hasta. */
+export interface OpcionPeriodo {
+  id: IdAtajo | "todo" | "todo_el_mes" | "elegir";
+  texto: string;
+  rango: Rango | null;
+}
+
+export const OPCION_ELEGIR: OpcionPeriodo = { id: "elegir", texto: "Elegir fechas", rango: null };
+
+/** Atajos de calendario recortados a lo que se puede elegir; los que quedan fuera no se ofrecen. `conTodo` agrega «Todas las fechas» al principio. */
+export function opcionesDePeriodo(ids: IdAtajo[], hoy: string, limites?: Limites | null, conTodo = false): OpcionPeriodo[] {
+  const lista: OpcionPeriodo[] = conTodo ? [{ id: "todo", texto: "Todas las fechas", rango: null }] : [];
+  for (const id of ids) {
+    const rango = recortarRango(rangoDeAtajo(id, hoy), { limites });
+    if (rango) lista.push({ id, texto: TEXTO_ATAJO[id], rango });
+  }
+  return [...lista, OPCION_ELEGIR];
+}
+
+/** Pagos del mes: «Todo el mes» siempre; «Hoy» y «Esta semana» solo si se ve el mes actual (la semana, recortada al mes). */
+export function opcionesDelMes(periodo: string, hoy: string): OpcionPeriodo[] {
+  const lista: OpcionPeriodo[] = [{ id: "todo_el_mes", texto: "Todo el mes", rango: null }];
+  if (periodo === periodoDe(hoy)) {
+    lista.push({ id: "hoy", texto: TEXTO_ATAJO.hoy, rango: rangoDeAtajo("hoy", hoy) });
+    const semana = recortarRango(semanaDe(hoy), { mes: periodo });
+    if (semana) lista.push({ id: "semana", texto: TEXTO_ATAJO.semana, rango: semana });
+  }
+  return [...lista, OPCION_ELEGIR];
+}
