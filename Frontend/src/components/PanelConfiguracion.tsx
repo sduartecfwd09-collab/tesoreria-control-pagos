@@ -6,12 +6,9 @@ import type { MiConfiguracion } from "@/lib/tipos";
 import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
 import { CajaError } from "./ui";
 import { fechaHoraCR } from "@/lib/formato";
-import { ESTADO, EtiquetaEstado } from "./pagos/EstadoPago";
-import type { EstadoVencimiento } from "@/lib/tipos";
+import { fraseDeAviso, fraseDeEspera } from "@/lib/fechas";
 
 const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
-const fecha = (d: Date) => d.toLocaleDateString("es-CR", { day: "numeric", month: "long" });
-const sumarDias = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
 /** Entero entre 0 y max, o null si el texto no lo es. */
 function entero(texto: string, max: number): number | null {
@@ -46,137 +43,8 @@ function CampoDias({
         <span className="text-sm font-medium">días</span>
       </div>
       {error && <p id={`${id}-error`} role="alert" className="mt-2 text-sm font-medium text-rojo">{error}</p>}
-      <p className="mt-3 rounded border border-divisor bg-fondo-suave px-3 py-2 text-sm">
-        <strong>Ejemplo:</strong> {ejemplo}
-      </p>
+      <p className="mt-3 text-sm">{ejemplo}</p>
     </div>
-  );
-}
-
-/** Un hito es un día que marca un cambio (marcador neutro, sin color de estado); un tramo es un estado real entre dos hitos. */
-type Paso =
-  | { tipo: "hito"; titulo: string; fecha: Date; frase: string }
-  | { tipo: "tramo"; estado: EstadoVencimiento; etiqueta: string; espera?: boolean; rango: string; frase: string };
-
-/** Reloj de arena del sistema de diseño (mismo trazo y tamaño que los íconos de estado). */
-function IconoEspera() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-      <path d="M4 2h8M4 14h8M5 2v2.5L8 8l3-3.5V2M5 14v-2.5L8 8l3 3.5V14" />
-    </svg>
-  );
-}
-
-/** Un pago de ejemplo, con los dos valores escritos en los campos (no los guardados): hito, tramo, hito, tramo, en orden cronológico. */
-function PanelEjemplo({ pago, aviso, espera }: { pago: Date; aviso: number | null; espera: number | null }) {
-  const invalidos = [aviso === null && "los días de aviso (de 0 a 60)", espera === null && "los días de espera (de 0 a 15)"].filter(Boolean);
-  let contenido: React.ReactNode;
-  if (aviso === null || espera === null) {
-    contenido = (
-      <p role="status" className="mt-4 rounded border border-divisor bg-fondo-suave px-3 py-2 text-sm">
-        Escriba un número entero válido en {invalidos.join(" y en ")} para ver cómo se comportaría un pago.
-      </p>
-    );
-  } else {
-    const inicio = sumarDias(pago, -aviso);
-    const finEspera = sumarDias(pago, espera);
-    const vence = sumarDias(pago, espera + 1);
-    const pasos: Paso[] = [
-      {
-        tipo: "tramo",
-        estado: "proyectado",
-        etiqueta: "Programado",
-        rango: `Hasta el ${fecha(sumarDias(inicio, -1))}`,
-        frase: "Todavía falta tiempo: el pago está programado y no se avisa.",
-      },
-      {
-        tipo: "hito",
-        titulo: "Empieza el aviso",
-        fecha: inicio,
-        frase: aviso === 0 ? "No hay días de aviso: el aviso empieza el mismo día de pago." : `Desde este día el sistema le avisa del pago (${textoDias(aviso)} antes).`,
-      },
-      {
-        tipo: "tramo",
-        estado: "por_vencer",
-        etiqueta: "Por vencer",
-        rango: aviso === 0 ? `Solo el ${fecha(pago)}` : `Del ${fecha(inicio)} al ${fecha(pago)}`,
-        frase: "El pago se acerca o es hoy. Si aparece en el estado de cuenta, pasa a Pagado.",
-      },
-      {
-        tipo: "hito",
-        titulo: "Día de pago",
-        fecha: pago,
-        frase: espera === 0 ? "Es la fecha habitual de pago. No hay días de espera: si el pago no aparece este día, al siguiente se marca Vencido." : "Es la fecha habitual de pago.",
-      },
-      ...(espera > 0
-        ? ([
-            {
-              tipo: "tramo",
-              estado: "por_vencer",
-              etiqueta: "Por vencer, esperando el pago",
-              espera: true,
-              rango: espera === 1 ? `Solo el ${fecha(finEspera)}` : `Del ${fecha(sumarDias(pago, 1))} al ${fecha(finEspera)}`,
-              frase: "La fecha de pago pasó y se espera que el pago aparezca. Sigue Por vencer.",
-            },
-            { tipo: "hito", titulo: "Fin de la espera", fecha: finEspera, frase: "Último día de espera. Si el pago no aparece, desde el día siguiente se marca Vencido." },
-          ] as Paso[])
-        : []),
-      {
-        tipo: "tramo",
-        estado: "vencido",
-        etiqueta: "Vencido",
-        rango: `Desde el ${fecha(vence)}`,
-        frase: "El pago no apareció en el tiempo de espera. Se sigue buscando por si llega.",
-      },
-    ];
-    contenido = (
-      <ol className="mt-4">
-        {pasos.map((p, i) => {
-          const ultimo = i === pasos.length - 1;
-          const riel = `border-l-2 ${p.tipo === "tramo" && p.espera ? "border-dashed" : ""} border-divisor pl-5 ${ultimo ? "!border-transparent pb-0" : "pb-4"}`;
-          if (p.tipo === "hito") {
-            return (
-              <li key={`h-${p.titulo}`} className={`relative ${riel}`}>
-                <span aria-hidden="true" className="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-texto bg-fondo" />
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{p.titulo}</span>
-                  <span className="text-sm text-suave">{fecha(p.fecha)}</span>
-                </div>
-                <p className="mt-1 text-sm">{p.frase}</p>
-              </li>
-            );
-          }
-          return (
-            <li key={`t-${p.etiqueta}`} className={riel}>
-              <div className="flex flex-wrap items-center gap-2">
-                {p.espera ? (
-                  <span title={ESTADO.por_vencer.ayuda} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-dashed border-texto px-3 py-1 text-xs font-bold ${ESTADO.por_vencer.clase}`}>
-                    <IconoEspera />
-                    {p.etiqueta}
-                  </span>
-                ) : (
-                  <EtiquetaEstado estado={p.estado} texto={p.etiqueta} />
-                )}
-                <span className="text-sm text-suave">{p.rango}</span>
-              </div>
-              <p className="mt-1 text-sm">{p.frase}</p>
-            </li>
-          );
-        })}
-      </ol>
-    );
-  }
-
-  return (
-    <aside aria-labelledby="h-ejemplo" className="rounded-[14px] border border-divisor bg-fondo p-5">
-      <h2 id="h-ejemplo" className="text-lg font-bold border-b-2 border-acento pb-1">
-        Así funcionará con sus valores
-      </h2>
-      <p className="mt-2 text-sm text-suave">
-        Ejemplo con un pago cuyo día de pago es el {fecha(pago)}. Se actualiza mientras escribe, antes de guardar.
-      </p>
-      {contenido}
-    </aside>
   );
 }
 
@@ -247,21 +115,11 @@ export function PanelConfiguracion() {
   const nEspera = entero(espera, 15);
   const cambiado = nAviso !== datos.diasAviso || nEspera !== datos.diasEspera;
 
-  // Ejemplos con fechas: toman el día 20 del mes en curso como fecha de pago ilustrativa.
+  // Un pago de ejemplo que vence el 20 del mes en curso; las frases cambian mientras se escribe.
   const hoy = new Date();
-  const pago = new Date(hoy.getFullYear(), hoy.getMonth(), 20);
-  const ejemploAviso =
-    nAviso === null
-      ? "Escriba un número de días para ver un ejemplo."
-      : nAviso === 0
-        ? `Si un pago vence el ${fecha(pago)}, el aviso aparece ese mismo día.`
-        : `Si un pago vence el ${fecha(pago)}, el aviso le aparece desde el ${fecha(sumarDias(pago, -nAviso))} (${textoDias(nAviso)} antes).`;
-  const ejemploEspera =
-    nEspera === null
-      ? "Escriba un número de días para ver un ejemplo."
-      : nEspera === 0
-        ? `Si el pago se esperaba el ${fecha(pago)} y no aparece, el ${fecha(sumarDias(pago, 1))} se marca Vencido.`
-        : `Si el pago se esperaba el ${fecha(pago)} y no aparece, hasta el ${fecha(sumarDias(pago, nEspera))} se sigue esperando; desde el ${fecha(sumarDias(pago, nEspera + 1))} se marca Vencido.`;
+  const pago = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-20`;
+  const ejemploAviso = nAviso === null ? "Escriba un número de días para ver un ejemplo." : fraseDeAviso(nAviso, pago);
+  const ejemploEspera = nEspera === null ? "Escriba un número de días para ver un ejemplo." : fraseDeEspera(nEspera, pago);
 
   function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -304,7 +162,7 @@ export function PanelConfiguracion() {
   }
 
   return (
-    <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,640px)_minmax(0,480px)]">
+    <div className="mt-8 max-w-[640px]">
     <form onSubmit={guardar} noValidate>
       <fieldset disabled={actualizando} className="contents">
       <section aria-labelledby="h-mis-reglas">
@@ -352,7 +210,6 @@ export function PanelConfiguracion() {
       )}
       {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
     </form>
-    <PanelEjemplo pago={pago} aviso={nAviso} espera={nEspera} />
     </div>
   );
 }

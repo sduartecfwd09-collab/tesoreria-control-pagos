@@ -89,3 +89,15 @@ test("qué decir cuando un período no tiene filas", () => {
   assert.equal(f.tipoDeVacio({ desde: "2026-05-01", hasta: "2026-05-31" }, hoy, null), "sin_informacion");
   assert.equal(f.tipoDeVacio({ desde: hoy, hasta: "2026-11-30" }, hoy, cobertura), "sin_informacion"); // empieza hoy: no es futuro
 });
+
+test("frases de Mi configuración", () => {
+  const pago = "2026-10-20";
+  assert.equal(f.fraseDeAviso(3, pago), "Con 3 días de aviso, un pago que vence el 20 aparece en Avisos desde el 17.");
+  assert.equal(f.fraseDeAviso(1, pago), "Con 1 día de aviso, un pago que vence el 20 aparece en Avisos desde el 19.");
+  assert.equal(f.fraseDeAviso(0, pago), "Con 0 días de aviso, un pago que vence el 20 aparece en Avisos desde el 20.");
+  assert.equal(f.fraseDeAviso(60, pago), "Con 60 días de aviso, un pago que vence el 20 aparece en Avisos desde el 21 de agosto.");
+  assert.equal(f.fraseDeEspera(3, pago), "Si el pago del 20 no aparece en el banco, se espera hasta el 23 y desde el 24 se marca Vencido.");
+  assert.equal(f.fraseDeEspera(0, pago), "Si el pago del 20 no aparece en el banco, desde el 21 se marca Vencido.");
+  assert.equal(f.fraseDeEspera(15, pago), "Si el pago del 20 no aparece en el banco, se espera hasta el 4 de noviembre y desde el 5 de noviembre se marca Vencido.");
+  assert.equal(f.fraseDeEspera(11, "2026-12-20"), "Si el pago del 20 no aparece en el banco, se espera hasta el 31 y desde el 1 de enero se marca Vencido.");
+});

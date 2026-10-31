@@ -136,3 +136,27 @@ export function tipoDeVacio(rango: Rango, hoy: string, cobertura: Limites | null
   if (!cobertura || rango.hasta < cobertura.primera || rango.desde > cobertura.ultima) return "sin_informacion";
   return "normal";
 }
+
+// Frases de Mi configuración: un pago de ejemplo que vence el día de `pago`, con los días de aviso y de espera que la persona escribe.
+
+/** «20» si cae en el mes del pago; «21 de septiembre» si cae en otro mes. */
+function diaConMes(iso: string, mesDelPago: string): string {
+  const dia = Number(iso.slice(8, 10));
+  return periodoDe(iso) === mesDelPago ? String(dia) : `${dia} de ${NOMBRES_MES[Number(iso.slice(5, 7)) - 1]}`;
+}
+
+const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
+
+/** «Con 3 días de aviso, un pago que vence el 20 aparece en Avisos desde el 17.» */
+export function fraseDeAviso(diasAviso: number, pago: string): string {
+  const mes = periodoDe(pago);
+  return `Con ${textoDias(diasAviso)} de aviso, un pago que vence el ${Number(pago.slice(8, 10))} aparece en Avisos desde el ${diaConMes(sumarDias(pago, -diasAviso), mes)}.`;
+}
+
+/** «Si el pago del 20 no aparece en el banco, se espera hasta el 23 y desde el 24 se marca Vencido.» */
+export function fraseDeEspera(diasEspera: number, pago: string): string {
+  const mes = periodoDe(pago);
+  const dia = Number(pago.slice(8, 10));
+  if (diasEspera === 0) return `Si el pago del ${dia} no aparece en el banco, desde el ${diaConMes(sumarDias(pago, 1), mes)} se marca Vencido.`;
+  return `Si el pago del ${dia} no aparece en el banco, se espera hasta el ${diaConMes(sumarDias(pago, diasEspera), mes)} y desde el ${diaConMes(sumarDias(pago, diasEspera + 1), mes)} se marca Vencido.`;
+}
