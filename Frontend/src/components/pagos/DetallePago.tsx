@@ -137,7 +137,7 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
                 {fila("Número de servicio", <span className="font-mono">{d.identificador}</span>)}
                 {fila("Sociedad", d.sociedad)}
                 {fila("Vence", <>{nombreFecha(d.fecha)}{d.movida && <span className="block text-xs font-normal text-suave">Antes: {nombreFecha(d.fechaOriginal)}{d.fechaMovidaPor ? ` · lo cambió ${d.fechaMovidaPor}` : ""}</span>}</>)}
-                {fila("Responsable", d.responsableEfectivo ?? "Sin responsable")}
+                {d.responsableEfectivo !== undefined && fila("Responsable", d.responsableEfectivo ?? "Sin responsable")}
               </dl>
             </Seccion>
           </>

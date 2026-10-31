@@ -404,7 +404,7 @@ export interface DetalleVencimiento {
   textoEstado: string | null;
   diferenciaDias: number | null;
   sinInfoHasta: string | null;
-  responsableEfectivo: string | null;
+  responsableEfectivo?: string | null; // solo lo recibe Jefatura
   ventana: { desde: string; hasta: string; diasAntes: number; diasDespues: number };
   cobertura: { estadosHasta: string | null; cuentas: number; cuentasSinCobertura: { cuenta: string; banco: string | null; hasta: string | null }[] } | null;
   /** textos armados por el servidor con los datos reales: qué pasó, por qué y qué hacer */

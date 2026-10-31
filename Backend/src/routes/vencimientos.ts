@@ -49,9 +49,11 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
     const d = await detalleDeVencimiento(id.data, opts.reloj);
     // fuera del alcance de la persona: no se distingue de uno que no existe
-    const ids = await obligacionesDelAlcance(await alcanceDe(req, opts.modoPruebas));
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const ids = await obligacionesDelAlcance(alcance);
     if (!d || (ids && !ids.includes(d.obligacionId))) return reply.code(404).send({ error: "Vencimiento no encontrado" });
-    return { datos: d };
+    // el responsable solo se informa a Jefatura: a un tesorero le repetiría que es él
+    return { datos: alcance.tipo === "todo" ? d : { ...d, responsableEfectivo: undefined } };
   });
 
   // Aviso de datos: sociedades cuyos estados de cuenta llegan hasta una fecha anterior a hoy menos N días.
