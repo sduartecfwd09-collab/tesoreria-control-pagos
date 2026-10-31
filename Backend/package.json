@@ -25,6 +25,7 @@
     "db:reiniciar": "tsx scripts/reiniciar-dev.ts",
     "db:preparar-test": "tsx scripts/preparar-test.ts",
     "catalogo": "tsx src/cli/catalogo.ts",
+    "calidad:reporte": "tsx src/cli/calidad-reporte.ts",
     "reimportar": "tsx src/cli/reimportar.ts",
     "cruzar": "tsx src/cli/cruzar.ts",
     "cruzar:diagnostico": "tsx src/cli/diagnostico-cruce.ts",

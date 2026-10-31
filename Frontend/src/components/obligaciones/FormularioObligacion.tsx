@@ -5,7 +5,7 @@ import { ErrorApi } from "@/lib/api";
 import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_MONEDA, SIMBOLO } from "@/lib/formato";
 import type { CambiosObligacion, Categoria, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
 import { ConfirmarCambio, ConfirmarSalida, type CambioPendiente } from "../ConfirmarCambio";
-import { Campo, claseBoton, claseBotonSecundario, claseControl, describir, Etiqueta } from "../ui";
+import { Campo, claseBoton, claseBotonSecundario, claseControl, describir } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
 
 const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
@@ -155,7 +155,6 @@ export function FormularioObligacion({
   }
 
   const desc = (id: keyof Valores, ayuda = true) => describir(`f-${id}`, ayuda, !!errors[id]);
-  const avisos = obligacion?.etiquetas ?? [];
 
   return (
     <dialog
@@ -183,20 +182,6 @@ export function FormularioObligacion({
         </div>
 
         <div className="space-y-6 px-6 py-5">
-          {avisos.length > 0 && (
-            <section aria-label="Avisos de esta obligación" className="rounded border border-divisor bg-fondo-suave p-4">
-              <h3 className="font-semibold">Revise antes de guardar</h3>
-              <ul className="mt-2 space-y-2 text-sm">
-                {avisos.map((a) => (
-                  <li key={a.codigo}>
-                    <Etiqueta tono={a.codigo === "falta_dia" || a.codigo === "falta_mes_arranque" ? "rojo" : "ambar"}>{a.texto}</Etiqueta>{" "}
-                    {a.ayuda}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
           {nueva ? (
             <fieldset className="grid gap-4 sm:grid-cols-2">
               <legend className="mb-2 text-lg font-bold">Datos de la obligación</legend>

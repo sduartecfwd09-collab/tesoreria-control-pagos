@@ -166,12 +166,6 @@ export function PanelObligaciones() {
             setTexto("");
             setFiltro({ activa: true, falta });
           }}
-          alBuscar={(sociedad, q) => {
-            setTexto(q);
-            // El aviso de calidad trae la sociedad como texto (abreviatura o nombre largo): se busca su identificador.
-            const encontrada = catalogos?.sociedades.find((s) => s.nombreLargo === sociedad);
-            cambiarFiltro({ sociedadId: encontrada?.id, q, activa: true, falta: undefined, categoria: undefined });
-          }}
         />
       )}
 
