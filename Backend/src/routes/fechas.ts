@@ -5,8 +5,12 @@ import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { limitesDeMovimientos, limitesDeVencimientos } from "../repositories/fechas.js";
 import { valorGlobal } from "../repositories/parametros.js";
 
+// Si la fila del parámetro no existe (la base no pasó por el seed), `Number(null)` daría 0 y la ventana se reduciría al mes en curso:
+// un valor ausente o vacío usa el respaldo.
 const entero = async (clave: string, respaldo: number) => {
-  const n = Number(await valorGlobal(clave));
+  const texto = await valorGlobal(clave);
+  if (texto === null || texto.trim() === "") return respaldo;
+  const n = Number(texto);
   return Number.isInteger(n) && n >= 0 ? n : respaldo;
 };
 

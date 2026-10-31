@@ -118,6 +118,14 @@ export function validarRango(r: Rango, opciones: { limites?: Limites | null; mes
   return null;
 }
 
+/**
+ * Fechas que se pueden elegir en el selector: la ventana que informa el servidor (años atrás y meses adelante), no los datos.
+ * Las pantallas del pasado (Histórico) la cierran en hoy.
+ */
+export function limitesDeNavegacion(respuesta: { hoy: string; ventana: Limites }, soloPasado = false): Limites {
+  return { primera: respuesta.ventana.primera, ultima: soloPasado && respuesta.hoy < respuesta.ventana.ultima ? respuesta.hoy : respuesta.ventana.ultima };
+}
+
 /** ¿Se puede ir a este mes? Sin límites siempre; con límites, solo si el mes tiene algún día con datos. */
 export function mesDentroDeLimites(periodo: string, limites: Limites | null | undefined): boolean {
   if (!limites) return true;

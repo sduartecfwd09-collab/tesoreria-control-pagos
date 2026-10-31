@@ -74,6 +74,39 @@ describe("GET /api/fechas/limites", () => {
   });
 });
 
+// De punta a punta: la respuesta real de la ruta pasa por la función del Frontend que arma lo que se puede elegir. El módulo del Frontend es
+// lógica pura sin dependencias; se carga por ruta para no mezclarlo con la compilación del Backend.
+const rutaFechasFrontend = new URL("../../Frontend/src/lib/fechas.ts", import.meta.url).href;
+
+describe("el selector puede navegar de 5 años atrás a 12 meses adelante", () => {
+  it("con el alcance de un Tesorero y sin filas de parámetros en la base (causa del error: Number(null) = 0)", async () => {
+    const claves = ["selector_anios_atras", "selector_meses_adelante"];
+    const guardadas = await prisma.parametro.findMany({ where: { clave: { in: claves } } });
+    await prisma.parametro.deleteMany({ where: { clave: { in: claves } } });
+    try {
+      const fechas = await import(/* @vite-ignore */ rutaFechasFrontend);
+      const app = await crearApp({ reloj, modoPruebas: true });
+      const r = (await app.inject({ method: "GET", url: "/api/fechas/limites", headers: encabezado(ana) })).json();
+      expect(r.alcance.tipo).toBe("mio");
+
+      const navegable = fechas.limitesDeNavegacion(r);
+      expect(navegable).toEqual({ primera: "2021-10-01", ultima: "2027-10-31" });
+      expect(fechas.mesDentroDeLimites("2021-10", navegable)).toBe(true);
+      expect(fechas.mesDentroDeLimites("2021-09", navegable)).toBe(false);
+      expect(fechas.mesDentroDeLimites("2026-09", navegable)).toBe(true); // el mes anterior ya no queda deshabilitado
+      expect(fechas.mesDentroDeLimites("2027-10", navegable)).toBe(true);
+      expect(fechas.mesDentroDeLimites("2027-11", navegable)).toBe(false);
+      for (const atajo of ["mes", "mes_anterior", "ultimos_3_meses", "anio"]) {
+        expect(fechas.recortarRango(fechas.rangoDeAtajo(atajo, r.hoy), { limites: navegable }), atajo).not.toBeNull();
+      }
+      // el Histórico es el pasado: se cierra en hoy
+      expect(fechas.limitesDeNavegacion(r, true)).toEqual({ primera: "2021-10-01", ultima: "2026-10-27" });
+    } finally {
+      for (const p of guardadas) await prisma.parametro.create({ data: { clave: p.clave, valor: p.valor, tipo: p.tipo, ambito: p.ambito, categoriaId: p.categoriaId, descripcion: p.descripcion } });
+    }
+  });
+});
+
 describe("ventana del selector", () => {
   it("no depende de los datos: 5 años atrás y 12 meses adelante, y sigue los parámetros", async () => {
     const app = await crearApp({ reloj, modoPruebas: true });
