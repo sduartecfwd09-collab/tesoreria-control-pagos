@@ -57,3 +57,22 @@ export function ConfirmarCambio({ cambio, alCerrar }: { cambio: CambioPendiente;
     </div>
   );
 }
+
+/** Aviso al intentar cerrar una ventana con cambios sin guardar. */
+export function ConfirmarSalida({ alSalir, alSeguir }: { alSalir: () => void; alSeguir: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="salir-titulo" className="w-full max-w-md rounded border-2 border-control bg-fondo p-6">
+        <h2 id="salir-titulo" className="text-lg font-bold">Hay cambios sin guardar. ¿Salir sin guardar?</h2>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <button type="button" className={claseBotonSecundario} onClick={alSalir}>
+            Salir sin guardar
+          </button>
+          <button type="button" className={claseBoton} onClick={alSeguir} autoFocus>
+            Seguir editando
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

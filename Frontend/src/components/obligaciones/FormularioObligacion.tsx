@@ -4,7 +4,7 @@ import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { ErrorApi } from "@/lib/api";
 import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_MONEDA, SIMBOLO } from "@/lib/formato";
 import type { CambiosObligacion, Categoria, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
-import { ConfirmarCambio, type CambioPendiente } from "../ConfirmarCambio";
+import { ConfirmarCambio, ConfirmarSalida, type CambioPendiente } from "../ConfirmarCambio";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir, Etiqueta } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
 
@@ -108,11 +108,15 @@ export function FormularioObligacion({
   const nueva = obligacion === null;
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
+  const [confirmandoSalida, setConfirmandoSalida] = useState(false);
   const { register, handleSubmit, control, setError, formState } = useForm<Valores>({
     defaultValues: valoresIniciales(obligacion, frecuenciaDefecto),
     mode: "onBlur",
   });
   const { errors, dirtyFields, isDirty, isSubmitting } = formState;
+
+  // Cerrar con cambios sin guardar pide confirmación (botón de cerrar, Cancelar y Escape).
+  const intentarCerrar = () => (isDirty ? setConfirmandoSalida(true) : dialogo.current?.close());
 
   useEffect(() => {
     const d = dialogo.current;
@@ -157,6 +161,7 @@ export function FormularioObligacion({
     <dialog
       ref={dialogo}
       onClose={alCerrar}
+      onCancel={(e) => isDirty && (e.preventDefault(), setConfirmandoSalida(true))}
       aria-labelledby="titulo-formulario"
       className="m-auto w-[min(48rem,calc(100%-2rem))] max-h-[calc(100%-2rem)] rounded border-2 border-control bg-fondo p-0 text-texto backdrop:bg-black/50"
     >
@@ -172,7 +177,7 @@ export function FormularioObligacion({
               </p>
             )}
           </div>
-          <button type="button" onClick={() => dialogo.current?.close()} className={claseBotonSecundario} aria-label="Cerrar sin guardar">
+          <button type="button" onClick={intentarCerrar} className={claseBotonSecundario} aria-label="Cerrar sin guardar">
             Cerrar
           </button>
         </div>
@@ -371,13 +376,14 @@ export function FormularioObligacion({
           <button type="submit" className={claseBoton} disabled={isSubmitting || (!nueva && !isDirty)}>
             {isSubmitting ? "Guardando…" : nueva ? "Crear obligación" : "Guardar cambios"}
           </button>
-          <button type="button" onClick={() => dialogo.current?.close()} className={claseBotonSecundario}>
+          <button type="button" onClick={intentarCerrar} className={claseBotonSecundario}>
             Cancelar
           </button>
           {!nueva && !isDirty && <span className="text-sm text-suave">Cambie algún dato para poder guardar.</span>}
         </div>
       </form>
       {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
+      {confirmandoSalida && <ConfirmarSalida alSalir={() => (setConfirmandoSalida(false), dialogo.current?.close())} alSeguir={() => setConfirmandoSalida(false)} />}
     </dialog>
   );
 }
