@@ -28,6 +28,19 @@ export function informeDiagnosticoCruce(r: ResumenCruce, sociedades: SociedadInf
   }
   for (const [k, n] of [...tabla].sort(([a], [b]) => a.localeCompare(b))) L.push(`  ${k}: ${n}`);
 
+  // Programado = fecha futura que todavía no entra en los días de aviso (los generados por adelantado)
+  L.push("", `programado: ${r.porEstado.proyectado ?? 0}`);
+  L.push("Programados por sociedad y mes:");
+  const programados = new Map<string, number>();
+  for (const x of r.resultados) {
+    if (x.estado !== "proyectado") continue;
+    const v = venc.get(x.vencimientoId)!;
+    const k = `${nombre(v.sociedadId)} | ${iso(v.fecha).slice(0, 7)}`;
+    programados.set(k, (programados.get(k) ?? 0) + 1);
+  }
+  for (const [k, n] of [...programados].sort(([a], [b]) => a.localeCompare(b))) L.push(`  ${k}: ${n}`);
+  if (programados.size === 0) L.push("  ninguno");
+
   L.push("", "Pagados: fecha de pago menos fecha vigente, en días (pagado y pagado con inconsistencia):");
   const dist = new Map<string, number>();
   for (const x of r.resultados) {

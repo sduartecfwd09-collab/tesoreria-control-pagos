@@ -136,11 +136,11 @@ export function mesDentroDeLimites(periodo: string, limites: Limites | null | un
 export const textoEntre = (r: Rango) => `${aTextoDMA(r.desde)} y ${aTextoDMA(r.hasta)}`;
 
 /**
- * Qué decir cuando un período no tiene filas: «futuro» (empieza después de hoy), «sin_informacion» (ya pasó y ningún día tiene
- * estados de cuenta cargados: una tabla vacía se leería como «no hubo pagos») o «normal» (hay estados de cuenta: de verdad no hay filas).
+ * Qué decir cuando un período no tiene filas: «sin_informacion» (ya pasó y ningún día tiene estados de cuenta cargados: una tabla vacía
+ * se leería como «no hubo pagos») o «normal» (hay estados de cuenta, o el período es futuro: de verdad no hay filas).
  */
-export function tipoDeVacio(rango: Rango, hoy: string, cobertura: Limites | null): "futuro" | "sin_informacion" | "normal" {
-  if (rango.desde > hoy) return "futuro";
+export function tipoDeVacio(rango: Rango, hoy: string, cobertura: Limites | null): "sin_informacion" | "normal" {
+  if (rango.desde > hoy) return "normal";
   if (!cobertura || rango.hasta < cobertura.primera || rango.desde > cobertura.ultima) return "sin_informacion";
   return "normal";
 }

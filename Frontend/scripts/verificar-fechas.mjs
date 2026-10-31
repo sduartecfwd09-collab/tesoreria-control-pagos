@@ -82,7 +82,7 @@ test("texto «entre … y …»", () => {
 test("qué decir cuando un período no tiene filas", () => {
   const cobertura = { primera: "2026-03-10", ultima: "2026-09-30" };
   const hoy = "2026-10-29";
-  assert.equal(f.tipoDeVacio({ desde: "2026-12-01", hasta: "2026-12-31" }, hoy, cobertura), "futuro");
+  assert.equal(f.tipoDeVacio({ desde: "2026-12-01", hasta: "2026-12-31" }, hoy, cobertura), "normal"); // un mes futuro sin filas no es «sin información»
   assert.equal(f.tipoDeVacio({ desde: "2025-01-01", hasta: "2025-01-31" }, hoy, cobertura), "sin_informacion");
   assert.equal(f.tipoDeVacio({ desde: "2026-10-01", hasta: "2026-10-31" }, hoy, cobertura), "sin_informacion"); // octubre: aún sin estados
   assert.equal(f.tipoDeVacio({ desde: "2026-05-01", hasta: "2026-05-31" }, hoy, cobertura), "normal");

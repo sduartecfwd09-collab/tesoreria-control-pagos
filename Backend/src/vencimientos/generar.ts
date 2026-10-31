@@ -1,6 +1,7 @@
 // Calendario automático de vencimientos. El sistema crea solo, para cada obligación activa, los vencimientos desde su
-// «Control desde» hasta el fin del mes en curso (o hoy + los días de aviso si eso cruza al mes siguiente; sin meses
-// futuros) y mantiene al día los futuros. Todos nacen «proyectado»: el estado real lo calcula el motor de cruce. Es idempotente y nunca toca un vencimiento
+// «Control desde» hasta el fin del mes de hoy + N meses (parámetro `meses_vencimientos_adelante`, 12; o hoy + los días de aviso si
+// eso llega más lejos) y mantiene al día los futuros. Los de fechas futuras quedan «Programado» (el motor de cruce no los marca Vencido
+// ni Sin información, y Programado no genera avisos). Todos nacen «proyectado»: el estado real lo calcula el motor de cruce. Es idempotente y nunca toca un vencimiento
 // pasado, pagado, conciliado o con avisos.
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
@@ -10,6 +11,7 @@ import { mayorAvisoDeUsuarios } from "../repositories/usuarios.js";
 import { aplicarCambios, type CambiosVencimientos, obligacionesParaPlan, obligacionParaPlan, vencimientosDeObligaciones } from "../repositories/vencimientos.js";
 
 const MS_DIA = 86_400_000;
+const MESES_ADELANTE_DEFECTO = 12;
 
 export interface ResumenSincronizacion {
   creados: number;
@@ -25,6 +27,13 @@ export async function diasDeAviso(): Promise<number> {
   return Number.isInteger(n) && n >= 0 ? n : 3;
 }
 
+/** Meses por delante del actual para los que se generan vencimientos (parámetro; sin fila o con un valor inválido, 12). */
+export async function mesesAdelante(): Promise<number> {
+  const texto = await valorGlobal("meses_vencimientos_adelante");
+  const n = texto === null || texto.trim() === "" ? NaN : Number(texto);
+  return Number.isInteger(n) && n >= 0 ? n : MESES_ADELANTE_DEFECTO;
+}
+
 /** Horizonte del calendario: el mayor de todos los avisos (el general y los propios de cada tesorero). */
 export async function horizonteDeAviso(): Promise<number> {
   return Math.max(await diasDeAviso(), (await mayorAvisoDeUsuarios()) ?? 0);
@@ -38,9 +47,8 @@ export async function horizonteDeAviso(): Promise<number> {
 export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: number): Promise<ResumenSincronizacion> {
   const r: ResumenSincronizacion = { creados: 0, actualizados: 0, eliminados: 0, protegidos: 0 };
   const hoy = hoyDe(reloj);
-  // Se genera todo el mes en curso (hasta fin de mes) o, si hoy + los días de aviso cruza al mes siguiente, hasta ahí.
-  // Nunca se crean meses futuros por adelantado.
-  const finDeMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 0));
+  // Se genera hasta el fin del mes de hoy + N meses o, si hoy + los días de aviso llega más lejos, hasta ahí.
+  const finDeMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + (await mesesAdelante()) + 1, 0));
   const conAviso = new Date(hoy.getTime() + (await horizonteDeAviso()) * MS_DIA);
   const limite = conAviso > finDeMes ? conAviso : finDeMes;
   const obligaciones = obligacionId === undefined ? await obligacionesParaPlan() : [await obligacionParaPlan(obligacionId)].filter((o) => o !== null);

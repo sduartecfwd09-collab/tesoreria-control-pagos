@@ -53,3 +53,9 @@ export async function fijarRango(antes: number, despues: number) {
   await prisma.parametro.updateMany({ where: { clave: "ventana_dias_antes" }, data: { valor: String(antes) } });
   await prisma.parametro.updateMany({ where: { clave: "ventana_dias_despues" }, data: { valor: String(despues) } });
 }
+
+/** Fija los meses de vencimientos que se generan por adelantado (el valor inicial del sistema es 12; las pruebas parten de 0 y las del calendario anticipado lo suben). */
+export async function fijarMesesAdelante(valor: number) {
+  exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
+  await prisma.parametro.updateMany({ where: { clave: "meses_vencimientos_adelante" }, data: { valor: String(valor) } });
+}

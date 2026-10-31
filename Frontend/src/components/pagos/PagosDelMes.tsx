@@ -85,7 +85,7 @@ export function PagosDelMes() {
   const cambiarMes = (nuevo: string) => (setPeriodo(nuevo), setRango(null)); // el día o rango es de un mes: al cambiar de mes se quita
   const todos = datos ?? [];
   const vacioDe = tipoDeVacio(rango ?? { desde: primerDia(periodo), hasta: ultimoDia(periodo) }, hoy, limites?.movimientos ?? null);
-  const textoVacio = vacioDe === "futuro" ? "Los pagos de estas fechas aparecerán más cerca de su vencimiento." : vacioDe === "sin_informacion" ? "Sin información: todavía no hay estados de cuenta de estas fechas." : rango ? `No hay vencimientos con fecha de vencimiento entre ${textoEntre(rango)}.` : `No hay pagos de ${nombreMes}.`;
+  const textoVacio = vacioDe === "sin_informacion" ? "Sin información: todavía no hay estados de cuenta de estas fechas." : rango ? `No hay vencimientos con fecha de vencimiento entre ${textoEntre(rango)}.` : `No hay pagos de ${nombreMes}.`;
   const cuenta = (...e: EstadoVencimiento[]) => todos.filter((v) => e.includes(v.estado)).length;
   // El número de cada tarjeta y las filas que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
   const porTarjeta = contarPorTarjeta(todos, TARJETAS_PAGOS);

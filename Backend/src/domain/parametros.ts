@@ -47,6 +47,12 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "12", unidad: "días", min: 0, max: 15, supuesto: false, visible: false,
   },
   {
+    clave: "meses_vencimientos_adelante",
+    etiqueta: "Meses de vencimientos que se generan por adelantado",
+    ayuda: "Cuántos meses después del actual se generan los vencimientos de cada obligación. Los de fechas futuras quedan como Programado: no generan avisos ni se marcan Vencido ni Sin información.",
+    tipo: "entero", ambito: "global", valorInicial: "12", unidad: "meses", min: 0, max: 36, supuesto: true, visible: false,
+  },
+  {
     clave: "selector_anios_atras",
     etiqueta: "Años hacia atrás que permite el selector de fechas",
     ayuda: "Hasta cuántos años antes de hoy se puede navegar en el selector de fechas. No cambia ningún estado.",
