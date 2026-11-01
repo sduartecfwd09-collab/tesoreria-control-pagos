@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asociacionSinEfecto, ESTADOS_ASOCIABLES, MAXIMO_CANDIDATOS, ordenarCandidatos, rangoDeCandidatos, ventanaDeAsociacion } from "../src/domain/asociacion.js";
+import { asociacionSinEfecto, ESTADOS_ASOCIABLES, marcasDeCoincidencia, MAXIMO_CANDIDATOS, ordenarCandidatos, rangoDeCandidatos, ventanaDeAsociacion } from "../src/domain/asociacion.js";
 import type { CuentaCorte } from "../src/domain/cobertura-corte.js";
 import { cruzar, MOTIVOS, type AsociacionManual, type EntradaCruce, type MovimientoCruce, type ObligacionCruce, type VencimientoCruce } from "../src/domain/cruce.js";
 import { lineaDeAsociarPago, lineaDeQuitarAsociacion } from "../src/domain/historial.js";
@@ -147,5 +147,71 @@ describe("reglas puras de asociar un pago", () => {
   it("líneas del historial: solo el periodo, nunca montos, cuentas ni identificadores", () => {
     expect(lineaDeAsociarPago("2026-10")).toEqual({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: "2026-10" });
     expect(lineaDeQuitarAsociacion("2026-10")).toEqual({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "2026-10", despues: null });
+  });
+});
+
+describe("marcas «trae el número» y «trae el proveedor»", () => {
+  const luz = { identificador: "12345", proveedor: "Luz Uno" };
+  const m = (descripcion: string | null, referencia: string | null = null) => marcasDeCoincidencia({ descripcion, referencia }, luz);
+
+  it("número: la misma extracción del cruce (ceros a la izquierda, delimitación numérica) en la descripción o en la referencia", () => {
+    expect(m("PAGO 12345").traeNumero).toBe(true);
+    expect(m("PAGO 0000012345 FIN").traeNumero).toBe(true);
+    expect(m("pago 12345").traeNumero).toBe(true); // sin importar mayúsculas
+    expect(m("PAGO 123456").traeNumero).toBe(false);
+    expect(m("PAGO 912345").traeNumero).toBe(false);
+    expect(m("SIN NUMERO", "12345").traeNumero).toBe(true); // en la referencia
+    expect(m("SIN NUMERO", "123456").traeNumero).toBe(false);
+    expect(m(null, null).traeNumero).toBe(false);
+    expect(marcasDeCoincidencia({ descripcion: "PAGO 12345" }, { identificador: "", proveedor: "X" }).traeNumero).toBe(false); // identificador vacío
+  });
+
+  it("proveedor: nombre sin importar mayúsculas, tildes ni espacios; alias conocidos y rótulos del banco", () => {
+    expect(m("PAGO LUZ UNO").traeProveedor).toBe(true);
+    expect(m("pago LUZUNO").traeProveedor).toBe(true);
+    expect(m("COBRO LUZ DOS").traeProveedor).toBe(false);
+    expect(m("PAGO 12345", "LUZ UNO").traeProveedor).toBe(false); // el proveedor se busca en la descripción
+    expect(marcasDeCoincidencia({ descripcion: "ICETEL 55555" }, { identificador: "99", proveedor: "ICE" }).traeProveedor).toBe(true); // rótulo del banco
+    expect(marcasDeCoincidencia({ descripcion: "PAGO MOVIS" }, { identificador: "99", proveedor: "Movistar" }).traeProveedor).toBe(true);
+    expect(marcasDeCoincidencia({ descripcion: "PAGO ICE TELEFONO" }, { identificador: "99", proveedor: "ICE Telefono" }).traeProveedor).toBe(true); // alias de la unión de proveedores
+    expect(marcasDeCoincidencia({ descripcion: "PAGO JASEC" }, { identificador: "99", proveedor: "JASEC Internet" }).traeProveedor).toBe(true); // el canónico de un alias
+  });
+
+  it("las cuatro combinaciones", () => {
+    expect(m("PAGO LUZ UNO 12345")).toEqual({ traeNumero: true, traeProveedor: true });
+    expect(m("PAGO 12345")).toEqual({ traeNumero: true, traeProveedor: false });
+    expect(m("PAGO LUZ UNO")).toEqual({ traeNumero: false, traeProveedor: true });
+    expect(m("COBRO BETA")).toEqual({ traeNumero: false, traeProveedor: false });
+  });
+});
+
+describe("orden de los pagos candidatos por marcas", () => {
+  const f = dia(2026, 10, 15);
+  const c = (id: number, d: number, traeNumero = false, traeProveedor = false) => ({ id, fecha: dia(2026, 10, d), traeNumero, traeProveedor });
+
+  it("primero número y proveedor, luego solo número, luego solo proveedor, luego el resto; dentro de cada grupo, cercanía, fecha e id", () => {
+    const lista = [
+      c(1, 15), // ninguno, el más cercano
+      c(2, 25, false, true), // solo proveedor, lejos
+      c(3, 24, true, false), // solo número, lejos
+      c(4, 28, true, true), // ambos, el más lejos de todos
+      c(5, 16, true, false), // solo número, cerca
+      c(6, 14, false, true), // solo proveedor, cerca
+      c(7, 14, false, false), // ninguno, a 1 día, antes que el siguiente
+      c(8, 16, false, false), // ninguno, a 1 día, después
+    ];
+    expect(ordenarCandidatos(lista, f).map((x) => x.id)).toEqual([4, 5, 3, 6, 2, 1, 7, 8]);
+  });
+
+  it("el tope se aplica DESPUÉS de ordenar: uno con marca lejano entra y uno sin marca cercano queda fuera", () => {
+    const sinMarca = Array.from({ length: 60 }, (_, i) => c(i + 1, 10 + (i % 11))); // 60 pagos sin marca, todos cerca
+    const lejanoConMarca = c(100, 28, true, true); // a 13 días
+    const r = ordenarCandidatos([...sinMarca, lejanoConMarca], f);
+    expect(r).toHaveLength(MAXIMO_CANDIDATOS);
+    expect(r[0]!.id).toBe(100); // el que trae número y proveedor va primero aunque esté lejos
+    // de los sin marca quedan los 49 más cercanos: se pierde el más lejano de todos
+    const cercanos = ordenarCandidatos(sinMarca, f);
+    expect(r.slice(1).map((x) => x.id)).toEqual(cercanos.slice(0, 49).map((x) => x.id));
+    expect(r.map((x) => x.id)).not.toContain(cercanos[49]!.id);
   });
 });

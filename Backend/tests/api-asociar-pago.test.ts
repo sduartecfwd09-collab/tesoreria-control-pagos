@@ -171,6 +171,48 @@ describe("candidatos", () => {
     expect((await candidatos(luz)).json().datos).toHaveLength(5);
   });
 
+  it("cada pago trae las marcas «número» y «proveedor», y se ordena por grupos antes que por cercanía", async () => {
+    const ambos = await movA(dia(2026, 10, 24), "PAGO LUZ UNO 7771234"); // número y proveedor, a 9 días (fuera del rango del cruce: no se asigna solo)
+    const soloNumero = await movA(dia(2026, 10, 25), "PAGO 7771234"); // número, a 10 días
+    const numeroEnReferencia = await prisma.movimiento.create({
+      data: { cuentaId: cuentaA, archivoId: archivoA, hoja: "H", fila: 5000, periodo: "2026-10", fecha: dia(2026, 10, 18), descripcion: "TRANSFERENCIA", referencia: "7771234", debito: 5000n, credito: 0n, claveDedup: "r".padEnd(40, "0") },
+    }); // el número está en la referencia, a 3 días
+    const soloProveedor = await movA(dia(2026, 10, 15), "COBRO LUZ UNO"); // proveedor, el más cercano de todos
+    const ninguno = await movA(dia(2026, 10, 15), "COBRO BETA"); // ninguna marca, igual de cercano
+    await actualizarVencimientos(reloj);
+    expect((await venc(luz)).estado).toBe("vencido"); // nada de esto es un pago de la ventana del cruce con el número
+    const datos = (await candidatos(luz)).json().datos as (Cand & { traeNumero: boolean; traeProveedor: boolean })[];
+    const relleno = await prisma.movimiento.findFirstOrThrow({ where: { cuentaId: cuentaA, descripcion: "COMISION SIN RELACION" } });
+    expect(datos.map((c) => c.movimientoId)).toEqual([ambos.id, numeroEnReferencia.id, soloNumero.id, soloProveedor.id, ninguno.id, relleno.id]);
+    const marcas = (id: number) => {
+      const c = datos.find((x) => x.movimientoId === id)!;
+      return [c.traeNumero, c.traeProveedor];
+    };
+    expect(marcas(ambos.id)).toEqual([true, true]);
+    expect(marcas(soloNumero.id)).toEqual([true, false]);
+    expect(marcas(numeroEnReferencia.id)).toEqual([true, false]);
+    expect(marcas(soloProveedor.id)).toEqual([false, true]);
+    expect(marcas(ninguno.id)).toEqual([false, false]);
+    // nada nuevo expuesto: las mismas claves de siempre más las dos marcas, y la cuenta sigue enmascarada
+    expect(Object.keys(datos[0]!).sort()).toEqual(["banco", "cuenta", "descripcion", "fecha", "moneda", "monto", "movimientoId", "traeNumero", "traeProveedor"]);
+    expect(datos[0]!.cuenta).toBe("****1234");
+    expect(JSON.stringify(datos)).not.toContain(CUENTA_A);
+  });
+
+  it("el tope de 50 se aplica después de ordenar: un pago con marca lejano entra y uno sin marca cercano queda fuera", async () => {
+    await prisma.movimiento.createMany({
+      data: Array.from({ length: 55 }, (_, i) => ({ cuentaId: cuentaA, archivoId: archivoA, hoja: "H", fila: 2000 + i, periodo: "2026-10", fecha: dia(2026, 10, 12 + (i % 7)), descripcion: `COBRO ${i}`, debito: 100n, credito: 0n, claveDedup: `t${String(i).padStart(3, "0")}`.padEnd(40, "0") })),
+    });
+    const lejano = await movA(dia(2026, 11, 20), "PAGO LUZ UNO 7771234"); // a 36 días: fuera de la ventana de 30
+    const dentro = await movA(dia(2026, 11, 10), "PAGO LUZ UNO 7771234"); // a 26 días: dentro, pero más lejos que los 55 sin marca
+    const datos = (await candidatos(luz)).json().datos as (Cand & { traeNumero: boolean })[];
+    expect(datos).toHaveLength(50);
+    expect(datos[0]!.movimientoId).toBe(dentro.id); // el que trae número y proveedor entra y va primero aunque esté lejos
+    expect(datos.map((c) => c.movimientoId)).not.toContain(lejano.id); // la ventana no cambió
+    // de los 56 libres sin marca (55 más el relleno) solo caben 49: los más lejanos quedan fuera
+    expect(datos.filter((c) => !c.traeNumero)).toHaveLength(49);
+  });
+
   it("como máximo 50", async () => {
     await prisma.movimiento.createMany({
       data: Array.from({ length: 60 }, (_, i) => ({ cuentaId: cuentaA, archivoId: archivoA, hoja: "H", fila: 1000 + i, periodo: "2026-10", fecha: dia(2026, 10, 1 + (i % 28)), descripcion: `COBRO ${i}`, debito: 100n, credito: 0n, claveDedup: `m${String(i).padStart(3, "0")}`.padEnd(40, "0") })),

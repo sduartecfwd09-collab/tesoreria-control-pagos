@@ -200,6 +200,7 @@ export async function vencimientoParaAsociar(id: number) {
     select: {
       id: true, obligacionId: true, sociedadId: true, periodo: true, fecha: true, estado: true,
       sociedad: { select: { id: true, tesoreroId: true } },
+      obligacion: { select: { identificador: true, proveedor: true } }, // para las marcas «trae el número» y «trae el proveedor»
       movimiento: { select: { claveDedup: true } },
     },
   });
@@ -215,6 +216,6 @@ export async function debitosLibresDeSociedad(sociedadId: number, desde: Date, h
       debito: { gt: 0n }, archivo: { retiradoEn: null }, cuenta: { sociedadId }, fecha: { gte: desde, lt: hastaExclusivo },
       vencimientos: { none: {} }, ...(excluirHuellas.length > 0 ? { claveDedup: { notIn: excluirHuellas } } : {}),
     },
-    select: { id: true, fecha: true, descripcion: true, claveDedup: true, debito: true, cuenta: { select: { numero: true, moneda: true, banco: true } } },
+    select: { id: true, fecha: true, descripcion: true, referencia: true, claveDedup: true, debito: true, cuenta: { select: { numero: true, moneda: true, banco: true } } },
   });
 }

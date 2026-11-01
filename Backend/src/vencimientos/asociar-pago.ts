@@ -1,7 +1,7 @@
 // Asociar a mano un pago a un vencimiento, y quitar esa asociación. La decisión es una DecisionManual que el motor de cruce consulta antes de
 // calcular; cada acción escribe su línea en el historial en la MISMA transacción y después se recalcula como lo hacen las demás ediciones.
 // Los permisos (persona y sociedad) los verifica la ruta; aquí van las reglas del negocio.
-import { ESTADOS_ASOCIABLES, ordenarCandidatos, rangoDeCandidatos, ventanaDeAsociacion } from "../domain/asociacion.js";
+import { ESTADOS_ASOCIABLES, marcasDeCoincidencia, ordenarCandidatos, rangoDeCandidatos, ventanaDeAsociacion } from "../domain/asociacion.js";
 import { enmascararCuenta, enmascararNumerosLargos } from "../domain/enmascarar.js";
 import { lineaDeAsociarPago, lineaDeQuitarAsociacion } from "../domain/historial.js";
 import { aNumero } from "../domain/montos.js";
@@ -27,16 +27,25 @@ export interface Candidato {
   banco: string | null;
   monto: number;
   moneda: string | null;
+  /** el identificador de la obligación aparece en la descripción o en la referencia del pago */
+  traeNumero: boolean;
+  /** el nombre del proveedor (o un alias conocido) aparece en la descripción del pago */
+  traeProveedor: boolean;
 }
 
 const iso = (f: Date) => f.toISOString().slice(0, 10);
 
-/** Pagos que se pueden asociar a este vencimiento: de su misma sociedad, libres y dentro de la ventana; los más cercanos primero, hasta 50. */
+/**
+ * Pagos que se pueden asociar a este vencimiento: de su misma sociedad, libres y dentro de la ventana. Primero los que traen el número y el
+ * proveedor, luego solo el número, luego solo el proveedor y luego el resto; dentro de cada grupo, los más cercanos a la fecha vigente. Hasta 50,
+ * aplicado después de ordenar.
+ */
 export async function candidatosDe(v: VencimientoAsociable): Promise<(Candidato & { clave: string })[]> {
   const ventana = ventanaDeAsociacion(await valorGlobal("ventana_asociacion_manual_dias"));
   const { desde, hastaExclusivo } = rangoDeCandidatos(v.fecha, ventana);
   const libres = await debitosLibresDeSociedad(v.sociedadId, desde, hastaExclusivo, await huellasAsociadas());
-  return ordenarCandidatos(libres, v.fecha).map((m) => ({
+  const conMarcas = libres.map((m) => ({ ...m, ...marcasDeCoincidencia(m, v.obligacion) }));
+  return ordenarCandidatos(conMarcas, v.fecha).map((m) => ({
     movimientoId: m.id,
     clave: m.claveDedup,
     fecha: iso(m.fecha),
@@ -45,6 +54,8 @@ export async function candidatosDe(v: VencimientoAsociable): Promise<(Candidato 
     banco: m.cuenta.banco,
     monto: aNumero(m.debito) ?? 0,
     moneda: m.cuenta.moneda,
+    traeNumero: m.traeNumero,
+    traeProveedor: m.traeProveedor,
   }));
 }
 
