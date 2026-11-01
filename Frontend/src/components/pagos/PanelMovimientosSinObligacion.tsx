@@ -43,27 +43,28 @@ export function PanelMovimientosSinObligacion() {
   return (
     <>
       <LineaAlcance alcance={datos.alcance} />
-      {/* una sola franja: el Período a la izquierda y las dos cifras (solo informan; no filtran ni se pulsan) a la derecha */}
-      <CajaFiltros
-        etiqueta="Filtros y resumen de movimientos sin obligación"
-        completa
-        derecha={
-          <div role="group" aria-label="Resumen" aria-live="polite" className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-            {datos.totalGrupos === 0 ? (
-              <p className="font-semibold">No hay movimientos sin obligación.</p>
-            ) : (
-              <>
-                <span><b className="text-2xl font-extrabold leading-none tabular-nums">{n(datos.totalGrupos)}</b> <span className="text-sm text-suave">{datos.totalGrupos === 1 ? "número sin obligación" : "números sin obligación"}</span></span>
-                <span><b className="text-2xl font-extrabold leading-none tabular-nums">{n(datos.totalPagos)}</b> <span className="text-sm text-suave">{datos.totalPagos === 1 ? "pago" : "pagos"}</span></span>
-              </>
-            )}
-          </div>
-        }
-      >
-        {navegable && (
-          <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites!.hoy, navegable, true)} inicial="todo" rangoActual={rango} limites={navegable} alCambiar={setRango} />
-        )}
-      </CajaFiltros>
+      {/* Fila: el recuadro con solo el Período y, a su derecha, las dos cifras (solo informan; no filtran ni se pulsan). Ancho propio, espacio fijo,
+          sin márgenes automáticos. Las cifras se alinean con la línea del texto del selector: arriba el borde (1) + relleno (16) del recuadro,
+          la etiqueta (16) y el borde (2) + relleno (8) del selector, menos lo que el número de 24 px sube sobre la línea base (~4): 39 px.
+          Van fijas desde arriba (no desde abajo) para que el mensaje del selector, que agranda el recuadro, no las mueva. En pantalla angosta
+          bajan debajo del recuadro, a la izquierda, sin ese desplazamiento. */}
+      <div className="mt-5 flex flex-wrap items-start gap-x-8 gap-y-3">
+        <CajaFiltros etiqueta="Filtros de movimientos sin obligación" margen="" mensajeSinAncho>
+          {navegable && (
+            <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites!.hoy, navegable, true)} inicial="todo" rangoActual={rango} limites={navegable} alCambiar={setRango} />
+          )}
+        </CajaFiltros>
+        <div role="group" aria-label="Resumen" aria-live="polite" className="flex flex-wrap items-baseline gap-x-6 gap-y-1 min-[860px]:mt-[39px]">
+          {datos.totalGrupos === 0 ? (
+            <p className="font-semibold">No hay movimientos sin obligación.</p>
+          ) : (
+            <>
+              <span><b className="text-2xl font-extrabold leading-none tabular-nums">{n(datos.totalGrupos)}</b> <span className="text-sm text-suave">{datos.totalGrupos === 1 ? "número sin obligación" : "números sin obligación"}</span></span>
+              <span><b className="text-2xl font-extrabold leading-none tabular-nums">{n(datos.totalPagos)}</b> <span className="text-sm text-suave">{datos.totalPagos === 1 ? "pago" : "pagos"}</span></span>
+            </>
+          )}
+        </div>
+      </div>
       {datos.totalGrupos > 0 && (
         <div className={claseContenedorTabla}>
           <table className={`${claseTabla} min-w-[900px]`}>

@@ -5,19 +5,20 @@ import { ContextoMensajeFiltros } from "./SelectorFechas";
 /**
  * Recuadro de fondo suave con todos los filtros en una fila (baja a otra solo si no caben), alineados por su base.
  * Los mensajes del selector de fechas salen en una línea propia debajo de TODA la fila, a todo el ancho del recuadro: así nunca
- * mueven ni desalinean los controles. `derecha` pone contenido al extremo derecho, centrado verticalmente (en pantalla angosta pasa a
- * otra línea). `completa` estira el recuadro a todo el ancho; por defecto se ajusta al contenido.
+ * mueven ni desalinean los controles. El recuadro se ajusta al tamaño de su contenido. `margen` es el margen superior (por defecto
+ * mt-5); una pantalla que lo coloca dentro de una fila propia lo deja vacío y pone el margen en la fila. Con `mensajeSinAncho`
+ * el mensaje no cuenta para el ancho del recuadro (ocupa el ancho que ya tiene y, si es más largo, baja a otra línea): así un mensaje
+ * no ensancha el recuadro ni mueve lo que hay a su derecha.
  */
-export function CajaFiltros({ etiqueta, children, derecha, completa = false }: { etiqueta: string; children: ReactNode; derecha?: ReactNode; completa?: boolean }) {
+export function CajaFiltros({ etiqueta, children, margen = "mt-5", mensajeSinAncho = false }: { etiqueta: string; children: ReactNode; margen?: string; mensajeSinAncho?: boolean }) {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const idMensaje = useId();
   const contexto = useMemo(() => ({ ponerMensaje: setMensaje, idMensaje }), [idMensaje]);
   return (
     <ContextoMensajeFiltros.Provider value={contexto}>
-      <section aria-label={etiqueta} className={`mt-5 flex ${completa ? "w-full" : "w-fit"} max-w-full flex-wrap items-end gap-x-4 gap-y-3 rounded-[14px] border border-divisor bg-tinte-filtros p-4`}>
+      <section aria-label={etiqueta} className={`${margen} flex w-fit max-w-full flex-wrap items-end gap-x-4 gap-y-3 rounded-[14px] border border-divisor bg-tinte-filtros p-4`}>
         {children}
-        {derecha && <div className="ml-auto flex flex-wrap items-center gap-x-6 gap-y-1 self-center">{derecha}</div>}
-        {mensaje && <p id={idMensaje} role="alert" className="basis-full text-sm font-semibold text-rojo">{mensaje}</p>}
+        {mensaje && <p id={idMensaje} role="alert" className={`${mensajeSinAncho ? "w-0 min-w-full" : "basis-full"} text-sm font-semibold text-rojo`}>{mensaje}</p>}
       </section>
     </ContextoMensajeFiltros.Provider>
   );
