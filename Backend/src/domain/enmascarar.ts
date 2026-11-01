@@ -49,3 +49,8 @@ export function coberturaSegura(c: Cobertura): CoberturaSegura {
 export function enmascararSalvo(texto: string, identificadorClave: string): string {
   return texto.replace(/\d{8,}/g, (n) => (n.replace(/^0+/, "") === identificadorClave ? n : `****${n.slice(-4)}`));
 }
+
+/** Identificador de un servicio (NISE, número de contrato...): nunca completo; solo los últimos 4 caracteres, como «****1083». */
+export function enmascararIdentificador(identificador: string): string {
+  return identificador.length <= 4 ? "****" : `****${identificador.slice(-4)}`;
+}

@@ -46,3 +46,24 @@ export function lineasDeEdicion(a: DatosEditables, d: DatosEditables): LineaCamb
 
 /** El alta manual deja una sola línea. */
 export const lineaDeAlta = (): LineaCambio => ({ accion: "crear", campo: "obligacion", antes: null, despues: null });
+
+// --- Lectura del historial (pantalla «Historial de cambios») ---
+
+/** Tamaño de página de respaldo si el parámetro `historial_por_pagina` no existe o es inválido. */
+export const HISTORIAL_POR_PAGINA_DEFECTO = 50;
+export const HISTORIAL_POR_PAGINA_MAXIMO = 200;
+
+const MS_DIA = 86_400_000;
+const CR_UTC_MS = 6 * 3_600_000; // Costa Rica es UTC-6 todo el año (sin horario de verano)
+
+/**
+ * Límites en UTC de un rango de días de Costa Rica (AAAA-MM-DD): desde el inicio del día `desde` hasta el inicio del día siguiente a
+ * `hasta` (exclusivo). `creadoEn` se guarda en UTC, así que el día de la persona se traduce aquí.
+ */
+export function limitesDeDias(desde?: string, hasta?: string): { desde?: Date; hastaExclusivo?: Date } {
+  const inicio = (iso: string) => new Date(new Date(`${iso}T00:00:00.000Z`).getTime() + CR_UTC_MS);
+  return {
+    ...(desde ? { desde: inicio(desde) } : {}),
+    ...(hasta ? { hastaExclusivo: new Date(inicio(hasta).getTime() + MS_DIA) } : {}),
+  };
+}

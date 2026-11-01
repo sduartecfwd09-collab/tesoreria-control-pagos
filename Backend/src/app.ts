@@ -7,6 +7,7 @@ import { rutasArchivos } from "./routes/archivos.js";
 import { rutasAvisos } from "./routes/avisos.js";
 import { rutasMovimientosSinObligacion } from "./routes/movimientos-sin-obligacion.js";
 import { rutasFechas } from "./routes/fechas.js";
+import { rutasHistorialCambios } from "./routes/historial-cambios.js";
 import { rutasHistorico } from "./routes/historico.js";
 import { rutasIdentidad } from "./routes/identidad.js";
 import { rutasImportaciones } from "./routes/importaciones.js";
@@ -47,6 +48,7 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
   await app.register(rutasVencimientos, { reloj, modoPruebas });
   await app.register(rutasFechas, { reloj, modoPruebas });
   await app.register(rutasHistorico, { reloj, modoPruebas });
+  await app.register(rutasHistorialCambios, { modoPruebas });
 
   return app;
 }
