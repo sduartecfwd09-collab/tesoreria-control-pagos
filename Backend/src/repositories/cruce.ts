@@ -174,18 +174,14 @@ export async function movimientosParaGrupos() {
 export interface PreferenciasPorObligacion { aviso: Map<number, number>; espera: Map<number, number> }
 
 /**
- * Aviso y espera propios del responsable efectivo de cada obligación activa (el responsable de la obligación o, si falta, el
- * tesorero de su sociedad). Solo entran quienes tienen el suyo: sin entrada se usa el valor general.
+ * Aviso y espera propios del responsable de cada obligación activa (el tesorero de su sociedad). Solo entran quienes tienen el suyo:
+ * sin entrada se usa el valor general.
  */
 export async function preferenciasPorObligacion(): Promise<PreferenciasPorObligacion> {
-  const [obligaciones, usuarios] = await Promise.all([
-    prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, responsable: true, sociedad: { select: { tesorero: { select: { diasAviso: true, diasEspera: true } } } } } }),
-    prisma.usuario.findMany({ where: { activo: true }, select: { nombreNormalizado: true, diasAviso: true, diasEspera: true } }),
-  ]);
-  const porNombre = new Map(usuarios.map((u) => [u.nombreNormalizado, u]));
+  const obligaciones = await prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedad: { select: { tesorero: { select: { diasAviso: true, diasEspera: true } } } } } });
   const r: PreferenciasPorObligacion = { aviso: new Map(), espera: new Map() };
   for (const o of obligaciones) {
-    const dueno = o.responsable ? porNombre.get(normalizarNombrePersona(o.responsable)) : o.sociedad.tesorero;
+    const dueno = o.sociedad.tesorero;
     if (dueno?.diasAviso != null) r.aviso.set(o.id, dueno.diasAviso);
     if (dueno?.diasEspera != null) r.espera.set(o.id, dueno.diasEspera);
   }

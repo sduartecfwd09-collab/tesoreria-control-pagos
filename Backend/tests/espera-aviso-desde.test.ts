@@ -155,10 +155,13 @@ describe("aviso propio de cada tesorero", () => {
   it("dos tesoreros con avisos de 3 y 7 días ven distinto Por vencer y Programado; el calendario llega al mayor aviso", async () => {
     await asegurarRoles();
     const rolId = (await mapaDeRoles()).get("Tesorero")!;
-    await prisma.usuario.create({ data: { correo: "ana@x.cr", nombre: "Ana Uno", nombreNormalizado: "ana uno", rolId, diasAviso: 3 } });
-    await prisma.usuario.create({ data: { correo: "beto@x.cr", nombre: "Beto Dos", nombreNormalizado: "beto dos", rolId, diasAviso: 7 } });
-    const deAna = await obligacion("Luz Ana", "1110001", 1, { responsable: "Ana Uno" });
-    const deBeto = await obligacion("Luz Beto", "2220002", 1, { responsable: "Beto Dos" });
+    const ana = await prisma.usuario.create({ data: { correo: "ana@x.cr", nombre: "Ana Uno", nombreNormalizado: "ana uno", rolId, diasAviso: 3 } });
+    const beto = await prisma.usuario.create({ data: { correo: "beto@x.cr", nombre: "Beto Dos", nombreNormalizado: "beto dos", rolId, diasAviso: 7 } });
+    // el responsable es el tesorero de la sociedad: cada uno con la suya; la general no tiene tesorero
+    const sociedadAna = (await prisma.sociedad.create({ data: { codigo: "SAN", nombreLargo: "Sociedad de Ana", tesoreroId: ana.id } })).id;
+    const sociedadBeto = (await prisma.sociedad.create({ data: { codigo: "SBE", nombreLargo: "Sociedad de Beto", tesoreroId: beto.id } })).id;
+    const deAna = await obligacion("Luz Ana", "1110001", 1, { sociedadId: sociedadAna });
+    const deBeto = await obligacion("Luz Beto", "2220002", 1, { sociedadId: sociedadBeto });
     const general = await obligacion("Luz Sin Dueño", "3330003", 1);
     await actualizarVencimientos(reloj); // hoy 27 de octubre; fecha de pago 1 de noviembre (en 5 días)
     expect((await vencimientoDe(deAna.id, "2026-11")).estado).toBe("proyectado"); // 5 > 3

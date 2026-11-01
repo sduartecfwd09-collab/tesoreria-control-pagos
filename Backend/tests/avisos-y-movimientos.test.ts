@@ -43,11 +43,11 @@ afterAll(async () => {
   await vaciarImportaciones();
 });
 
-/** Una obligación de Ana (tesorera de AAA), una de Beto por responsable propio dentro de AAA y una de Beto por su sociedad BBB. */
+/** Una obligación de Ana (tesorera de AAA) y dos de Beto (tesorero de BBB). */
 async function escenario() {
-  const luz = await crearObligacion(sociedadA, "Luz Ana", "7771234"); // sin responsable propio: la tesorera de AAA, Ana
-  const agua = await crearObligacion(sociedadA, "Agua Beto", "8885678", "Beto Dos"); // responsable propio: Beto
-  const gas = await crearObligacion(sociedadB, "Gas Beto", "9990001"); // sin responsable propio: el tesorero de BBB, Beto
+  const luz = await crearObligacion(sociedadA, "Luz Ana", "7771234"); // la tesorera de AAA, Ana
+  const agua = await crearObligacion(sociedadB, "Agua Beto", "8885678"); // tesorero de BBB: Beto
+  const gas = await crearObligacion(sociedadB, "Gas Beto", "9990001"); // el tesorero de BBB, Beto
   await crearVencimiento(luz, "vencido", dia(2026, 10, 10), { motivo: MOTIVOS.vencido });
   await crearVencimiento(luz, "pagado", dia(2026, 9, 10)); // pagado: nunca aparece
   await crearVencimiento(agua, "por_vencer", dia(2026, 10, 25), { motivo: MOTIVOS.esperaPago }); // pasó hace 2 días
@@ -80,12 +80,12 @@ describe("Avisos", () => {
     expect(JSON.stringify(r)).not.toContain("7771234");
   });
 
-  it("un tesorero ve lo de sus obligaciones: las suyas por responsable propio o por ser el tesorero de la sociedad", async () => {
+  it("un tesorero ve lo de las obligaciones de sus sociedades", async () => {
     await escenario();
     const deAna = await avisos(true, encabezado(ana));
     expect(deAna.alcance).toEqual({ tipo: "mio", nombre: "Ana Uno" });
     expect(deAna.usuario).toMatchObject({ nombre: "Ana Uno" });
-    expect(proveedoresDe(deAna)).toEqual(["Luz Ana"]); // Agua es de Beto aunque la sociedad sea de Ana
+    expect(proveedoresDe(deAna)).toEqual(["Luz Ana"]);
     const deBeto = await avisos(true, encabezado(beto));
     expect(proveedoresDe(deBeto)).toEqual(["Agua Beto", "Agua Beto", "Gas Beto"]);
     expect(deBeto.total).toBe(3);

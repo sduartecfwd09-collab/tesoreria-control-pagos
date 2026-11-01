@@ -120,10 +120,10 @@ const FALTA: Record<NonNullable<FiltroObligaciones["falta"]>, Prisma.ObligacionW
   frecuencia: { frecuenciaPorConfirmar: true },
 };
 
-/** Lo mínimo para decidir el alcance de una persona: responsable propio y tesorero de la sociedad de cada obligación (y las sociedades de las que es tesorero). */
+/** Lo mínimo para decidir el alcance de una persona: el tesorero de la sociedad de cada obligación (y las sociedades de las que es tesorero). */
 export async function datosParaAlcance(tesoreroId?: number) {
   const [obligaciones, sociedades] = await Promise.all([
-    prisma.obligacion.findMany({ select: { id: true, sociedadId: true, responsable: true, sociedad: { select: { tesoreroId: true } } } }),
+    prisma.obligacion.findMany({ select: { id: true, sociedadId: true, sociedad: { select: { tesoreroId: true } } } }),
     tesoreroId === undefined ? Promise.resolve([]) : prisma.sociedad.findMany({ where: { tesoreroId }, select: { id: true } }),
   ]);
   return { obligaciones, sociedadesDeTesorero: sociedades.map((x) => x.id) };

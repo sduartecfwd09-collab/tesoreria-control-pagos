@@ -149,6 +149,10 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
   });
 
   app.post("/api/obligaciones", async (req, reply) => {
+    // el responsable es el tesorero de la sociedad: no se indica por obligación
+    if (req.body && typeof req.body === "object" && "responsable" in req.body) {
+      return invalido(reply, "El responsable de una obligación es el tesorero de su sociedad: para cambiarlo, reasigne la sociedad", "responsable");
+    }
     const r = esquemaAlta.safeParse(req.body ?? {});
     if (!r.success) return reply.code(422).send(primerError(r.error));
     const d = r.data;

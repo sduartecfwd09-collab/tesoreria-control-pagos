@@ -1,8 +1,7 @@
 // UNA sola regla de alcance para todas las pantallas operativas.
 //  - Jefatura ve todo.
-//  - Un Tesorero ve solo las obligaciones de las que es responsable efectivo (el responsable propio de la obligación o,
-//    si no tiene, el tesorero de su sociedad) y, donde la pantalla es por sociedad (Estados de cuenta, Movimientos sin
-//    obligación), las sociedades de su responsabilidad: aquellas de las que es tesorero o donde es responsable de alguna obligación.
+//  - Un Tesorero ve solo las obligaciones de las sociedades de las que es el tesorero vigente (el responsable de una obligación es
+//    el tesorero de su sociedad) y, donde la pantalla es por sociedad (Estados de cuenta, Movimientos sin obligación), esas sociedades.
 //  - Sin persona elegida (todavía no hay inicio de sesión) se ve todo, como hoy, hasta el login (Hito 4A).
 // «Mi configuración» no usa el alcance: siempre es personal.
 import type { FastifyRequest } from "fastify";
@@ -25,13 +24,12 @@ export const alcanceParaRespuesta = (a: Alcance): { tipo: "todo" | "mio"; nombre
 export async function obligacionesDelAlcance(a: Alcance): Promise<number[] | null> {
   if (a.tipo === "todo") return null;
   const { obligaciones } = await datosParaAlcance();
-  return obligaciones.filter((o) => esDelUsuario(a.usuario, { responsable: o.responsable, sociedad: { tesoreroId: o.sociedad.tesoreroId } })).map((o) => o.id);
+  return obligaciones.filter((o) => esDelUsuario(a.usuario, { sociedad: { tesoreroId: o.sociedad.tesoreroId } })).map((o) => o.id);
 }
 
 /** Identificadores de las sociedades del alcance; null = todas. */
 export async function sociedadesDelAlcance(a: Alcance): Promise<number[] | null> {
   if (a.tipo === "todo") return null;
-  const { obligaciones, sociedadesDeTesorero } = await datosParaAlcance(a.usuario.id);
-  const propias = obligaciones.filter((o) => esDelUsuario(a.usuario, { responsable: o.responsable, sociedad: { tesoreroId: o.sociedad.tesoreroId } })).map((o) => o.sociedadId);
-  return [...new Set([...sociedadesDeTesorero, ...propias])];
+  const { sociedadesDeTesorero } = await datosParaAlcance(a.usuario.id);
+  return sociedadesDeTesorero;
 }

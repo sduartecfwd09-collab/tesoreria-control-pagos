@@ -15,12 +15,12 @@ export const ESTADOS_DE_AVISOS: string[] = GRUPOS_AVISO.flatMap((g) => [...g.est
 export const grupoDeAviso = (estado: string): ClaveGrupoAviso | null =>
   GRUPOS_AVISO.find((g) => (g.estados as readonly string[]).includes(estado))?.clave ?? null;
 
-/** ¿La obligación es de este usuario? Su responsable propio o, si no tiene, el tesorero de su sociedad. */
+/** ¿La obligación es de este usuario? Lo es si es el tesorero vigente de su sociedad. */
 export function esDelUsuario(
   u: { id: number; nombreNormalizado: string },
-  o: { responsable: string | null; sociedad: { tesoreroId: number | null } },
+  o: { sociedad: { tesoreroId: number | null } },
 ): boolean {
-  return o.responsable ? normalizarNombrePersona(o.responsable) === u.nombreNormalizado : o.sociedad.tesoreroId === u.id;
+  return o.sociedad.tesoreroId === u.id;
 }
 
 /** Identificador enmascarado a sus últimos 4 caracteres. */

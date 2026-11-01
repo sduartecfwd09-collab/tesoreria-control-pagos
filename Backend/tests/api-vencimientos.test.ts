@@ -72,8 +72,13 @@ describe("edición de obligaciones y vencimientos", () => {
     expect(v.map((x: { montoEsperado: number | null }) => x.montoEsperado)).toEqual([null, 5000]);
   });
 
-  it("editar solo el responsable no regenera", async () => {
-    const r = (await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { responsable: "Ana" } })).json();
-    expect(r.regeneracion).toBeNull();
+  it("la API no acepta el responsable de una obligación: es el tesorero de su sociedad", async () => {
+    const r = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { responsable: "Ana" } });
+    expect(r.statusCode).toBe(422);
+    expect(r.json().campo).toBe("responsable");
+    expect((await prisma.obligacion.findUniqueOrThrow({ where: { id: mensual } })).responsable).toBeNull();
+    const alta = await app.inject({ method: "POST", url: "/api/obligaciones", payload: { responsable: "Ana", sociedadId: 1, categoriaId: 1, proveedor: "X", identificador: "1" } });
+    expect(alta.statusCode).toBe(422);
+    expect(alta.json().campo).toBe("responsable");
   });
 });

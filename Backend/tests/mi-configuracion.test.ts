@@ -119,25 +119,31 @@ describe("Mi configuración", () => {
     }
   });
 
-  it("la espera propia del responsable efectivo decide cuándo su pago pasa a Vencido", async () => {
+  it("la espera propia del tesorero de la sociedad decide cuándo su pago pasa a Vencido", async () => {
     await prisma.usuario.update({ where: { id: ana }, data: { diasEspera: 1 } });
     await prisma.usuario.update({ where: { id: beto }, data: { diasEspera: 8 } });
-    const sociedadId = (await prisma.sociedad.create({ data: { codigo: "AAA", nombreLargo: "Sociedad AAA" } })).id;
-    const cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: "CR0000000000000000001234" } })).id;
     const categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
-    let archivoId = 0;
-    for (const mes of ["2026-09", "2026-10"]) {
-      const a = await prisma.archivoImportado.create({ data: { ruta: `AAA/${mes}.xlsx`, hash: mes, sociedadId, cuentaId, mes, estado: "leido", numMovimientos: 1 } });
-      if (mes === "2026-10") archivoId = a.id;
-    }
-    let n = 0;
-    for (const [fecha, texto] of [[dia(2026, 9, 1), "COMISION INICIAL"], [dia(2026, 10, 26), "COMISION"]] as const) {
-      await prisma.movimiento.create({ data: { cuentaId, archivoId, hoja: "H", fila: ++n, periodo: "2026-10", fecha, descripcion: texto, debito: 100n, credito: 0n, claveDedup: `m${n}`.padEnd(40, "0") } });
-    }
-    const crear = (proveedor: string, identificador: string, responsable: string | null) =>
-      prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor, identificador, diaEsperadoPago: 10, controlDesde: dia(2026, 10, 1), responsable } });
-    const deAna = await crear("Luz Ana", "1110001", "Ana Uno");
-    const deBeto = await crear("Luz Beto", "2220002", "Beto Dos");
+    // cada tesorero con su sociedad, las dos con estados de cuenta de septiembre y octubre
+    const crearSociedad = async (codigo: string, tesoreroId: number, numeroCuenta: string) => {
+      const sociedadId = (await prisma.sociedad.create({ data: { codigo, nombreLargo: `Sociedad ${codigo}`, tesoreroId } })).id;
+      const cuentaId = (await prisma.cuenta.create({ data: { sociedadId, numero: numeroCuenta } })).id;
+      let archivoId = 0;
+      for (const mes of ["2026-09", "2026-10"]) {
+        const a = await prisma.archivoImportado.create({ data: { ruta: `${codigo}/${mes}.xlsx`, hash: `${codigo}${mes}`, sociedadId, cuentaId, mes, estado: "leido", numMovimientos: 1 } });
+        if (mes === "2026-10") archivoId = a.id;
+      }
+      let n = 0;
+      for (const [fecha, texto] of [[dia(2026, 9, 1), "COMISION INICIAL"], [dia(2026, 10, 26), "COMISION"]] as const) {
+        await prisma.movimiento.create({ data: { cuentaId, archivoId, hoja: "H", fila: ++n, periodo: "2026-10", fecha, descripcion: texto, debito: 100n, credito: 0n, claveDedup: `${codigo}${n}`.padEnd(40, "0") } });
+      }
+      return sociedadId;
+    };
+    const sociedadAna = await crearSociedad("AAA", ana, "CR0000000000000000001234");
+    const sociedadBeto = await crearSociedad("BBB", beto, "CR0000000000000000005678");
+    const crear = (sociedadId: number, proveedor: string, identificador: string) =>
+      prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor, identificador, diaEsperadoPago: 10, controlDesde: dia(2026, 10, 1) } });
+    const deAna = await crear(sociedadAna, "Luz Ana", "1110001");
+    const deBeto = await crear(sociedadBeto, "Luz Beto", "2220002");
     hoy = new Date(2026, 9, 14, 10, 0); // F+4
     await actualizarVencimientos(reloj);
     const estado = async (id: number) => (await prisma.vencimiento.findFirstOrThrow({ where: { obligacionId: id, periodo: "2026-10" } })).estado;

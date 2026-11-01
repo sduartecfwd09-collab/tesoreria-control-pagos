@@ -51,10 +51,10 @@ afterAll(async () => {
   await vaciarImportaciones();
 });
 
-/** Luz (AAA, sin responsable propio: Ana), Agua (AAA, responsable propio Beto) y Gas (BBB, tesorero Beto). */
+/** Luz (AAA, tesorera Ana), Agua y Gas (BBB, tesorero Beto). */
 async function escenario() {
   const luz = await obligacion(sociedadA, "Luz Ana", "7771234");
-  const agua = await obligacion(sociedadA, "Agua Beto", "8885678", { responsable: "Beto Dos" });
+  const agua = await obligacion(sociedadB, "Agua Beto", "8885678");
   const gas = await obligacion(sociedadB, "Gas Beto", "9990001");
   await movimiento(cuentaA, archivoA, dia(2026, 10, 26), "COMISION", 100n);
   await movimiento(cuentaB, archivoB, dia(2026, 10, 26), "COMISION", 100n);
@@ -112,11 +112,11 @@ describe("una sola regla de alcance", () => {
     expect((await llamar(`/api/obligaciones/${agua.id}`, encabezado(beto))).codigo).toBe(200);
   });
 
-  it("Estados de cuenta: por sociedades de su responsabilidad (la que preside o donde es responsable de alguna obligación)", async () => {
+  it("Estados de cuenta: por las sociedades de las que es tesorero", async () => {
     await escenario();
     const archivosDe = async (id: number) => ((await llamar("/api/importaciones", encabezado(id))).cuerpo.datos as { sociedad: string }[]).map((a) => a.sociedad).sort();
     expect(await archivosDe(ana)).toEqual(["Sociedad AAA"]);
-    expect(await archivosDe(beto)).toEqual(["Sociedad AAA", "Sociedad BBB"]); // tesorero de BBB y responsable de Agua en AAA
+    expect(await archivosDe(beto)).toEqual(["Sociedad BBB"]); // tesorero de BBB
     expect(await archivosDe(jefa)).toEqual(["Sociedad AAA", "Sociedad BBB"]);
     const cob = await llamar("/api/cobertura", encabezado(ana));
     expect((cob.cuerpo.datos.filas as unknown[]).length).toBe(1);
@@ -124,13 +124,13 @@ describe("una sola regla de alcance", () => {
     expect((await llamar("/api/importaciones", encabezado(ana))).cuerpo.resumen.leidos).toBe(1); // los contadores también
   });
 
-  it("Movimientos sin obligación: por sociedades de su responsabilidad", async () => {
+  it("Movimientos sin obligación: por las sociedades de las que es tesorero", async () => {
     await escenario();
     const deAna = (await llamar("/api/movimientos-sin-obligacion", encabezado(ana))).cuerpo;
     expect((deAna.datos as { proveedor: string }[]).map((g) => g.proveedor)).toEqual(["TIGO"]);
     expect(deAna.alcance).toEqual({ tipo: "mio", nombre: "Ana Uno" });
     const deBeto = (await llamar("/api/movimientos-sin-obligacion", encabezado(beto))).cuerpo;
-    expect((deBeto.datos as { proveedor: string }[]).map((g) => g.proveedor).sort()).toEqual(["CNFL", "TIGO"]);
+    expect((deBeto.datos as { proveedor: string }[]).map((g) => g.proveedor).sort()).toEqual(["CNFL"]);
     expect(((await llamar("/api/movimientos-sin-obligacion", encabezado(jefa))).cuerpo.datos as unknown[]).length).toBe(2);
   });
 

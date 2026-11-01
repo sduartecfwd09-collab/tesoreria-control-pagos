@@ -42,7 +42,6 @@ const camposEditables = {
   moneda: z.enum(MONEDAS, { error: "La moneda debe ser CRC (colones) o USD (dólares)" }),
   monedaPorConfirmar: z.boolean({ error: "Indique sí o no" }),
   cuentaEsperadaId: z.number({ error: "La cuenta de pago no es válida" }).int("La cuenta de pago no es válida").positive("La cuenta de pago no es válida").nullable(),
-  responsable: textoOpcional(80, "El responsable"),
   activa: z.boolean({ error: "Indique si la obligación está activa (sí o no)" }),
   controlDesde: z
     .string({ error: "«Control desde» debe ser un mes con el formato AAAA-MM (por ejemplo 2026-08)" })
@@ -107,7 +106,7 @@ export interface ObligacionCalidad {
   montoEsperado: number | null;
   monedaPorConfirmar: boolean;
   cuentaEsperadaId: number | null;
-  /** responsable efectivo: el de la obligación o, si no tiene, el tesorero de su sociedad */
+  /** el responsable: el tesorero vigente de su sociedad (null si la sociedad no tiene) */
   responsable: string | null;
 }
 

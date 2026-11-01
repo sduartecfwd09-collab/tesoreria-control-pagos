@@ -187,7 +187,7 @@ export async function vencimientosParaAvisos(estados: string[]) {
     select: {
       id: true, obligacionId: true, sociedadId: true, periodo: true, fecha: true, estado: true, motivo: true, sinInfoHasta: true, proveedor: true,
       sociedad: { select: { codigo: true, nombreLargo: true, tesoreroId: true, tesorero: { select: { nombre: true } } } },
-      obligacion: { select: { identificador: true, responsable: true } },
+      obligacion: { select: { identificador: true, sociedad: { select: { tesorero: { select: { nombre: true } } } } } },
     },
     orderBy: [{ fecha: "asc" }, { id: "asc" }],
   });

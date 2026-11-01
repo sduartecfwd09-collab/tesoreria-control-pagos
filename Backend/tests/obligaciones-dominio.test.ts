@@ -69,10 +69,9 @@ describe("etiquetas por obligación", () => {
 describe("validaciones", () => {
   const error = (r: { success: boolean; error?: unknown }) => (r.success ? null : primerError(r.error as never));
 
-  it("acepta una edición válida y normaliza el responsable", () => {
-    const r = esquemaEdicion.parse({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050, responsable: "  Ana   Pérez " });
-    expect(r).toEqual({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050, responsable: "Ana Pérez" });
-    expect(esquemaEdicion.parse({ responsable: "" })).toEqual({ responsable: null });
+  it("acepta una edición válida; el responsable ya no es un campo editable", () => {
+    expect(esquemaEdicion.parse({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050 })).toEqual({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050 });
+    expect(error(esquemaEdicion.safeParse({ responsable: "Ana" }))?.error).toBe("No se indicó ningún cambio");
   });
 
   it("rechaza valores fuera de rango con mensajes en español y el campo afectado", () => {
