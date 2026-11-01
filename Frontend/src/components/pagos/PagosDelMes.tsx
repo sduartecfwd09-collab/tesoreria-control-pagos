@@ -170,7 +170,7 @@ export function PagosDelMes() {
           <TablaPagos datos={filas} alGestionar={setAbierto} vacio={N === 0 ? textoVacio : "No hay pagos que coincidan."} />
         )}
       </section>
-      {abierto !== null && <DetallePago id={abierto} alCerrar={() => setAbierto(null)} />}
+      {abierto !== null && <DetallePago id={abierto} alCerrar={() => setAbierto(null)} acciones={{ alCambiar: () => setIntento((n) => n + 1) }} />}
     </>
   );
 }

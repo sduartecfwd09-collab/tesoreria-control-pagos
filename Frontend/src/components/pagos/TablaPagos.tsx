@@ -4,6 +4,7 @@ import { montoPagado, nombreFecha } from "@/lib/formato";
 import type { Vencimiento } from "@/lib/tipos";
 import { claseControl } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
+import { EtiquetaAsociadoAMano } from "./AccionesPago";
 import { EstadoPago } from "./EstadoPago";
 
 /** «Hace N días» / «En N días» / «Vence hoy», calculado en el servidor con su reloj (campo `dias`). */
@@ -89,7 +90,10 @@ export function TablaPagos({ datos, vacio, alGestionar }: { datos: Vencimiento[]
                 onKeyDown={(e) => e.key === "Enter" && alGestionar(v.id)}
                 className="cursor-pointer border-t border-linea hover:bg-fondo-suave"
               >
-                <td className="px-3.5 py-4 align-top"><EstadoPago estado={v.estado} /></td>
+                <td className="px-3.5 py-4 align-top">
+                  <EstadoPago estado={v.estado} />
+                  {v.asociadoAMano && !v.sinEfecto && <span className="mt-1 block"><EtiquetaAsociadoAMano /></span>}
+                </td>
                 <td className="px-3.5 py-4 align-top">
                   <span className="block font-semibold whitespace-nowrap">{nombreFecha(v.fecha)}</span>
                   {c && <span className="mt-0.5 block text-xs text-suave whitespace-nowrap">{c}</span>}

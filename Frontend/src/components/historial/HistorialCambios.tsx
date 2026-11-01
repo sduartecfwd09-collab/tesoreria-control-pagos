@@ -124,8 +124,8 @@ export function HistorialCambios() {
                           </>
                         )}
                       </td>
-                      {cambio.tipo === "alta" ? (
-                        <td colSpan={2} className={`${celda} font-semibold`}>Se creó la obligación</td>
+                      {cambio.tipo === "alta" || cambio.tipo === "frase" ? (
+                        <td colSpan={2} className={`${celda} font-semibold`}>{cambio.tipo === "alta" ? "Se creó la obligación" : cambio.texto}</td>
                       ) : (
                         <>
                           <td className={`${celda} font-semibold`}>{rotuloDeCampo(f.campo)}</td>

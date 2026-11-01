@@ -54,3 +54,29 @@ test("fecha y hora de Costa Rica; el año solo si no es el año en curso", () =>
   assert.equal(f.fechaHoraDeCambio("2026-01-01T03:00:00.000Z", "2026"), "31 dic 2025, 21:00");
   assert.equal(f.fechaHoraDeCambio("no es fecha", "2026"), null);
 });
+
+test("asociar un pago a mano: el historial lo cuenta como frase, sin antes ni después", () => {
+  assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago asociado a mano");
+  assert.deepEqual(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: "2026-10" }), { tipo: "frase", texto: "Se asoció un pago a mano al vencimiento de oct 2026" });
+  assert.deepEqual(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "2026-10", despues: null }), { tipo: "frase", texto: "Se quitó la asociación manual del vencimiento de oct 2026" });
+  // sin periodo legible no se inventa uno
+  assert.equal(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: null }).texto, "Se asoció un pago a mano a un vencimiento");
+  assert.equal(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "raro", despues: null }).texto, "Se quitó la asociación manual de un vencimiento");
+});
+
+test("frase del detalle: «Asociado a mano por {nombre} el {fecha}. Motivo: {motivo}.»", () => {
+  // 15:30 UTC del 28 de octubre es el 28 en Costa Rica; 03:00 UTC del 1 de noviembre todavía es el 31 de octubre
+  const a = { quien: "Ana Uno", cuando: "2026-10-28T15:30:00.000Z", motivo: "Se pagó con otra referencia" };
+  assert.equal(f.fraseAsociadoAMano(a, "2026"), "Asociado a mano por Ana Uno el 28 oct. Motivo: Se pagó con otra referencia.");
+  assert.equal(f.fraseAsociadoAMano({ ...a, cuando: "2026-11-01T03:00:00.000Z" }, "2026"), "Asociado a mano por Ana Uno el 31 oct. Motivo: Se pagó con otra referencia.");
+  // el año solo si no es el año en curso
+  assert.equal(f.fraseAsociadoAMano({ ...a, cuando: "2025-12-31T15:30:00.000Z" }, "2026"), "Asociado a mano por Ana Uno el 31 dic 2025. Motivo: Se pagó con otra referencia.");
+  // sin punto doble si el motivo ya termina en punto
+  assert.equal(f.fraseAsociadoAMano({ ...a, motivo: "Ya estaba pagado. " }, "2026"), "Asociado a mano por Ana Uno el 28 oct. Motivo: Ya estaba pagado.");
+  // una fecha ilegible no rompe la frase
+  assert.equal(f.fraseAsociadoAMano({ ...a, cuando: "no es fecha" }, "2026"), "Asociado a mano por Ana Uno. Motivo: Se pagó con otra referencia.");
+});
+
+test("estados que ofrecen asociar un pago", () => {
+  assert.deepEqual([...f.ESTADOS_ASOCIABLES].sort(), ["por_revisar", "sin_informacion", "vencido"]);
+});

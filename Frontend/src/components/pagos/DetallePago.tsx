@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { montoPagado, nombreFecha } from "@/lib/formato";
+import { fraseAsociadoAMano, montoPagado, nombreFecha } from "@/lib/formato";
 import type { DetalleVencimiento, EstadoVencimiento, MovimientoDetalle } from "@/lib/tipos";
 import { Ficha } from "../Ficha";
+import { AccionesPago, EtiquetaAsociadoAMano } from "./AccionesPago";
 import { EstadoPago } from "./EstadoPago";
 
 const ESTADOS: EstadoVencimiento[] = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"];
@@ -86,17 +87,18 @@ function Seccion({ titulo, children }: { titulo: string; children: ReactNode }) 
  * Detalle de solo lectura de un pago: se abre con «Gestionar» o tocando la fila. Sin acciones: cuenta qué pasó, por qué y
  * qué hacer con los datos reales. Los textos los arma el servidor. Cierra con Escape, con el botón o al pulsar fuera.
  */
-export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void }) {
+export function DetallePago({ id, alCerrar, acciones }: { id: number; alCerrar: () => void; /** solo Pagos del mes pide las acciones (asociar o quitar un pago a mano); alCambiar actualiza la lista */ acciones?: { alCambiar: () => void } }) {
   const [d, setD] = useState<DetalleVencimiento | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0); // vuelve a pedir el detalle después de una acción
 
   useEffect(() => {
     let vigente = true;
-    api.detalleVencimiento(id).then((r) => vigente && setD(r)).catch((e) => vigente && setError(e instanceof Error ? e.message : "No se pudo cargar el detalle"));
+    api.detalleVencimiento(id).then((r) => vigente && (setD(r), setError(null))).catch((e) => vigente && setError(e instanceof Error ? e.message : "No se pudo cargar el detalle"));
     return () => {
       vigente = false;
     };
-  }, [id]);
+  }, [id, recarga]);
 
   const fila = (k: string, v: ReactNode) => (
     <>
@@ -113,8 +115,11 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
           <>
             <p className="flex flex-wrap items-center gap-2">
               <EstadoPago estado={d.estado} />
+              {d.asociadoAMano && !d.sinEfecto && <EtiquetaAsociadoAMano />}
             </p>
             <p className="mt-3 font-semibold">{d.textos.resumen}</p>
+            {d.asociadoAMano && !d.sinEfecto && <p className="mt-2 text-sm">{fraseAsociadoAMano(d.asociadoAMano)}</p>}
+            {d.sinEfecto && <p role="status" className="mt-3 rounded border-l-4 border-acento bg-fondo-suave p-3 text-sm font-semibold">El pago asociado ya no aparece en los estados de cuenta.</p>}
             {d.textos.parrafos.map((p, i) => (
               <p key={i} className="mt-2 text-sm">{p}</p>
             ))}
@@ -130,6 +135,8 @@ export function DetallePago({ id, alCerrar }: { id: number; alCerrar: () => void
                 <TablaMovimientos movimientos={d.movimientos} conSociedad={d.estado === "por_revisar" || d.estado === "pagado_con_inconsistencia"} />
               </Seccion>
             )}
+
+            {acciones && <AccionesPago d={d} alCambiar={() => (setRecarga((n) => n + 1), acciones.alCambiar())} />}
 
             <Seccion titulo="Datos">
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">

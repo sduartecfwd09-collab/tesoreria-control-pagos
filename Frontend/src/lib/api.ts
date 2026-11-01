@@ -1,5 +1,5 @@
 import type {
-  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, FiltroHistorico, RespuestaHistorico, FiltroHistorial, RespuestaHistorial, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
+  CandidatoPago, AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, FiltroHistorico, RespuestaHistorico, FiltroHistorial, RespuestaHistorial, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
@@ -87,6 +87,12 @@ export const api = {
     }
   },
   detalleVencimiento: async (id: number) => (await pedir<{ datos: DetalleVencimiento }>(`/api/vencimientos/${id}`)).datos,
+  /** Pagos del banco que se pueden asociar a mano a este vencimiento (los más cercanos a su fecha primero). */
+  pagosCandidatos: async (id: number) => (await pedir<{ datos: CandidatoPago[] }>(`/api/vencimientos/${id}/pagos-candidatos`)).datos,
+  asociarPago: (id: number, movimiento: number, motivo: string) =>
+    pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/asociar-pago`, { method: "POST", body: JSON.stringify({ movimiento, motivo }) }),
+  quitarAsociacion: (id: number, motivo: string) =>
+    pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/quitar-asociacion`, { method: "POST", body: JSON.stringify({ motivo }) }),
   avisosDatos: async () => (await pedir<{ datos: AvisoDatos[] }>("/api/vencimientos/avisos-datos")).datos,
   periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[]; hoy: string }>("/api/vencimientos/periodos")).datos,
   /** Histórico: vencimientos con su pago cruzado, una página por vez (filtro y paginación en el servidor). */

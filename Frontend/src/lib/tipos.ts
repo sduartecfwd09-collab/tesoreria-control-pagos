@@ -295,6 +295,29 @@ export interface Vencimiento {
   pago: PagoVencimiento | null;
   conciliado: boolean;
   futuro: boolean;
+  /** pago asociado a mano: quién, cuándo (instante UTC) y por qué; null si no hay una asociación vigente */
+  asociadoAMano: AsociacionManual | null;
+  /** la asociación sigue vigente pero el pago ya no aparece en los estados de cuenta */
+  sinEfecto: boolean;
+  /** hay una acción posible para esta persona (asociar o quitar un pago a mano) */
+  puedeGestionar: boolean;
+}
+
+export interface AsociacionManual {
+  quien: string;
+  cuando: string;
+  motivo: string;
+}
+
+/** Un pago del banco que se puede asociar a un vencimiento (descripción con los números largos enmascarados, cuenta con los últimos 4). */
+export interface CandidatoPago {
+  movimientoId: number;
+  fecha: string;
+  descripcion: string | null;
+  cuenta: string;
+  banco: string | null;
+  monto: number;
+  moneda: string | null;
 }
 
 export interface AvisoDatos {
@@ -409,6 +432,9 @@ export interface DetalleVencimiento {
   cobertura: { estadosHasta: string | null; cuentas: number; cuentasSinCobertura: { cuenta: string; banco: string | null; hasta: string | null }[] } | null;
   /** textos armados por el servidor con los datos reales: qué pasó, por qué y qué hacer */
   textos: { resumen: string; parrafos: string[]; queHacer: string | null };
+  asociadoAMano: AsociacionManual | null;
+  sinEfecto: boolean;
+  puedeGestionar: boolean;
   /** obligaciones de la sociedad con el mismo número de servicio (vacío si no se comparte) */
   grupo: ObligacionDelGrupo[];
   movimientos: MovimientoDetalle[];

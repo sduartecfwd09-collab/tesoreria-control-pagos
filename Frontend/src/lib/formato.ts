@@ -136,6 +136,7 @@ const ROTULO_CAMPO: Record<string, string> = {
   moneda: "Moneda",
   cuentaEsperadaId: "Cuenta de pago",
   obligacion: "Obligación nueva",
+  pago_asociado: "Pago asociado a mano",
 };
 export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
 
@@ -164,11 +165,18 @@ export function valorEnPalabras(campo: string, valor: string | null): string {
   }
 }
 
-export type CambioEnPalabras = { tipo: "alta" } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
+export type CambioEnPalabras = { tipo: "alta" } | { tipo: "frase"; texto: string } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
 
-/** Cómo se presenta lo que cambió: el alta como una frase, monto/moneda/cuenta como «Cambió», y el resto como antes y después. */
+/** Cómo se presenta lo que cambió: el alta y las asociaciones de pago como una frase, monto/moneda/cuenta como «Cambió», y el resto como antes y después. */
 export function cambioEnPalabras(f: { accion: string; campo: string; antes: string | null; despues: string | null }): CambioEnPalabras {
   if (f.accion === "crear") return { tipo: "alta" };
+  // asociar o quitar un pago a mano: solo se guardó el periodo (AAAA-MM) del vencimiento
+  if (f.accion === "asociar_pago" || f.accion === "quitar_asociacion") {
+    const periodo = f.accion === "asociar_pago" ? f.despues : f.antes;
+    const mes = periodo && /^\d{4}-\d{2}$/.test(periodo) ? mesCorto(periodo) : null;
+    if (f.accion === "asociar_pago") return { tipo: "frase", texto: mes ? `Se asoció un pago a mano al vencimiento de ${mes}` : "Se asoció un pago a mano a un vencimiento" };
+    return { tipo: "frase", texto: mes ? `Se quitó la asociación manual del vencimiento de ${mes}` : "Se quitó la asociación manual de un vencimiento" };
+  }
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
   return { tipo: "valores", antes: valorEnPalabras(f.campo, f.antes), despues: valorEnPalabras(f.campo, f.despues) };
 }
@@ -181,3 +189,21 @@ export function fechaHoraDeCambio(iso: string, anio: string = anioEnCurso): stri
   const dia = `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]}`;
   return `${p.year === anio ? dia : `${dia} ${p.year}`}, ${p.hour}:${p.minute}`;
 }
+
+/** Solo el día de un instante, en la zona de Costa Rica; con año solo si no es el año en curso: «28 oct» o «28 oct 2025». null si no es una fecha. */
+export function fechaDeCambio(iso: string, anio: string = anioEnCurso): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(PARTES_CR.formatToParts(d).map((x) => [x.type, x.value]));
+  const dia = `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]}`;
+  return p.year === anio ? dia : `${dia} ${p.year}`;
+}
+
+/** «Asociado a mano por Ana Uno el 28 oct. Motivo: se pagó con otra referencia.» (sin punto doble si el motivo ya termina en punto). */
+export function fraseAsociadoAMano(a: { quien: string; cuando: string; motivo: string }, anio?: string): string {
+  const fecha = fechaDeCambio(a.cuando, anio);
+  return `Asociado a mano por ${a.quien}${fecha ? ` el ${fecha}` : ""}. Motivo: ${a.motivo.replace(/[.\s]+$/, "")}.`;
+}
+
+/** Estados en los que se puede asociar un pago a mano (el servidor es quien decide; esto solo evita ofrecer lo imposible). */
+export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion"];
