@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { ErrorApi } from "@/lib/api";
-import { aCentavos, aTextoMonto, FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_MONEDA, SIMBOLO } from "@/lib/formato";
-import type { CambiosObligacion, Categoria, Frecuencia, Moneda, Obligacion, Sociedad } from "@/lib/tipos";
+import { FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence } from "@/lib/formato";
+import type { CambiosObligacion, Categoria, Frecuencia, Obligacion, Sociedad } from "@/lib/tipos";
 import { ConfirmarCambio, ConfirmarSalida, type CambioPendiente } from "../ConfirmarCambio";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
@@ -19,14 +19,9 @@ function lineasCambio(v: Valores, sucios: Partial<Record<keyof Valores, unknown>
     l.push(`Frecuencia: ${NOMBRE_FRECUENCIA[v.frecuencia]}${mes}`);
   }
   if (sucios.frecuenciaConfirmada) l.push(`Frecuencia: ${v.frecuenciaConfirmada ? "confirmada" : "sin confirmar"}`);
-  if (sucios.moneda) l.push(`Moneda: ${NOMBRE_MONEDA[v.moneda]}`);
-  if (sucios.monedaConfirmada) l.push(`Moneda: ${v.monedaConfirmada ? "confirmada" : "sin confirmar"}`);
-  if (sucios.monto) l.push(`Monto esperado: ${v.monto.trim() || "Sin monto"}`);
   if (sucios.activa) l.push(`Estado: ${v.activa ? "Activa" : "Inactiva"}`);
   return l.join("\n");
 }
-
-const MONTO_MAXIMO = Number.MAX_SAFE_INTEGER; // centavos (el mismo límite del Backend)
 
 interface Valores {
   sociedad: string;
@@ -37,18 +32,13 @@ interface Valores {
   frecuencia: Frecuencia;
   frecuenciaConfirmada: boolean;
   mesArranque: string;
-  moneda: Moneda;
-  monedaConfirmada: boolean;
-  monto: string;
   activa: boolean;
 }
 
 // Campo del Backend -> campo del formulario (para mostrar el error junto al control correcto).
 const CAMPO_FORMULARIO: Record<string, FieldPath<Valores>> = {
-  montoEsperado: "monto",
   sociedadId: "sociedad",
   frecuenciaPorConfirmar: "frecuenciaConfirmada",
-  monedaPorConfirmar: "monedaConfirmada",
 };
 
 function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): Valores {
@@ -61,9 +51,6 @@ function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): 
     frecuencia: o?.frecuencia ?? frecuenciaDefecto,
     frecuenciaConfirmada: o ? !o.frecuenciaPorConfirmar : false,
     mesArranque: o?.mesArranque != null ? String(o.mesArranque) : "",
-    moneda: o?.moneda ?? "CRC",
-    monedaConfirmada: o ? !o.monedaPorConfirmar : false,
-    monto: aTextoMonto(o?.montoEsperado ?? null),
     activa: o?.activa ?? true,
   };
 }
@@ -83,9 +70,6 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
   if (incluir("frecuenciaConfirmada")) c.frecuenciaPorConfirmar = !v.frecuenciaConfirmada;
   // Mensual no usa mes de arranque: se limpia. Las demás frecuencias lo exigen (el formulario lo valida).
   if (incluir("mesArranque") || incluir("frecuencia")) c.mesArranque = v.frecuencia === "mensual" || v.mesArranque === "" ? null : Number(v.mesArranque);
-  if (incluir("moneda")) c.moneda = v.moneda;
-  if (incluir("monedaConfirmada")) c.monedaPorConfirmar = !v.monedaConfirmada;
-  if (incluir("monto")) c.montoEsperado = aCentavos(v.monto) ?? null;
   if (incluir("activa")) c.activa = v.activa;
   return c;
 }
@@ -120,7 +104,7 @@ export function FormularioObligacion({
   }, []);
 
   // useWatch (y no watch) para que el React Compiler pueda optimizar el componente.
-  const [frecuencia, mesArranque, moneda] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda"] });
+  const [frecuencia, mesArranque] = useWatch({ control, name: ["frecuencia", "mesArranque"] });
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
 
   async function enviar(v: Valores) {
@@ -276,48 +260,6 @@ export function FormularioObligacion({
                 </select>
               </Campo>
             )}
-          </fieldset>
-
-          <fieldset className="grid gap-4 sm:grid-cols-2">
-            <legend className="mb-2 text-lg font-bold">Cuánto y desde dónde</legend>
-            <Campo
-              id="f-moneda"
-              etiqueta="Moneda"
-              ayuda="Moneda en que se paga."
-              error={errors.moneda?.message}
-            >
-              <select id="f-moneda" className={`${claseControl} w-full`} aria-describedby={desc("moneda")} {...register("moneda")}>
-                {(["CRC", "USD"] as const).map((m) => (
-                  <option key={m} value={m}>{NOMBRE_MONEDA[m]}</option>
-                ))}
-              </select>
-              <label className="mt-2 flex items-center gap-2 text-sm">
-                <input type="checkbox" className="h-4 w-4" {...register("monedaConfirmada")} />
-                Confirmada
-              </label>
-            </Campo>
-            <Campo
-              id="f-monto"
-              etiqueta={`Monto esperado (${SIMBOLO[moneda]})`}
-              ayuda="Opcional. Solo números, con hasta 2 decimales (p. ej. 15000 o 15000,50)."
-              error={errors.monto?.message}
-            >
-              <input
-                id="f-monto"
-                inputMode="decimal"
-                placeholder="Sin definir"
-                className={`${claseControl} w-full`}
-                aria-describedby={desc("monto")}
-                {...register("monto", {
-                  validate: (v) => {
-                    const c = aCentavos(v);
-                    if (c === undefined) return "Escriba solo números, con hasta 2 decimales (p. ej. 15000 o 15000,50)";
-                    if (c !== null && c > MONTO_MAXIMO) return "El monto es demasiado grande";
-                    return true;
-                  },
-                })}
-              />
-            </Campo>
           </fieldset>
 
           <div className="rounded border border-divisor p-4">
