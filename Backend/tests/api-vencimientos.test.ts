@@ -2,9 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { generarRango, vaciarImportaciones } from "./helpers/db.js";
+import { jefaDePruebas } from "./helpers/persona.js";
 
 let app: Awaited<ReturnType<typeof crearApp>>;
 let mensual: number;
+let actua: Record<string, string>;
 
 beforeAll(async () => {
   await vaciarImportaciones();
@@ -15,7 +17,8 @@ beforeAll(async () => {
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "Otro", identificador: "0002", diaEsperadoPago: 31 } });
   await prisma.obligacion.create({ data: { sociedadId: b.id, categoriaId: c.id, proveedor: "SinDia", identificador: "0003" } });
   await generarRango("2026-08", "2026-09");
-  app = await crearApp({ reloj: () => new Date(2026, 8, 10, 9, 0) }); // hoy: 10 sep 2026
+  actua = await jefaDePruebas();
+  app = await crearApp({ reloj: () => new Date(2026, 8, 10, 9, 0), modoPruebas: true }); // hoy: 10 sep 2026
 });
 afterAll(async () => {
   await app.close();
@@ -63,9 +66,9 @@ describe("GET /api/vencimientos", () => {
 
 describe("edición de obligaciones y vencimientos", () => {
   it("al editar el monto por el API se ajustan solo los vencimientos futuros y el día no se cambia por aquí", async () => {
-    const dia = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { diaEsperadoPago: 20 } });
+    const dia = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, headers: actua, payload: { diaEsperadoPago: 20 } });
     expect(dia.statusCode).toBe(422);
-    const r = (await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { montoEsperado: 5000 } })).json();
+    const r = (await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, headers: actua, payload: { montoEsperado: 5000 } })).json();
     expect(r.regeneracion).toEqual({ creados: 0, actualizados: 1, eliminados: 0, protegidos: 0 });
     const v = (await app.inject("/api/vencimientos?q=fono")).json().datos;
     expect(v.map((x: { fecha: string }) => x.fecha)).toEqual(["2026-08-15", "2026-09-15"]);
@@ -73,11 +76,11 @@ describe("edición de obligaciones y vencimientos", () => {
   });
 
   it("la API no acepta el responsable de una obligación: es el tesorero de su sociedad", async () => {
-    const r = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, payload: { responsable: "Ana" } });
+    const r = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, headers: actua, payload: { responsable: "Ana" } });
     expect(r.statusCode).toBe(422);
     expect(r.json().campo).toBe("responsable");
     expect((await prisma.obligacion.findUniqueOrThrow({ where: { id: mensual } })).responsable).toBeNull();
-    const alta = await app.inject({ method: "POST", url: "/api/obligaciones", payload: { responsable: "Ana", sociedadId: 1, categoriaId: 1, proveedor: "X", identificador: "1" } });
+    const alta = await app.inject({ method: "POST", url: "/api/obligaciones", headers: actua, payload: { responsable: "Ana", sociedadId: 1, categoriaId: 1, proveedor: "X", identificador: "1" } });
     expect(alta.statusCode).toBe(422);
     expect(alta.json().campo).toBe("responsable");
   });

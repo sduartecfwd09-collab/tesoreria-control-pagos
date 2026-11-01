@@ -10,6 +10,7 @@ import { planificar, type ObligacionPlan } from "../src/domain/vencimientos.js";
 import { completarControlDesdePendientes } from "../src/repositories/obligaciones.js";
 import { sincronizarVencimientos } from "../src/vencimientos/generar.js";
 import { catalogo, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
+import { jefaDePruebas } from "./helpers/persona.js";
 import { generarRango, vaciarImportaciones } from "./helpers/db.js";
 
 const reloj = (y: number, m: number, d: number) => () => new Date(y, m - 1, d, 10, 0);
@@ -115,18 +116,20 @@ describe("«Control desde» por defecto", () => {
 describe("API: alta y edición con «Control desde»", () => {
   let app: Awaited<ReturnType<typeof crearApp>>;
   let cat: number;
+  let actua: Record<string, string>;
   beforeAll(async () => {
     await vaciarImportaciones();
     await sembrarSociedadesDelCatalogo(["AAA"]);
     cat = (await prisma.categoria.findFirstOrThrow()).id;
-    app = await crearApp({ reloj: reloj(2026, 9, 10) });
+    actua = await jefaDePruebas();
+    app = await crearApp({ reloj: reloj(2026, 9, 10), modoPruebas: true });
   });
   afterAll(async () => {
     await app.close();
     await vaciarImportaciones();
   });
   const sociedadId = async () => (await prisma.sociedad.findUniqueOrThrow({ where: { codigo: "AAA" } })).id;
-  const crear = async (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", payload: { sociedadId: await sociedadId(), categoriaId: cat, ...payload } });
+  const crear = async (payload: object) => app.inject({ method: "POST", url: "/api/obligaciones", headers: actua, payload: { sociedadId: await sociedadId(), categoriaId: cat, ...payload } });
 
   it("el alta manual usa el mes de alta y avisa si el día de pago de ese mes ya pasó", async () => {
     const r = await crear({ proveedor: "Agua", identificador: "10", diaEsperadoPago: 5 });
@@ -145,10 +148,10 @@ describe("API: alta y edición con «Control desde»", () => {
   it("valida el formato del mes y permite editarlo (regenera los vencimientos)", async () => {
     expect((await crear({ proveedor: "X", identificador: "13", controlDesde: "octubre" })).statusCode).toBe(422);
     const o = (await prisma.obligacion.findFirstOrThrow({ where: { proveedor: "Luz" } }));
-    const r = await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, payload: { controlDesde: "2026-12" } });
+    const r = await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, headers: actua, payload: { controlDesde: "2026-12" } });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ datos: { controlDesde: "2026-12" }, regeneracion: expect.any(Object) });
-    expect((await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, payload: { controlDesde: "2026-13" } })).statusCode).toBe(422);
+    expect((await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, headers: actua, payload: { controlDesde: "2026-13" } })).statusCode).toBe(422);
     expect(await sociedadId()).toBeGreaterThan(0);
   });
 });

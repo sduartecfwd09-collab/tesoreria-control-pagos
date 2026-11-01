@@ -7,9 +7,11 @@ import { env } from "../src/config/env.js";
 import { prisma } from "../src/db.js";
 import { catalogo, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
+import { jefaDePruebas } from "./helpers/persona.js";
 
 let app: Awaited<ReturnType<typeof crearApp>>;
 let dir: string;
+let actua: Record<string, string>; // encabezado de la persona de Jefatura que actúa
 const original = env.CATALOGO_FILE;
 type Ob = { id: number; identificador: string; proveedor: string; sociedad: string; etiquetas: { codigo: string }[] } & Record<string, unknown>;
 
@@ -20,9 +22,9 @@ const porId = async (identificador: string, proveedor?: string) =>
 const alta = async (payload: { sociedad?: string } & Record<string, unknown>) => {
   const { sociedad, ...resto } = payload;
   const sociedadId = sociedad ? (await prisma.sociedad.findUniqueOrThrow({ where: { codigo: sociedad.toUpperCase() } })).id : undefined;
-  return app.inject({ method: "POST", url: "/api/obligaciones", payload: { ...(sociedadId ? { sociedadId } : {}), ...resto } });
+  return app.inject({ method: "POST", url: "/api/obligaciones", headers: actua, payload: { ...(sociedadId ? { sociedadId } : {}), ...resto } });
 };
-const patch = (id: number, payload: object) => app.inject({ method: "PATCH", url: `/api/obligaciones/${id}`, payload });
+const patch = (id: number, payload: object) => app.inject({ method: "PATCH", url: `/api/obligaciones/${id}`, headers: actua, payload });
 
 beforeAll(async () => {
   await vaciarImportaciones();
@@ -30,7 +32,8 @@ beforeAll(async () => {
   dir = mkdtempSync(path.join(tmpdir(), "catalogo-api-"));
   writeFileSync(path.join(dir, "catalogo.xlsx"), await catalogo());
   writeFileSync(path.join(dir, "sin-cabecera.xlsx"), await catalogo([], { cabecera: ["Otra", "Cosa"] }));
-  app = await crearApp();
+  actua = await jefaDePruebas();
+  app = await crearApp({ modoPruebas: true });
 });
 afterAll(async () => {
   env.CATALOGO_FILE = original;

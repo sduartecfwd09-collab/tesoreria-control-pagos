@@ -7,6 +7,7 @@ import { cargarCoberturaCuentas } from "../src/repositories/cruce.js";
 import { asegurarRoles, mapaDeRoles } from "../src/repositories/usuarios.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
 import { fijarRango, vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
+import { jefaDePruebas } from "./helpers/persona.js";
 
 // Días de espera, aviso por tesorero, frecuencia y regla «desde», con datos inventados. Rango -3/+12; espera 3.
 let hoy = new Date(2026, 9, 27, 10, 0);
@@ -183,20 +184,21 @@ describe("frecuencia por obligación", () => {
     const p = await obligacion("Agua Dos", "5550005", 8);
     await actualizarVencimientos(reloj);
     expect(await prisma.vencimiento.count({ where: { obligacionId: o.id } })).toBeGreaterThan(0);
-    const app = await crearApp({ reloj });
+    const actua = await jefaDePruebas();
+    const app = await crearApp({ reloj, modoPruebas: true });
     try {
-      const sinMes = await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, payload: { frecuencia: "bimestral" } });
+      const sinMes = await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, headers: actua, payload: { frecuencia: "bimestral" } });
       expect(sinMes.statusCode).toBe(422);
       expect(sinMes.json().error).toContain("mes de arranque");
-      const ok = await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, payload: { frecuencia: "bimestral", mesArranque: 9 } });
+      const ok = await app.inject({ method: "PATCH", url: `/api/obligaciones/${o.id}`, headers: actua, payload: { frecuencia: "bimestral", mesArranque: 9 } });
       expect(ok.statusCode).toBe(200);
       expect(ok.json().datos).toMatchObject({ frecuencia: "bimestral", mesArranque: 9, frecuenciaPorConfirmar: false });
       expect(ok.json().regeneracion).toHaveProperty("eliminados");
       expect(await prisma.vencimiento.count({ where: { obligacionId: o.id, periodo: "2026-10" } })).toBe(0);
 
-      const masivoSinMes = await app.inject({ method: "POST", url: "/api/obligaciones/frecuencia", payload: { ids: [p.id], frecuencia: "trimestral" } });
+      const masivoSinMes = await app.inject({ method: "POST", url: "/api/obligaciones/frecuencia", headers: actua, payload: { ids: [p.id], frecuencia: "trimestral" } });
       expect(masivoSinMes.statusCode).toBe(422);
-      const masivo = await app.inject({ method: "POST", url: "/api/obligaciones/frecuencia", payload: { ids: [p.id], frecuencia: "trimestral", mesArranque: 7 } });
+      const masivo = await app.inject({ method: "POST", url: "/api/obligaciones/frecuencia", headers: actua, payload: { ids: [p.id], frecuencia: "trimestral", mesArranque: 7 } });
       expect(masivo.json().datos).toMatchObject({ actualizadas: 1 });
       expect(masivo.json().datos.calendario).toHaveProperty("creados");
       expect(await prisma.obligacion.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ frecuencia: "trimestral", mesArranque: 7, frecuenciaPorConfirmar: false });

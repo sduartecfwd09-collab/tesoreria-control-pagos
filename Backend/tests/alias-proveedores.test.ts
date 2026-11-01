@@ -8,6 +8,7 @@ import { proveedorCanonico } from "../src/config/alias-proveedores.js";
 import { prisma } from "../src/db.js";
 import { catalogo, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
+import { jefaDePruebas } from "./helpers/persona.js";
 
 describe("proveedorCanonico", () => {
   it("une «JASEC Internet» con JASEC y «ICE Telefono» con ICE, sin importar mayúsculas, tildes ni espacios", () => {
@@ -75,12 +76,13 @@ describe("el importador y el alta manual usan la unión", () => {
   });
 
   it("el alta manual guarda el proveedor canónico y bloquea si ya existe esa obligación bajo el nombre canónico", async () => {
-    const app = await crearApp({ reloj: () => new Date(2026, 8, 10, 10, 0) });
+    const actua = await jefaDePruebas();
+    const app = await crearApp({ reloj: () => new Date(2026, 8, 10, 10, 0), modoPruebas: true });
     try {
       const sociedadId = (await prisma.sociedad.findUniqueOrThrow({ where: { codigo: "AAA" } })).id;
       const categoriaId = (await prisma.categoria.findFirstOrThrow({ where: { nombreNormalizado: "internet" } })).id;
       const alta = (proveedor: string) =>
-        app.inject({ method: "POST", url: "/api/obligaciones", payload: { sociedadId, categoriaId, proveedor, identificador: "7001", diaEsperadoPago: 20 } });
+        app.inject({ method: "POST", url: "/api/obligaciones", headers: actua, payload: { sociedadId, categoriaId, proveedor, identificador: "7001", diaEsperadoPago: 20 } });
       const r = await alta("  jasec   Internet ");
       expect(r.statusCode).toBe(201);
       expect(r.json().datos.proveedor).toBe("JASEC");

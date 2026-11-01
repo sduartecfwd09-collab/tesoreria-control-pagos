@@ -12,6 +12,7 @@ import {
   estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
+import { exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
@@ -149,6 +150,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
   });
 
   app.post("/api/obligaciones", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
     // el responsable es el tesorero de la sociedad: no se indica por obligación
     if (req.body && typeof req.body === "object" && "responsable" in req.body) {
       return invalido(reply, "El responsable de una obligación es el tesorero de su sociedad: para cambiarlo, reasigne la sociedad", "responsable");
@@ -158,6 +161,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const d = r.data;
     const sociedad = await obtenerSociedadPorId(d.sociedadId);
     if (!sociedad) return invalido(reply, "La sociedad no existe", "sociedadId");
+    if (!puedeEscribirEnSociedad(persona, sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
     if (!(await obtenerCategoria(d.categoriaId))) return invalido(reply, "La categoría no existe", "categoriaId");
     if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador, d.categoriaId)) {
       return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador y esa categoría en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
@@ -204,6 +208,8 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
 
   // Cambio masivo de frecuencia sobre las filas elegidas: la frecuencia queda confirmada y el calendario se ajusta una sola vez.
   app.post("/api/obligaciones/frecuencia", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
     const r = z.object({
       ids: z.array(z.number().int().positive(), { error: "Elija las obligaciones" }).min(1, "Elija al menos una obligación").max(500, "Elija como máximo 500 obligaciones"),
       frecuencia: z.string({ error: "Indique la frecuencia" }).refine((f) => FRECUENCIAS.includes(f), `La frecuencia debe ser una de: ${FRECUENCIAS.join(", ")}`),
@@ -213,10 +219,16 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const { ids, frecuencia } = r.data;
     const mes = frecuencia === "mensual" ? null : (r.data.mesArranque ?? null);
     if (frecuencia !== "mensual" && mes === null) return invalido(reply, "Indique el mes de arranque: en qué mes toca el primer pago de esta frecuencia", "mesArranque");
-    let actualizadas = 0;
+    // primero se revisa el permiso de TODAS: si alguna es de otra sociedad, no se cambia ninguna
+    const existentes = [];
     for (const id of new Set(ids)) {
-      if (!(await obtenerObligacion(id))) continue;
-      await actualizarObligacion(id, { frecuencia, mesArranque: mes, frecuenciaPorConfirmar: false });
+      const o = await obtenerObligacion(id);
+      if (o) existentes.push(o);
+    }
+    if (existentes.some((o) => !puedeEscribirEnSociedad(persona, o.sociedad))) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+    let actualizadas = 0;
+    for (const o of existentes) {
+      await actualizarObligacion(o.id, { frecuencia, mesArranque: mes, frecuenciaPorConfirmar: false });
       actualizadas++;
     }
     const { calendario } = await actualizarVencimientos(opts.reloj);
@@ -224,8 +236,13 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
   });
 
   app.patch("/api/obligaciones/:id", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
     const id = idParam.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
+    const actual = await obtenerObligacion(id.data);
+    if (!actual) return reply.code(404).send({ error: "Obligación no encontrada" });
+    if (!puedeEscribirEnSociedad(persona, actual.sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
     const cuerpo = (req.body ?? {}) as Record<string, unknown>;
     const ajeno = Object.keys(cuerpo).find((k) => !CAMPOS_EDITABLES.includes(k));
     if (ajeno) {
@@ -233,8 +250,6 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     }
     const r = esquemaEdicion.safeParse(cuerpo);
     if (!r.success) return reply.code(422).send(primerError(r.error));
-    const actual = await obtenerObligacion(id.data);
-    if (!actual) return reply.code(404).send({ error: "Obligación no encontrada" });
 
     // Cambiar un día ya definido exige motivo y deja historial (servicio cambiar-dia, que verifica el permiso de quien actúa):
     // hasta que exista el inicio de sesión no se hace por esta ruta. Indicar el día cuando falta sí se permite.
