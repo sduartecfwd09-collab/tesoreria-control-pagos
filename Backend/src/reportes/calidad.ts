@@ -1,7 +1,7 @@
 // Reporte local de los pendientes de calidad del catálogo (lo que antes mostraba el panel «Pendientes con Tesorería»).
 // Se escribe como un archivo Markdown en una carpeta ignorada por git: nunca se envía a ningún lado ni se versiona.
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { calidadCatalogo } from "../domain/obligaciones.js";
 
 type Calidad = ReturnType<typeof calidadCatalogo>;
@@ -37,6 +37,17 @@ export function reporteDeCalidad(c: Calidad, fecha: string): string {
   L.push(`- Sin día de pago (no generan vencimientos): ${n(c.sinDia)}`);
   L.push(`- Sin monto: ${n(c.sinMonto)} · sin cuenta de pago: ${n(c.sinCuenta)} · sin responsable: ${n(c.sinResponsable)}`);
   return L.join("\n") + "\n";
+}
+
+/** ¿`ruta` está dentro de `carpeta` (o es ella)? */
+export function estaDentroDe(ruta: string, carpeta: string): boolean {
+  const r = relative(resolve(carpeta), resolve(ruta));
+  return r === "" || (!r.startsWith("..") && !isAbsolute(r));
+}
+
+/** Las fuentes (estados de cuenta y catálogo) son de solo lectura: el reporte nunca se escribe en su carpeta. */
+export function carpetaPermitida(carpeta: string, fuentes: (string | undefined)[]): boolean {
+  return fuentes.every((f) => !f || (!estaDentroDe(carpeta, f) && !estaDentroDe(carpeta, dirname(f))));
 }
 
 /** Escribe el reporte en `carpeta` (se crea si falta) y devuelve la ruta del archivo. */

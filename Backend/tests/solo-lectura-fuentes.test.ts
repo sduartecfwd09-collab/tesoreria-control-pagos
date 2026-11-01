@@ -22,7 +22,10 @@ const archivosDeCodigo = (dir: string): string[] =>
   });
 
 describe("el código no usa operaciones de escritura sobre archivos", () => {
-  const codigo = [...archivosDeCodigo(path.join(raizBackend, "src")), ...archivosDeCodigo(path.join(raizBackend, "scripts"))];
+  // Única excepción: el reporte local de calidad (npm run calidad:reporte), que escribe un Markdown en una carpeta ignorada por git y
+  // nunca en las carpetas de origen (carpetaPermitida lo impide y se prueba en reporte-calidad.test.ts).
+  const EXCEPCION = path.join(raizBackend, "src", "reportes", "calidad.ts");
+  const codigo = [...archivosDeCodigo(path.join(raizBackend, "src")), ...archivosDeCodigo(path.join(raizBackend, "scripts"))].filter((f) => f !== EXCEPCION);
   // Escritura, movimiento, borrado, creación de carpetas, flujos de escritura y volcado de libros de Excel a archivo.
   const PROHIBIDO = /\b(writeFile|writeFileSync|appendFile|appendFileSync|unlink|unlinkSync|rmSync|rmdir|rmdirSync|rename|renameSync|copyFile|copyFileSync|mkdir|mkdirSync|createWriteStream|truncate|truncateSync|chmod|utimes)\b|\.xlsx\.write(File)?\(|\bfs\.rm\(|\brm\(/;
 

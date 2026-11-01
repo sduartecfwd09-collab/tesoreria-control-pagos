@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { calidadCatalogo, type ObligacionCalidad } from "../src/domain/obligaciones.js";
-import { guardarReporte, reporteDeCalidad } from "../src/reportes/calidad.js";
+import { carpetaPermitida, guardarReporte, reporteDeCalidad } from "../src/reportes/calidad.js";
 
 // Datos inventados: el reporte lista los pendientes que antes mostraba el panel y se escribe solo donde se le indica.
 const obligacion = (id: number, sociedad: string, proveedor: string, identificador: string, extra: Partial<ObligacionCalidad> = {}): ObligacionCalidad => ({
@@ -37,5 +37,14 @@ describe("reporte de calidad", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
+  });
+
+  it("nunca escribe en la carpeta de los estados de cuenta ni en la del catálogo", () => {
+    const fuentes = ["C:/datos/estados", "C:/datos/catalogo/tabla.xlsx"];
+    expect(carpetaPermitida("C:/datos/estados", fuentes)).toBe(false);
+    expect(carpetaPermitida("C:/datos/estados/subcarpeta", fuentes)).toBe(false);
+    expect(carpetaPermitida("C:/datos/catalogo", fuentes)).toBe(false);
+    expect(carpetaPermitida("C:/proyecto/Backend/resultados", fuentes)).toBe(true);
+    expect(carpetaPermitida("C:/proyecto/Backend/resultados", [undefined])).toBe(true);
   });
 });
