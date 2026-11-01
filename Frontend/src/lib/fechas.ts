@@ -200,3 +200,42 @@ export function opcionesDelMes(periodo: string, hoy: string): OpcionPeriodo[] {
   }
   return [...lista, OPCION_ELEGIR];
 }
+
+// --- Fechas escritas a mano en «Elegir fechas» (Desde y Hasta) ---------------------------------------------------------------
+
+export const MENSAJE_INCOMPLETO = "Complete «Desde» y «Hasta».";
+const MENSAJE_FORMATO = "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
+
+/**
+ * Qué son las dos fechas escritas: `vacio` (ninguna), `incompleto` (falta una y la escrita está bien), `invalido` (no es una fecha
+ * completa y real, está fuera de los límites o del mes, o «Desde» es posterior a «Hasta») o `valido` (se puede aplicar).
+ * Lo escrito se valida contra los MISMOS límites que el calendario: si una sola fecha ya está fuera de ellos se dice, sin esperar a la otra.
+ * La pantalla decide cuándo mostrar el mensaje (nunca mientras se escribe).
+ */
+export type FechasEscritas =
+  | { estado: "vacio" }
+  | { estado: "incompleto"; mensaje: string }
+  | { estado: "invalido"; mensaje: string }
+  | { estado: "valido"; rango: Rango };
+
+export function evaluarFechasEscritas(desde: string, hasta: string, opciones: { limites?: Limites | null; mes?: string | null } = {}): FechasEscritas {
+  const d = desde.trim();
+  const h = hasta.trim();
+  if (d === "" && h === "") return { estado: "vacio" };
+  const a = d === "" ? null : deTextoDMA(d);
+  const b = h === "" ? null : deTextoDMA(h);
+  if ((d !== "" && a === null) || (h !== "" && b === null)) return { estado: "invalido", mensaje: MENSAJE_FORMATO };
+  if (a !== null && b !== null) {
+    const mensaje = validarRango({ desde: a, hasta: b }, opciones);
+    return mensaje ? { estado: "invalido", mensaje } : { estado: "valido", rango: { desde: a, hasta: b } };
+  }
+  // falta una: si la escrita ya queda fuera de los límites, se dice eso en vez de pedir la otra
+  const unica = (a ?? b)!;
+  const mensaje = validarRango({ desde: unica, hasta: unica }, opciones);
+  return mensaje ? { estado: "invalido", mensaje } : { estado: "incompleto", mensaje: MENSAJE_INCOMPLETO };
+}
+
+/** El mensaje que se muestra, o null: solo después de salir del campo o de intentar aplicar, nunca mientras se escribe. */
+export function mensajeDeFechas(f: FechasEscritas, mostrar: boolean): string | null {
+  return mostrar && (f.estado === "incompleto" || f.estado === "invalido") ? f.mensaje : null;
+}

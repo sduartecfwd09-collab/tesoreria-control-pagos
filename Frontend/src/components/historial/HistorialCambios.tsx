@@ -9,7 +9,8 @@ import { LineaAlcance } from "../LineaAlcance";
 import { SelectorPeriodo } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { CajaError, claseControl, FinDeLista, NombreSociedad } from "../ui";
-import { CajaFiltros, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh, FiltroConEtiqueta } from "../estilo-tabla";
+import { CajaFiltros } from "../CajaFiltros";
+import { claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh, FiltroConEtiqueta } from "../estilo-tabla";
 
 const OPCIONES: IdAtajo[] = ["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"];
 const th = claseTh;

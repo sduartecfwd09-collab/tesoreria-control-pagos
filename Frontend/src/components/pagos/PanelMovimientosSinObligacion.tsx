@@ -7,7 +7,8 @@ import type { LimitesFechas, MovimientoSinObligacion, MovimientosSinObligacion }
 import { LineaAlcance } from "../LineaAlcance";
 import { SelectorPeriodo } from "../SelectorFechas";
 import { CajaError } from "../ui";
-import { CajaFiltros, claseBotonTabla, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh } from "../estilo-tabla";
+import { CajaFiltros } from "../CajaFiltros";
+import { claseBotonTabla, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh } from "../estilo-tabla";
 import { FichaMovimiento } from "../archivos/FichaMovimiento";
 
 const OPCIONES: IdAtajo[] = ["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"];
@@ -42,21 +43,27 @@ export function PanelMovimientosSinObligacion() {
   return (
     <>
       <LineaAlcance alcance={datos.alcance} />
-      {navegable && (
-        <CajaFiltros etiqueta="Filtros de movimientos sin obligación">
-          <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites!.hoy, navegable, true)} inicial="todo" rangoActual={rango} limites={navegable} alCambiar={setRango} />
-        </CajaFiltros>
-      )}
-      <section aria-label="Resumen" aria-live="polite" className="mt-4 max-w-xl rounded-[14px] border border-divisor bg-fondo-suave p-5">
-        {datos.totalGrupos === 0 ? (
-          <p className="font-semibold">No hay movimientos sin obligación.</p>
-        ) : (
-          <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
-            <span><b className="text-[44px] font-extrabold leading-none tabular-nums">{n(datos.totalGrupos)}</b> <span className="text-sm text-suave">{datos.totalGrupos === 1 ? "número sin obligación" : "números sin obligación"}</span></span>
-            <span><b className="text-[44px] font-extrabold leading-none tabular-nums">{n(datos.totalPagos)}</b> <span className="text-sm text-suave">{datos.totalPagos === 1 ? "pago" : "pagos"}</span></span>
+      {/* una sola franja: el Período a la izquierda y las dos cifras (solo informan; no filtran ni se pulsan) a la derecha */}
+      <CajaFiltros
+        etiqueta="Filtros y resumen de movimientos sin obligación"
+        completa
+        derecha={
+          <div role="group" aria-label="Resumen" aria-live="polite" className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+            {datos.totalGrupos === 0 ? (
+              <p className="font-semibold">No hay movimientos sin obligación.</p>
+            ) : (
+              <>
+                <span><b className="text-2xl font-extrabold leading-none tabular-nums">{n(datos.totalGrupos)}</b> <span className="text-sm text-suave">{datos.totalGrupos === 1 ? "número sin obligación" : "números sin obligación"}</span></span>
+                <span><b className="text-2xl font-extrabold leading-none tabular-nums">{n(datos.totalPagos)}</b> <span className="text-sm text-suave">{datos.totalPagos === 1 ? "pago" : "pagos"}</span></span>
+              </>
+            )}
           </div>
+        }
+      >
+        {navegable && (
+          <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites!.hoy, navegable, true)} inicial="todo" rangoActual={rango} limites={navegable} alCambiar={setRango} />
         )}
-      </section>
+      </CajaFiltros>
       {datos.totalGrupos > 0 && (
         <div className={claseContenedorTabla}>
           <table className={`${claseTabla} min-w-[900px]`}>

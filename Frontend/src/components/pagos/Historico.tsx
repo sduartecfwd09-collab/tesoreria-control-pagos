@@ -9,7 +9,8 @@ import { LineaAlcance } from "../LineaAlcance";
 import { SelectorPeriodo } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { CajaError, claseControl, FinDeLista, NombreSociedad } from "../ui";
-import { CajaFiltros, claseBotonTabla, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh, FiltroConEtiqueta } from "../estilo-tabla";
+import { CajaFiltros } from "../CajaFiltros";
+import { claseBotonTabla, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh, FiltroConEtiqueta } from "../estilo-tabla";
 import { DetallePago } from "./DetallePago";
 import { ESTADO, EstadoPago, ORDEN } from "./EstadoPago";
 

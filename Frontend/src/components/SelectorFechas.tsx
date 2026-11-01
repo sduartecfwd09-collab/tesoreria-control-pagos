@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import {
-  aTextoDMA, deTextoDMA, mesDentroDeLimites, nombreDelPeriodo, OPCION_ELEGIR, sumarMeses, validarRango,
+  aTextoDMA, evaluarFechasEscritas, mensajeDeFechas, mesDentroDeLimites, nombreDelPeriodo, OPCION_ELEGIR, sumarMeses,
   type Limites, type OpcionPeriodo, type Rango,
 } from "@/lib/fechas";
 import { claseControl } from "./ui";
@@ -90,9 +90,17 @@ export function SelectorMes({ valor, alCambiar, limites }: { valor: string; alCa
 const claseEntrada = "w-36 rounded border-2 border-control bg-fondo px-3 py-2 text-sm";
 
 /**
+ * Lugar donde el recuadro de filtros (CajaFiltros) muestra el mensaje del selector: en una línea propia debajo de TODA la fila, a todo
+ * su ancho, para que el mensaje nunca mueva ni desalinee los demás controles. Sin recuadro (p. ej. Vencidos), el selector lo muestra debajo.
+ */
+export const ContextoMensajeFiltros = createContext<{ ponerMensaje: (m: string | null) => void; idMensaje: string } | null>(null);
+
+/**
  * Lista desplegable de período. Las opciones ya vienen filtradas (solo válidas). Solo «Elegir fechas» muestra «Desde» y «Hasta»
- * (día/mes/año) y las comprueba contra `limites` y, si se indica, contra un mes. Al elegir una opción con rango, o al escribir fechas válidas,
- * avisa con `alCambiar(rango)`; `null` = sin filtro de fechas. El padre cambia la `key` para reiniciarla (p. ej. al cambiar de mes).
+ * (día/mes/año). El filtro se aplica en cuanto las dos fechas están completas y son válidas (sin Enter), y también al salir del campo
+ * por si el navegador no avisó. Lo escrito se valida contra los mismos límites que el calendario. El mensaje (incompleto, fuera de
+ * rango, Desde posterior a Hasta) aparece al salir de la pareja de campos o al pulsar Enter, no mientras se escribe, y desaparece al
+ * volver a escribir. `null` = sin filtro de fechas. El padre cambia la `key` para reiniciarla (p. ej. al cambiar de mes).
  */
 export function SelectorPeriodo({ etiqueta, opciones, inicial, rangoActual, limites, mes, alCambiar }: {
   etiqueta: string;
@@ -107,33 +115,67 @@ export function SelectorPeriodo({ etiqueta, opciones, inicial, rangoActual, limi
   const [elegida, setElegida] = useState(opciones.some((o) => o.id === inicial) ? inicial : opciones[0]!.id);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [mostrar, setMostrar] = useState(false); // ¿ya se puede mostrar el mensaje? (después de salir del campo o de intentar aplicar)
+  const aplicada = useRef(""); // el rango escrito que ya se aplicó, para no repetirlo
+  const campoDesde = useRef<HTMLInputElement>(null);
+  const campoHasta = useRef<HTMLInputElement>(null);
   const id = useId();
+  const contexto = useContext(ContextoMensajeFiltros);
   // si la opción elegida deja de ofrecerse (cambió «hoy» o la ventana), se vuelve a la primera
   const vigente = opciones.some((o) => o.id === elegida) ? elegida : opciones[0]!.id;
   const pidiendoFechas = vigente === OPCION_ELEGIR.id;
 
+  const fechas = evaluarFechasEscritas(desde, hasta, { limites, mes });
+  const mensaje = pidiendoFechas ? mensajeDeFechas(fechas, mostrar) : null;
+  const idMensaje = contexto?.idMensaje ?? `${id}-error`;
+
+  const ponerMensaje = contexto?.ponerMensaje;
+  useEffect(() => {
+    ponerMensaje?.(mensaje);
+    return () => ponerMensaje?.(null);
+  }, [mensaje, ponerMensaje]);
+
+  const aplicar = (d: string, h: string) => {
+    const r = evaluarFechasEscritas(d, h, { limites, mes });
+    if (r.estado !== "valido") return;
+    const clave = `${r.rango.desde}|${r.rango.hasta}`;
+    if (clave === aplicada.current) return;
+    aplicada.current = clave;
+    alCambiar(r.rango);
+  };
+
   const elegir = (nueva: string) => {
     const opcion = opciones.find((o) => o.id === nueva)!;
     setElegida(nueva);
-    setError(null);
+    setMostrar(false);
     if (nueva === OPCION_ELEGIR.id) {
       setDesde(rangoActual ? aTextoDMA(rangoActual.desde) : "");
       setHasta(rangoActual ? aTextoDMA(rangoActual.hasta) : "");
+      aplicada.current = rangoActual ? `${rangoActual.desde}|${rangoActual.hasta}` : "";
     } else {
+      aplicada.current = "";
       alCambiar(opcion.rango);
     }
   };
 
-  const confirmar = (d: string, h: string) => {
-    if (d.trim() === "" || h.trim() === "") return setError(d.trim() === "" && h.trim() === "" ? null : "Complete «Desde» y «Hasta».");
-    const a = deTextoDMA(d);
-    const b = deTextoDMA(h);
-    const mensaje = a && b ? validarRango({ desde: a, hasta: b }, { limites, mes }) : "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
-    setError(mensaje);
-    if (!mensaje && a && b) alCambiar({ desde: a, hasta: b });
+  const escribir = (campo: "desde" | "hasta", valor: string) => {
+    setMostrar(false); // mientras se escribe no se muestra ningún mensaje
+    if (campo === "desde") setDesde(valor);
+    else setHasta(valor);
+    aplicar(campo === "desde" ? valor : desde, campo === "hasta" ? valor : hasta);
   };
-  const alTeclear = (e: React.KeyboardEvent) => e.key === "Enter" && confirmar(desde, hasta);
+  const alSalir = (e: React.FocusEvent<HTMLInputElement>) => {
+    aplicar(desde, hasta);
+    // pasar de «Desde» a «Hasta» (o al revés) todavía es escribir: el mensaje espera a que se salga de la pareja
+    const destino = e.relatedTarget;
+    if (destino !== campoDesde.current && destino !== campoHasta.current) setMostrar(true);
+  };
+  const alTeclear = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    setMostrar(true);
+    aplicar(desde, hasta);
+  };
+  const invalido = mensaje ? true : undefined;
 
   return (
     <div role="group" aria-label={etiqueta}>
@@ -150,18 +192,18 @@ export function SelectorPeriodo({ etiqueta, opciones, inicial, rangoActual, limi
           <>
             <div>
               <label htmlFor={`${id}-desde`} className="block text-xs font-semibold text-suave">Desde</label>
-              <input id={`${id}-desde`} value={desde} onChange={(e) => setDesde(e.target.value)} onBlur={() => confirmar(desde, hasta)} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
-                placeholder="dd/mm/aaaa" aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className={claseEntrada} />
+              <input ref={campoDesde} id={`${id}-desde`} value={desde} onChange={(e) => escribir("desde", e.target.value)} onBlur={alSalir} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
+                placeholder="dd/mm/aaaa" aria-invalid={invalido} aria-describedby={mensaje ? idMensaje : undefined} className={claseEntrada} />
             </div>
             <div>
               <label htmlFor={`${id}-hasta`} className="block text-xs font-semibold text-suave">Hasta</label>
-              <input id={`${id}-hasta`} value={hasta} onChange={(e) => setHasta(e.target.value)} onBlur={() => confirmar(desde, hasta)} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
-                placeholder="dd/mm/aaaa" aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className={claseEntrada} />
+              <input ref={campoHasta} id={`${id}-hasta`} value={hasta} onChange={(e) => escribir("hasta", e.target.value)} onBlur={alSalir} onKeyDown={alTeclear} inputMode="numeric" autoComplete="off" maxLength={10}
+                placeholder="dd/mm/aaaa" aria-invalid={invalido} aria-describedby={mensaje ? idMensaje : undefined} className={claseEntrada} />
             </div>
           </>
         )}
       </div>
-      {error && <p id={`${id}-error`} role="alert" className="mt-2 text-sm font-semibold text-rojo">{error}</p>}
+      {mensaje && !contexto && <p id={idMensaje} role="alert" className="mt-2 text-sm font-semibold text-rojo">{mensaje}</p>}
     </div>
   );
 }

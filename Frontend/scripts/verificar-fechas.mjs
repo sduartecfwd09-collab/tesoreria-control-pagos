@@ -143,3 +143,58 @@ test("columnas de fecha: el año solo si no es del año en curso", async () => {
   assert.equal(fmt.nombreFecha("2026-10-20"), "20 oct 2026");
   assert.equal(fmt.nombreFecha("2027-01-05"), "5 ene");
 });
+
+// --- Fechas escritas a mano en «Elegir fechas» ---
+const LIM = { primera: "2021-11-01", ultima: "2026-11-01" }; // Historial: el máximo es hoy (el día de Costa Rica que informa el servidor)
+
+test("fechas escritas: se aplican en cuanto las dos están completas y válidas, sin Enter", () => {
+  const e = (d, h) => f.evaluarFechasEscritas(d, h, { limites: LIM });
+  // mientras se escribe el año de «Hasta» no es una fecha: no se aplica
+  for (const h of ["", "1", "15/1", "15/10/", "15/10/20", "15/10/202"]) assert.notEqual(e("01/10/2026", h).estado, "valido", h);
+  // al completar el año, ya es válido
+  assert.deepEqual(e("01/10/2026", "15/10/2026"), { estado: "valido", rango: { desde: "2026-10-01", hasta: "2026-10-15" } });
+  // día y mes de uno o dos dígitos
+  assert.equal(e("1/10/2026", "5/10/2026").estado, "valido");
+});
+
+test("fechas escritas: vacío, incompleto y los mensajes de siempre", () => {
+  const e = (d, h) => f.evaluarFechasEscritas(d, h, { limites: LIM });
+  assert.deepEqual(e("", ""), { estado: "vacio" });
+  assert.deepEqual(e("01/10/2026", ""), { estado: "incompleto", mensaje: "Complete «Desde» y «Hasta»." });
+  assert.deepEqual(e("", "01/10/2026"), { estado: "incompleto", mensaje: "Complete «Desde» y «Hasta»." });
+  assert.equal(e("30/02/2026", "01/10/2026").mensaje, "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.");
+  assert.equal(e("20/10/2026", "01/10/2026").mensaje, "«Desde» no puede ser posterior a «Hasta».");
+});
+
+test("fechas escritas: lo escrito a mano se valida contra los mismos límites que el calendario (hoy como máximo)", () => {
+  const e = (d, h) => f.evaluarFechasEscritas(d, h, { limites: LIM });
+  const fuera = "Elija fechas entre 01/11/2021 y 01/11/2026.";
+  // hoy es 01/11/2026: mañana (02/11) se rechaza, también cuando falta la otra fecha
+  assert.deepEqual(e("02/11/2026", "02/11/2026"), { estado: "invalido", mensaje: fuera });
+  assert.deepEqual(e("02/11/2026", ""), { estado: "invalido", mensaje: fuera });
+  assert.deepEqual(e("", "02/11/2026"), { estado: "invalido", mensaje: fuera });
+  assert.equal(e("01/10/2026", "02/11/2026").mensaje, fuera);
+  // hoy sí; el mínimo también
+  assert.equal(e("01/11/2026", "01/11/2026").estado, "valido");
+  assert.equal(e("31/10/2021", "01/11/2026").mensaje, fuera);
+  assert.equal(e("01/11/2021", "01/11/2021").estado, "valido");
+  // sin límites (no se conoce la ventana) solo cuenta que sean fechas reales
+  assert.equal(f.evaluarFechasEscritas("02/11/2099", "03/11/2099").estado, "valido");
+  // dentro de un mes (Pagos del mes) las fechas deben ser de ese mes
+  assert.equal(f.evaluarFechasEscritas("01/10/2026", "05/11/2026", { mes: "2026-10" }).mensaje, "Las fechas deben estar dentro de octubre 2026.");
+});
+
+test("el mensaje solo se muestra después de salir del campo o de intentar aplicar, nunca mientras se escribe", () => {
+  const incompleto = f.evaluarFechasEscritas("01/10/2026", "", { limites: LIM });
+  assert.equal(f.mensajeDeFechas(incompleto, false), null);
+  assert.equal(f.mensajeDeFechas(incompleto, true), "Complete «Desde» y «Hasta».");
+  const valido = f.evaluarFechasEscritas("01/10/2026", "02/10/2026", { limites: LIM });
+  assert.equal(f.mensajeDeFechas(valido, true), null);
+  assert.equal(f.mensajeDeFechas(f.evaluarFechasEscritas("", ""), true), null);
+});
+
+test("límites del Historial: la ventana cerrada en hoy; sin cortar, la ventana completa", () => {
+  const r = { hoy: "2026-11-01", ventana: { primera: "2021-11-01", ultima: "2027-11-30" } };
+  assert.deepEqual(f.limitesDeNavegacion(r, true), { primera: "2021-11-01", ultima: "2026-11-01" });
+  assert.deepEqual(f.limitesDeNavegacion(r), { primera: "2021-11-01", ultima: "2027-11-30" });
+});

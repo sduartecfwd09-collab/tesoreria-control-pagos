@@ -26,15 +26,6 @@ export function TituloPantalla({ children }: { children: ReactNode }) {
   );
 }
 
-/** Recuadro de fondo suave con todos los filtros en una fila; baja a otra solo si no caben. */
-export function CajaFiltros({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
-  return (
-    <section aria-label={etiqueta} className="mt-5 flex w-fit max-w-full flex-wrap items-end gap-x-4 gap-y-3 rounded-[14px] border border-divisor bg-tinte-filtros p-4">
-      {children}
-    </section>
-  );
-}
-
 /** Un filtro con su etiqueta pequeña encima (la misma letra que usa el selector de período). */
 export function FiltroConEtiqueta({ id, etiqueta, children }: { id: string; etiqueta: string; children: ReactNode }) {
   return (
