@@ -5,7 +5,8 @@ import { aNumero } from "../domain/montos.js";
 import { calidadCatalogo, responsableEfectivo } from "../domain/obligaciones.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { listarSociedades, sociedadesConEstados, todasLasObligaciones } from "../repositories/obligaciones.js";
-import { carpetaPermitida, guardarReporte, reporteDeCalidad } from "../reportes/calidad.js";
+import { relojSistema } from "../domain/reloj.js";
+import { carpetaPermitida, fechaDeReporte, guardarReporte, reporteDeCalidad } from "../reportes/calidad.js";
 
 // Uso: npm run calidad:reporte
 // Escribe un archivo Markdown con los pendientes de calidad del catálogo (de TODO el sistema, no de una persona) en la carpeta
@@ -20,7 +21,7 @@ const c = calidadCatalogo(
   obs.map((o) => ({ ...o, sociedad: etiquetaSociedad(o.sociedad), montoEsperado: aNumero(o.montoEsperado), responsable: responsableEfectivo(o).nombre })),
   sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) })),
 );
-const fecha = new Date().toISOString().slice(0, 10);
+const fecha = fechaDeReporte(relojSistema);
 const ruta = guardarReporte(carpeta, fecha, reporteDeCalidad(c, fecha));
 console.log(`Reporte escrito en ${ruta}`);
 console.log(`  Identificadores repetidos: ${c.identificadoresRepetidos.length} · con formato de IBAN: ${c.formatoIban.length} · sociedades sin obligaciones: ${c.sociedadesSinObligaciones.length + c.sociedadesSinEstadosNiObligaciones.length} · frecuencia sin confirmar: ${c.frecuenciaPorConfirmar}`);

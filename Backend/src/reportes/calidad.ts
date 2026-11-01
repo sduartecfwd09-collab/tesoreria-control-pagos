@@ -3,8 +3,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { calidadCatalogo } from "../domain/obligaciones.js";
+import { hoyDe, type Reloj } from "../domain/reloj.js";
 
 type Calidad = ReturnType<typeof calidadCatalogo>;
+
+/** La fecha del nombre del archivo es la de Costa Rica (no la de UTC: de noche cambiaría de día antes). */
+export const fechaDeReporte = (reloj: Reloj): string => hoyDe(reloj).toISOString().slice(0, 10);
 
 const n = (x: number) => x.toLocaleString("es-CR");
 

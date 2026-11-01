@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { calidadCatalogo, type ObligacionCalidad } from "../src/domain/obligaciones.js";
-import { carpetaPermitida, guardarReporte, reporteDeCalidad } from "../src/reportes/calidad.js";
+import { carpetaPermitida, fechaDeReporte, guardarReporte, reporteDeCalidad } from "../src/reportes/calidad.js";
 
 // Datos inventados: el reporte lista los pendientes que antes mostraba el panel y se escribe solo donde se le indica.
 const obligacion = (id: number, sociedad: string, proveedor: string, identificador: string, extra: Partial<ObligacionCalidad> = {}): ObligacionCalidad => ({
@@ -46,5 +46,11 @@ describe("reporte de calidad", () => {
     expect(carpetaPermitida("C:/datos/catalogo", fuentes)).toBe(false);
     expect(carpetaPermitida("C:/proyecto/Backend/resultados", fuentes)).toBe(true);
     expect(carpetaPermitida("C:/proyecto/Backend/resultados", [undefined])).toBe(true);
+  });
+
+  it("el nombre del archivo usa la fecha de Costa Rica, no la de UTC", () => {
+    // 31 de octubre, 8 de la noche en Costa Rica (UTC-6) = 1 de noviembre, 2 de la mañana en UTC
+    expect(fechaDeReporte(() => new Date("2026-11-01T02:00:00Z"))).toBe("2026-10-31");
+    expect(fechaDeReporte(() => new Date("2026-11-01T06:30:00Z"))).toBe("2026-11-01");
   });
 });
