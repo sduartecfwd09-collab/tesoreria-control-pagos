@@ -18,7 +18,6 @@ export function ResumenCalidad({
     n > 0 ? { estado: "por_revisar", texto: "Requiere decisión" } : { estado: "proyectado", texto: "Completo" };
   const tarjetas: { falta?: Falta; titulo: string; n: number; ayuda: string; estado: EstadoVencimiento; texto: string }[] = [
     { titulo: "Obligaciones activas", n: r.activas, ayuda: r.inactivas ? `${r.inactivas} inactivas` : "ninguna inactiva", estado: "proyectado", texto: "Total" },
-    { falta: "monto", titulo: "Falta monto", n: r.sinMonto, ayuda: "dato opcional", estado: "proyectado", texto: "Dato opcional" },
     // solo Jefatura: el servidor no envía este conteo a un tesorero
     ...(r.sinResponsable !== undefined ? [{ falta: "responsable" as const, titulo: "Sin responsable", n: r.sinResponsable, ayuda: "su sociedad no tiene tesorero", ...pide(r.sinResponsable) }] : []),
     { falta: "frecuencia", titulo: "Frecuencia sin confirmar", n: r.frecuenciaPorConfirmar, ayuda: "confírmela al editar", ...pide(r.frecuenciaPorConfirmar) },
