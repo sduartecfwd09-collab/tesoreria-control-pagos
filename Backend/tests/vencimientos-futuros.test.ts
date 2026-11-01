@@ -3,6 +3,7 @@ import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { cruzarVencimientos } from "../src/vencimientos/cruce.js";
 import { informeDiagnosticoCruce } from "../src/vencimientos/diagnostico.js";
+import { sinMesesFuturos } from "../src/vencimientos/diagnostico-margen.js";
 import { mesesAdelante, sincronizarVencimientos } from "../src/vencimientos/generar.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
 import { fijarMesesAdelante, vaciarImportaciones } from "./helpers/db.js";
@@ -128,5 +129,18 @@ describe("diagnóstico", () => {
     expect(informe).toContain("Programados por sociedad y mes:");
     expect(informe).toContain("AAA | 2026-11: 1");
     expect(informe).toContain("AAA | 2027-10: 1");
+  });
+
+  it("las secciones de cobertura excluyen los meses futuros; el informe base conserva programado: N", async () => {
+    await crear("Mensual", { diaEsperadoPago: 20 });
+    await actualizarVencimientos(reloj);
+    const r = await cruzarVencimientos(reloj);
+    const { r: actual, antes } = sinMesesFuturos(r, { diasDespues: 3, resultados: r.resultados });
+    expect(r.datos.vencimientos).toHaveLength(13);
+    expect(actual.datos.vencimientos.map((v) => v.fecha.toISOString().slice(0, 7))).toEqual(["2026-10"]);
+    expect(actual.vencimientos).toBe(1);
+    expect(actual.resultados).toHaveLength(1);
+    expect(antes.resultados).toHaveLength(1);
+    expect(informeDiagnosticoCruce(r, [{ id: sociedadId, codigo: "AAA" }])).toContain("programado: 12");
   });
 });

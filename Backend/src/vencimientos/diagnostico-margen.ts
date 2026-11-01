@@ -90,7 +90,23 @@ const ESTADOS_CIFRAS: { etiqueta: string; estados: string[] }[] = [
   { etiqueta: "Por vencer o programado", estados: ["por_vencer", "proyectado"] },
 ];
 
-export function informeMargenCruce(r: ResumenCruce, antes: CifrasAntes, sociedades: SociedadInforme[], x: ExtrasMargen): string {
+/**
+ * Quita los meses futuros (los vencimientos generados por adelantado): aún no tienen estados de cuenta posibles y las cifras de
+ * cobertura los contarían como «parcial». Los de este mes y los anteriores se conservan.
+ */
+export function sinMesesFuturos(r: ResumenCruce, antes: CifrasAntes): { r: ResumenCruce; antes: CifrasAntes } {
+  const mesHoy = r.parametros.hoy.toISOString().slice(0, 7);
+  const vencimientos = r.datos.vencimientos.filter((v) => v.fecha.toISOString().slice(0, 7) <= mesHoy);
+  const ids = new Set(vencimientos.map((v) => v.id));
+  const resultados = r.resultados.filter((q) => ids.has(q.vencimientoId));
+  return {
+    r: { ...r, vencimientos: vencimientos.length, resultados, datos: { ...r.datos, vencimientos } },
+    antes: { ...antes, resultados: antes.resultados.filter((q) => ids.has(q.vencimientoId)) },
+  };
+}
+
+export function informeMargenCruce(rCompleto: ResumenCruce, antesCompleto: CifrasAntes, sociedades: SociedadInforme[], x: ExtrasMargen): string {
+  const { r, antes } = sinMesesFuturos(rCompleto, antesCompleto);
   const nombre = (id: number) => sociedades.find((s) => s.id === id)?.codigo ?? `sociedad ${id}`;
   const { diasAntes, diasDespues } = r.parametros;
   const lejos = x.diasLejos;
