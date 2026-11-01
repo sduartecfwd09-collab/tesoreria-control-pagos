@@ -118,3 +118,66 @@ export function textoEstadosCalculados(iso: string | null): string {
 /** «sábado, 31 de octubre de 2026» a partir de AAAA-MM-DD (solo día, sin zona horaria). */
 export const textoHoy = (hoy: string) =>
   new Intl.DateTimeFormat("es-CR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${hoy}T00:00:00Z`));
+
+// --- Historial de cambios: nombres de negocio y valores en palabras (puras, sin red) ---------------------------------------
+
+/** Frecuencia en una palabra, la misma de la confirmación de Editar obligación. */
+export const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
+
+/** «Qué cambió»: el rótulo de cada dato. Los de Editar obligación se reutilizan; los demás son sencillos. */
+const ROTULO_CAMPO: Record<string, string> = {
+  frecuencia: "Frecuencia",
+  frecuenciaPorConfirmar: "Frecuencia confirmada",
+  mesArranque: "Mes de arranque",
+  diaEsperadoPago: "Día de pago",
+  activa: "Obligación activa",
+  controlDesde: "Control desde",
+  montoEsperado: "Monto esperado",
+  moneda: "Moneda",
+  cuentaEsperadaId: "Cuenta de pago",
+  obligacion: "Obligación nueva",
+};
+export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
+
+/** De estos datos no se guarda el valor (confidencial): solo se sabe que cambiaron. */
+const CAMPOS_SIN_VALOR = ["montoEsperado", "moneda", "cuentaEsperadaId"];
+
+const mayuscula = (t: string) => (t ? t[0]!.toUpperCase() + t.slice(1) : t);
+
+/** "2026-10" -> "oct 2026". */
+export const mesCorto = (p: string) => `${MESES_CORTOS[Number(p.slice(5, 7)) - 1] ?? p} ${p.slice(0, 4)}`;
+
+/**
+ * Un valor guardado, en palabras. «Frecuencia confirmada» se guarda al revés (sin confirmar = porConfirmar verdadero) y aquí se
+ * muestra como la casilla de Editar: porConfirmar verdadero = «No», falso = «Sí».
+ */
+export function valorEnPalabras(campo: string, valor: string | null): string {
+  if (valor === null) return campo === "diaEsperadoPago" ? "Sin día" : "Sin definir";
+  switch (campo) {
+    case "frecuencia": return NOMBRE_FRECUENCIA[valor as Frecuencia] ?? "Otro valor";
+    case "frecuenciaPorConfirmar": return valor === "sin confirmar" || valor === "true" ? "No" : "Sí";
+    case "activa": return valor === "activa" || valor === "true" ? "Sí" : "No";
+    case "mesArranque": return mayuscula(MESES[Number(valor) - 1] ?? "Otro valor");
+    case "diaEsperadoPago": return `día ${Number(valor)}`;
+    case "controlDesde": return /^\d{4}-\d{2}$/.test(valor) ? mesCorto(valor) : "Otro valor";
+    default: return "Otro valor";
+  }
+}
+
+export type CambioEnPalabras = { tipo: "alta" } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
+
+/** Cómo se presenta lo que cambió: el alta como una frase, monto/moneda/cuenta como «Cambió», y el resto como antes y después. */
+export function cambioEnPalabras(f: { accion: string; campo: string; antes: string | null; despues: string | null }): CambioEnPalabras {
+  if (f.accion === "crear") return { tipo: "alta" };
+  if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
+  return { tipo: "valores", antes: valorEnPalabras(f.campo, f.antes), despues: valorEnPalabras(f.campo, f.despues) };
+}
+
+/** Fecha y hora en la zona de Costa Rica; con año solo si no es el año en curso: «28 oct, 10:30» o «28 oct 2025, 10:30». null si no es una fecha. */
+export function fechaHoraDeCambio(iso: string, anio: string = anioEnCurso): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(PARTES_CR.formatToParts(d).map((x) => [x.type, x.value]));
+  const dia = `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]}`;
+  return `${p.year === anio ? dia : `${dia} ${p.year}`}, ${p.hour}:${p.minute}`;
+}

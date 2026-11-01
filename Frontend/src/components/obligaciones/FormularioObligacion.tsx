@@ -2,13 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { ErrorApi } from "@/lib/api";
-import { FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence } from "@/lib/formato";
+import { FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_FRECUENCIA } from "@/lib/formato";
 import type { CambiosObligacion, Categoria, Frecuencia, Obligacion, Sociedad } from "@/lib/tipos";
 import { ConfirmarCambio, ConfirmarSalida, type CambioPendiente } from "../ConfirmarCambio";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
-
-const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
 
 /** Texto del antes o el después de los campos que cambiaron, una línea por campo, para la confirmación. */
 function lineasCambio(v: Valores, sucios: Partial<Record<keyof Valores, unknown>>): string {

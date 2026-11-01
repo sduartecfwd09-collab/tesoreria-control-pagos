@@ -1,5 +1,5 @@
 import type {
-  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, FiltroHistorico, RespuestaHistorico, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
+  AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, FiltroHistorico, RespuestaHistorico, FiltroHistorial, RespuestaHistorial, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
@@ -91,6 +91,8 @@ export const api = {
   periodosGenerados: async () => (await pedir<{ datos: { periodo: string; total: number }[]; hoy: string }>("/api/vencimientos/periodos")).datos,
   /** Histórico: vencimientos con su pago cruzado, una página por vez (filtro y paginación en el servidor). */
   historico: (f: FiltroHistorico) => pedir<RespuestaHistorico>(`/api/historico${consulta(f)}`),
+  /** Historial de cambios de las obligaciones, una página por vez (alcance, filtros y paginación en el servidor). */
+  historialCambios: (f: FiltroHistorial) => pedir<RespuestaHistorial>(`/api/historial-cambios${consulta(f)}`),
   /** Primera y última fecha con datos (límites del selector de fechas) y «hoy» del servidor. */
   limitesFechas: () => pedir<LimitesFechas>("/api/fechas/limites"),
   /** La fecha de hoy según el servidor (reloj inyectable). */

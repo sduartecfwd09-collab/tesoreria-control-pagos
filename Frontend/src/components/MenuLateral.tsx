@@ -23,7 +23,10 @@ const GRUPOS: Pantalla[][] = [
     { href: "/historico", texto: "Histórico", icono: <Icono><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /><path d="M12 7v5l3 2" /></Icono> },
     { href: "/avisos", texto: "Avisos", icono: <Icono><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></Icono> },
   ],
-  [{ href: "/obligaciones", texto: "Obligaciones", icono: <Icono><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></Icono> }],
+  [
+    { href: "/obligaciones", texto: "Obligaciones", icono: <Icono><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></Icono> },
+    { href: "/historial-cambios", texto: "Historial de cambios", icono: <Icono><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></Icono> },
+  ],
   [
     { href: "/archivos", texto: "Estados de cuenta", icono: <Icono><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></Icono> },
     { href: "/movimientos-sin-obligacion", texto: "Movimientos sin obligación", icono: <Icono><path d="M8 6h13M8 12h5M8 18h5M3 6h.01M3 12h.01M3 18h.01" /><circle cx="18" cy="16" r="4" /><path d="M17 15a1 1 0 1 1 1 1v.5M18 19h.01" /></Icono> },

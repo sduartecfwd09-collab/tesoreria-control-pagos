@@ -514,3 +514,35 @@ export interface InfoArchivo {
   imagenNoLegible: boolean;
   saldo: TextoSaldo | null;
 }
+
+/** Una fila del Historial de cambios (GET /api/historial-cambios): un dato cambiado. Sin montos, cuentas ni identificadores completos. */
+export interface FilaHistorial {
+  id: number;
+  creadoEn: string;
+  sociedad: string;
+  obligacion: { proveedor: string; categoria: string; identificador: string } | null;
+  /** crear | editar | activar | desactivar */
+  accion: string;
+  campo: string;
+  antes: string | null;
+  despues: string | null;
+  motivo: string | null;
+  /** el nombre guardado en la línea, no el actual de la persona */
+  nombreUsuario: string;
+  modoPruebas: boolean;
+}
+
+export interface RespuestaHistorial extends Pagina<FilaHistorial> {
+  alcance: Alcance;
+  /** lo que existe dentro del alcance de la persona, para los filtros */
+  opciones: { sociedades: { id: number; nombre: string }[]; personas: { id: number; nombre: string }[]; campos: string[] };
+}
+
+export interface FiltroHistorial {
+  desde?: string;
+  hasta?: string;
+  sociedadId?: number;
+  usuarioId?: number;
+  campo?: string;
+  pagina: number;
+}

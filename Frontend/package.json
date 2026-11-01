@@ -12,6 +12,7 @@
     "toasts": "node scripts/verificar-toasts.mjs",
     "tarjetas": "node scripts/verificar-tarjetas.mjs",
     "fechas": "node --test scripts/verificar-fechas.mjs",
+    "historial": "node --test scripts/verificar-historial.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
