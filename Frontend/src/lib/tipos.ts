@@ -318,6 +318,10 @@ export interface CandidatoPago {
   banco: string | null;
   monto: number;
   moneda: string | null;
+  /** el identificador de la obligación aparece en la descripción o en la referencia del pago */
+  traeNumero: boolean;
+  /** el nombre del proveedor (o un alias conocido) aparece en la descripción del pago */
+  traeProveedor: boolean;
 }
 
 export interface AvisoDatos {

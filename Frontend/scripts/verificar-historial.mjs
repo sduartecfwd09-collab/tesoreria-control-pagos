@@ -37,13 +37,14 @@ test("valores en palabras: Sí/No, frecuencias, meses y día", () => {
   assert.deepEqual(f.cambioEnPalabras({ accion: "desactivar", campo: "activa", antes: "activa", despues: "inactiva" }), { tipo: "valores", antes: "Sí", despues: "No" });
 });
 
-test("monto, moneda y cuenta solo dicen «Cambió» (no hay valores); el alta es una frase sin antes ni después", () => {
+test("monto, moneda y cuenta solo dicen «Cambió» (no hay valores); el alta no tiene antes ni después (celda vacía)", () => {
   for (const campo of ["montoEsperado", "moneda", "cuentaEsperadaId"]) {
     assert.deepEqual(f.cambioEnPalabras({ accion: "editar", campo, antes: null, despues: null }), { tipo: "sin_valores" }, campo);
     // aunque llegara un valor, no se muestra
     assert.deepEqual(f.cambioEnPalabras({ accion: "editar", campo, antes: "123456789", despues: "USD" }), { tipo: "sin_valores" }, campo);
   }
-  assert.deepEqual(f.cambioEnPalabras({ accion: "crear", campo: "obligacion", antes: null, despues: null }), { tipo: "alta" });
+  assert.deepEqual(f.cambioEnPalabras({ accion: "crear", campo: "obligacion", antes: null, despues: null }), { tipo: "vacio" });
+  assert.equal(f.rotuloDeFila({ accion: "crear", campo: "obligacion" }), "Obligación nueva");
 });
 
 test("fecha y hora de Costa Rica; el año solo si no es el año en curso", () => {
@@ -55,13 +56,17 @@ test("fecha y hora de Costa Rica; el año solo si no es el año en curso", () =>
   assert.equal(f.fechaHoraDeCambio("no es fecha", "2026"), null);
 });
 
-test("asociar un pago a mano: el historial lo cuenta como frase, sin antes ni después", () => {
+test("asociar y quitar un pago a mano: cada dato en su columna, sin flecha ni antes y después", () => {
   assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago asociado a mano");
-  assert.deepEqual(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: "2026-10" }), { tipo: "frase", texto: "Se asoció un pago a mano al vencimiento de oct 2026" });
-  assert.deepEqual(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "2026-10", despues: null }), { tipo: "frase", texto: "Se quitó la asociación manual del vencimiento de oct 2026" });
+  assert.equal(f.rotuloDeFila({ accion: "asociar_pago", campo: "pago_asociado" }), "Pago asociado a mano");
+  assert.deepEqual(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: "2026-10" }), { tipo: "texto", texto: "Vencimiento de oct 2026" });
+  assert.equal(f.rotuloDeFila({ accion: "quitar_asociacion", campo: "pago_asociado" }), "Asociación quitada");
+  assert.deepEqual(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "2026-10", despues: null }), { tipo: "texto", texto: "Vencimiento de oct 2026" });
+  // el rótulo de las demás filas sigue siendo el del dato
+  assert.equal(f.rotuloDeFila({ accion: "editar", campo: "frecuencia" }), "Frecuencia");
   // sin periodo legible no se inventa uno
-  assert.equal(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: null }).texto, "Se asoció un pago a mano a un vencimiento");
-  assert.equal(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "raro", despues: null }).texto, "Se quitó la asociación manual de un vencimiento");
+  assert.deepEqual(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: null }), { tipo: "vacio" });
+  assert.deepEqual(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "raro", despues: null }), { tipo: "vacio" });
 });
 
 test("frase del detalle: «Asociado a mano por {nombre} el {fecha}. Motivo: {motivo}.»", () => {
@@ -79,4 +84,11 @@ test("frase del detalle: «Asociado a mano por {nombre} el {fecha}. Motivo: {mot
 
 test("estados que ofrecen asociar un pago", () => {
   assert.deepEqual([...f.ESTADOS_ASOCIABLES].sort(), ["por_revisar", "sin_informacion", "vencido"]);
+});
+
+test("etiquetas de un pago candidato: «Trae el número» y/o «Trae el proveedor»", () => {
+  assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: true, traeProveedor: true }), ["Trae el número", "Trae el proveedor"]);
+  assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: true, traeProveedor: false }), ["Trae el número"]);
+  assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: false, traeProveedor: true }), ["Trae el proveedor"]);
+  assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: false, traeProveedor: false }), []);
 });

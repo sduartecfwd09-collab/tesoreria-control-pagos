@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { limitesDeNavegacion, opcionesDePeriodo, type IdAtajo, type Rango } from "@/lib/fechas";
-import { cambioEnPalabras, fechaHoraDeCambio, rotuloDeCampo } from "@/lib/formato";
+import { cambioEnPalabras, fechaHoraDeCambio, rotuloDeCampo, rotuloDeFila } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { LimitesFechas, RespuestaHistorial } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
@@ -124,20 +124,19 @@ export function HistorialCambios() {
                           </>
                         )}
                       </td>
-                      {cambio.tipo === "alta" || cambio.tipo === "frase" ? (
-                        <td colSpan={2} className={`${celda} font-semibold`}>{cambio.tipo === "alta" ? "Se creó la obligación" : cambio.texto}</td>
-                      ) : (
-                        <>
-                          <td className={`${celda} font-semibold`}>{rotuloDeCampo(f.campo)}</td>
-                          <td className={celda}>{cambio.tipo === "sin_valores" ? (
-                              "Cambió"
-                            ) : (
-                              <>
-                                <span className="text-suave">{cambio.antes}</span> → <span className="font-semibold text-texto">{cambio.despues}</span>
-                              </>
-                            )}</td>
-                        </>
-                      )}
+                      {/* cada dato en su columna: ninguna celda se extiende sobre otra */}
+                      <td className={`${celda} font-semibold`}>{rotuloDeFila(f)}</td>
+                      <td className={celda}>
+                        {cambio.tipo === "valores" ? (
+                          <>
+                            <span className="text-suave">{cambio.antes}</span> → <span className="font-semibold text-texto">{cambio.despues}</span>
+                          </>
+                        ) : cambio.tipo === "sin_valores" ? (
+                          "Cambió"
+                        ) : cambio.tipo === "texto" ? (
+                          cambio.texto
+                        ) : null}
+                      </td>
                       <td className={celda}>
                         {f.nombreUsuario}
                         {f.modoPruebas && <span className="ml-2 inline-block rounded-full border border-divisor bg-fondo-suave px-2 py-0.5 text-xs font-bold text-suave">Prueba</span>}

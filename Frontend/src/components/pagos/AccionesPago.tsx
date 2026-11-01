@@ -2,13 +2,18 @@
 import { useEffect, useState } from "react";
 import { api, ErrorApi } from "@/lib/api";
 import { avisar } from "@/lib/avisos";
-import { ESTADOS_ASOCIABLES, montoPagado, nombreFecha } from "@/lib/formato";
+import { ESTADOS_ASOCIABLES, etiquetasDeCandidato, montoPagado, nombreFecha } from "@/lib/formato";
 import type { CandidatoPago, DetalleVencimiento } from "@/lib/tipos";
 import { Campo, claseBoton, claseBotonSecundario, claseControl } from "../ui";
 
+/** Etiqueta de texto (no solo color): la misma que «Prueba» en el Historial. */
+function EtiquetaTexto({ children }: { children: string }) {
+  return <span className="inline-block rounded-full border border-divisor bg-fondo-suave px-2 py-0.5 text-xs font-bold text-suave">{children}</span>;
+}
+
 /** Etiqueta de texto de un pago asociado a mano (junto al estado Pagado). */
 export function EtiquetaAsociadoAMano() {
-  return <span className="inline-block rounded-full border border-divisor bg-fondo-suave px-2 py-0.5 text-xs font-bold text-suave">Asociado a mano</span>;
+  return <EtiquetaTexto>Asociado a mano</EtiquetaTexto>;
 }
 
 const MENSAJE_MOTIVO = "Indique el motivo (entre 3 y 300 caracteres)";
@@ -103,6 +108,13 @@ function PanelAsociar({ id, alCancelar, alTerminar }: { id: number; alCancelar: 
                   <span className="break-words">
                     {c.descripcion ?? "—"}
                     <span className="block text-xs text-suave">{c.banco ? `${c.banco} · ` : ""}<span className="font-mono">{c.cuenta}</span></span>
+                    {etiquetasDeCandidato(c).length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1.5">
+                        {etiquetasDeCandidato(c).map((e) => (
+                          <EtiquetaTexto key={e}>{e}</EtiquetaTexto>
+                        ))}
+                      </span>
+                    )}
                   </span>
                   <span className="font-bold tabular-nums whitespace-nowrap sm:text-right">{montoPagado(c.monto, c.moneda)}</span>
                 </span>

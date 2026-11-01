@@ -165,17 +165,21 @@ export function valorEnPalabras(campo: string, valor: string | null): string {
   }
 }
 
-export type CambioEnPalabras = { tipo: "alta" } | { tipo: "frase"; texto: string } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
+/** `texto`: un solo dato (sin antes ni después); `vacio`: no hay nada que mostrar (la celda queda en blanco). */
+export type CambioEnPalabras = { tipo: "vacio" } | { tipo: "texto"; texto: string } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
 
-/** Cómo se presenta lo que cambió: el alta y las asociaciones de pago como una frase, monto/moneda/cuenta como «Cambió», y el resto como antes y después. */
+/** «Qué cambió» de una fila: el rótulo del dato; al quitar una asociación manual, «Asociación quitada». */
+export const rotuloDeFila = (f: { accion: string; campo: string }): string => (f.accion === "quitar_asociacion" ? "Asociación quitada" : rotuloDeCampo(f.campo));
+
+/**
+ * Lo que va en «Antes → Después»: el alta no tiene valores (vacío); asociar o quitar un pago a mano es un solo dato, «Vencimiento de oct 2026»
+ * (solo se guardó el periodo); monto/moneda/cuenta dicen «Cambió»; el resto, antes y después.
+ */
 export function cambioEnPalabras(f: { accion: string; campo: string; antes: string | null; despues: string | null }): CambioEnPalabras {
-  if (f.accion === "crear") return { tipo: "alta" };
-  // asociar o quitar un pago a mano: solo se guardó el periodo (AAAA-MM) del vencimiento
+  if (f.accion === "crear") return { tipo: "vacio" };
   if (f.accion === "asociar_pago" || f.accion === "quitar_asociacion") {
     const periodo = f.accion === "asociar_pago" ? f.despues : f.antes;
-    const mes = periodo && /^\d{4}-\d{2}$/.test(periodo) ? mesCorto(periodo) : null;
-    if (f.accion === "asociar_pago") return { tipo: "frase", texto: mes ? `Se asoció un pago a mano al vencimiento de ${mes}` : "Se asoció un pago a mano a un vencimiento" };
-    return { tipo: "frase", texto: mes ? `Se quitó la asociación manual del vencimiento de ${mes}` : "Se quitó la asociación manual de un vencimiento" };
+    return periodo && /^\d{4}-\d{2}$/.test(periodo) ? { tipo: "texto", texto: `Vencimiento de ${mesCorto(periodo)}` } : { tipo: "vacio" };
   }
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
   return { tipo: "valores", antes: valorEnPalabras(f.campo, f.antes), despues: valorEnPalabras(f.campo, f.despues) };
@@ -207,3 +211,8 @@ export function fraseAsociadoAMano(a: { quien: string; cuando: string; motivo: s
 
 /** Estados en los que se puede asociar un pago a mano (el servidor es quien decide; esto solo evita ofrecer lo imposible). */
 export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion"];
+
+/** Etiquetas de texto de un pago candidato: «Trae el número» y/o «Trae el proveedor» (ninguna si no trae ninguno). */
+export function etiquetasDeCandidato(c: { traeNumero: boolean; traeProveedor: boolean }): string[] {
+  return [...(c.traeNumero ? ["Trae el número"] : []), ...(c.traeProveedor ? ["Trae el proveedor"] : [])];
+}
