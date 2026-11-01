@@ -236,7 +236,7 @@ export function FormularioObligacion({
               </select>
               <label className="mt-2 flex items-center gap-2 text-sm">
                 <input type="checkbox" className="h-4 w-4" {...register("frecuenciaConfirmada")} />
-                Confirmada
+                Frecuencia confirmada
               </label>
             </Campo>
             {frecuencia !== "mensual" && (
