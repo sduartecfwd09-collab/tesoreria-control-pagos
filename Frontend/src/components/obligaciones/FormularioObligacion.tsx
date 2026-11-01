@@ -33,6 +33,8 @@ interface Valores {
   frecuenciaConfirmada: boolean;
   mesArranque: string;
   activa: boolean;
+  /** Solo se pide (y se envía) cuando se cambia «Obligación activa». */
+  motivo: string;
 }
 
 // Campo del Backend -> campo del formulario (para mostrar el error junto al control correcto).
@@ -52,6 +54,7 @@ function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): 
     frecuenciaConfirmada: o ? !o.frecuenciaPorConfirmar : false,
     mesArranque: o?.mesArranque != null ? String(o.mesArranque) : "",
     activa: o?.activa ?? true,
+    motivo: "",
   };
 }
 
@@ -70,7 +73,10 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
   if (incluir("frecuenciaConfirmada")) c.frecuenciaPorConfirmar = !v.frecuenciaConfirmada;
   // Mensual no usa mes de arranque: se limpia. Las demás frecuencias lo exigen (el formulario lo valida).
   if (incluir("mesArranque") || incluir("frecuencia")) c.mesArranque = v.frecuencia === "mensual" || v.mesArranque === "" ? null : Number(v.mesArranque);
-  if (incluir("activa")) c.activa = v.activa;
+  if (incluir("activa")) {
+    c.activa = v.activa;
+    if (sucios !== null) c.motivo = v.motivo.trim(); // solo en edición: el servidor lo exige al cambiar «activa»
+  }
   return c;
 }
 
@@ -104,12 +110,19 @@ export function FormularioObligacion({
   }, []);
 
   // useWatch (y no watch) para que el React Compiler pueda optimizar el componente.
-  const [frecuencia, mesArranque] = useWatch({ control, name: ["frecuencia", "mesArranque"] });
+  const [frecuencia, mesArranque, activa] = useWatch({ control, name: ["frecuencia", "mesArranque", "activa"] });
+  // el motivo aparece solo cuando se cambia el interruptor «Obligación activa» respecto a lo guardado
+  const cambiaActiva = !nueva && activa !== obligacion.activa;
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
 
   async function enviar(v: Valores) {
     setErrorGeneral(null);
     if (!nueva) {
+      // Desactivar o reactivar pide el motivo antes de confirmar (el servidor también lo exige).
+      if (v.activa !== obligacion.activa) {
+        const m = v.motivo.trim();
+        if (m.length < 3 || m.length > 300) return setError("motivo", { message: "Escriba el motivo (entre 3 y 300 caracteres)" }, { shouldFocus: true });
+      }
       // Toda edición manual pide confirmación con el valor de antes y el de después.
       const antes = valoresIniciales(obligacion, frecuenciaDefecto);
       const sucios = dirtyFields;
@@ -270,6 +283,19 @@ export function FormularioObligacion({
             <p className="mt-1 text-sm text-suave">
               Nada se borra: si ya no se paga, desmarque esta casilla. Deja de generar vencimientos futuros y se conserva su historial.
             </p>
+            {cambiaActiva && (
+              <div className="mt-3">
+                <Campo id="f-motivo" etiqueta="Motivo" error={errors.motivo?.message}>
+                  <input
+                    id="f-motivo"
+                    className={`${claseControl} w-full`}
+                    maxLength={300}
+                    aria-describedby={desc("motivo", false)}
+                    {...register("motivo")}
+                  />
+                </Campo>
+              </div>
+            )}
           </div>
 
           {errorGeneral && (

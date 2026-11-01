@@ -202,6 +202,8 @@ export interface CambiosObligacion {
   monedaPorConfirmar?: boolean;
   cuentaEsperadaId?: number | null;
   activa?: boolean;
+  /** Solo al desactivar o reactivar: por qué se cambia. */
+  motivo?: string;
 }
 
 export interface Regeneracion {
