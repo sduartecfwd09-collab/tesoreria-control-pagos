@@ -34,6 +34,7 @@ model Sociedad {
   vencimientos      Vencimiento[]
   archivos          ArchivoImportado[]
   historialTesorero SociedadTesoreroHistorial[]
+  historialCambios  HistorialCambio[]
 }
 
 // Quién fue tesorero de cada sociedad y por qué cambió. hasta = null: es el vigente.
@@ -108,6 +109,7 @@ model Obligacion {
   actualizado            DateTime      @updatedAt @db.DateTime(3)
   vencimientos           Vencimiento[]
   cambiosDia             CambioDia[]
+  historialCambios       HistorialCambio[]
 
   // La categoría es parte de la identidad: un mismo proveedor puede cobrar con el mismo identificador paquetes de
   // categorías distintas (por ejemplo cable e internet combinados).
@@ -187,10 +189,39 @@ model CambioDia {
   usuarioId     Int
   usuario       Usuario      @relation(fields: [usuarioId], references: [id])
   creadoEn      DateTime     @default(now()) @db.DateTime(3)
+  aplicaDesde   String?      @db.VarChar(7) // AAAA-MM: desde qué mes aplica un cambio permanente; null = sin indicar
+  modoPruebas   Boolean      @default(false) // true = lo hizo alguien con el selector «Actuando como» (solo pruebas)
 
   @@index([obligacionId])
   @@index([vencimientoId])
   @@index([usuarioId])
+}
+
+// Historial de decisiones humanas sobre una obligación (qué cambió, quién y cuándo). Solo se inserta: el repositorio no
+// ofrece edición ni borrado. No registra los estados automáticos. Sin montos, cuentas ni monedas: de esos campos solo se
+// anota que «cambió» (antes y despues nulos).
+model HistorialCambio {
+  id            Int         @id @default(autoincrement())
+  entidad       String      @db.VarChar(30) // por ahora «obligacion»
+  entidadId     Int
+  obligacionId  Int?
+  obligacion    Obligacion? @relation(fields: [obligacionId], references: [id])
+  sociedadId    Int // para el alcance: quién puede ver este registro
+  sociedad      Sociedad    @relation(fields: [sociedadId], references: [id])
+  accion        String      @db.VarChar(30) // crear | editar | activar | desactivar
+  campo         String      @db.VarChar(50)
+  antes         String?     @db.VarChar(100)
+  despues       String?     @db.VarChar(100)
+  motivo        String?     @db.VarChar(300)
+  usuarioId     Int
+  usuario       Usuario     @relation(fields: [usuarioId], references: [id])
+  nombreUsuario String      @db.VarChar(150) // copia del nombre al momento del cambio
+  creadoEn      DateTime    @default(now()) @db.DateTime(3)
+  modoPruebas   Boolean // true = lo hizo alguien con el selector «Actuando como» (solo pruebas)
+
+  @@index([sociedadId, creadoEn])
+  @@index([obligacionId, creadoEn])
+  @@index([usuarioId, creadoEn])
 }
 
 model ArchivoImportado {
@@ -311,4 +342,5 @@ model Usuario {
   sociedadesATesoreria Sociedad[]                  @relation("TesoreroDeSociedad")
   cambiosDia           CambioDia[]
   historialTesorero    SociedadTesoreroHistorial[]
+  historialCambios     HistorialCambio[]
 }

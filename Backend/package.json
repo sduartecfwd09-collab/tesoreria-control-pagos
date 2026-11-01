@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:verificar": "tsx scripts/verificar-conexion.ts",
+    "esquema:conteos": "tsx scripts/esquema-conteos.ts",
     "db:verificar-datos": "tsx src/cli/verificar-datos.ts",
     "db:migrar:crear": "prisma migrate dev",
     "db:migrar": "prisma migrate deploy",

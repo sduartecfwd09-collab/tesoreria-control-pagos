@@ -5,6 +5,7 @@ import { sincronizarVencimientos } from "../../src/vencimientos/generar.js";
 /** Deja vacías las tablas de importación para que cada archivo de pruebas parta de cero. */
 export async function vaciarImportaciones() {
   exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL"); // borra datos: solo en la base _test
+  await prisma.historialCambio.deleteMany();
   await prisma.catalogoRevision.deleteMany();
   await prisma.cambioDia.deleteMany();
   await prisma.conciliacion.deleteMany();
@@ -21,6 +22,7 @@ export async function vaciarImportaciones() {
 /** Deja sin usuarios la base de pruebas (quita antes el vínculo con las sociedades). Los roles se conservan. */
 export async function vaciarUsuarios() {
   exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
+  await prisma.historialCambio.deleteMany();
   await prisma.sociedadTesoreroHistorial.deleteMany();
   await prisma.sociedad.updateMany({ data: { tesoreroId: null } });
   await prisma.usuario.deleteMany();
