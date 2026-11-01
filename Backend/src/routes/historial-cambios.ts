@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { enmascararIdentificador, textoSeguro } from "../domain/enmascarar.js";
 import { HISTORIAL_POR_PAGINA_DEFECTO, HISTORIAL_POR_PAGINA_MAXIMO, limitesDeDias } from "../domain/historial.js";
+import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { esFechaIso } from "../domain/vencimientos.js";
 import { alcanceDe, alcanceParaRespuesta, sociedadesDelAlcance } from "../identidad/alcance.js";
 import { exigirPersona } from "../identidad/exigir-persona.js";
@@ -30,22 +31,25 @@ async function porPaginaPorDefecto(): Promise<number> {
 /**
  * Historial de cambios (solo lectura, privado). Sin persona identificada, 401. Jefatura ve todas las líneas; un Tesorero, las de las
  * sociedades de las que es tesorero vigente (el historial completo de la sociedad, incluso lo hecho por otra persona o antes de su
- * asignación). Una fila por dato cambiado, sin agrupar. Nunca incluye montos, cuentas ni identificadores completos.
+ * asignación). Las fechas futuras no existen: «hasta» se recorta a hoy. Una fila por dato cambiado, sin agrupar. Nunca incluye montos, cuentas ni identificadores completos.
  */
-export async function rutasHistorialCambios(app: FastifyInstance, opts: { modoPruebas: boolean }) {
+export async function rutasHistorialCambios(app: FastifyInstance, opts: { modoPruebas: boolean; reloj: Reloj }) {
   app.get("/api/historial-cambios", async (req, reply) => {
     const persona = await exigirPersona(req, reply, opts.modoPruebas);
     if (!persona) return reply;
     const q = consulta.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
 
+    // el historial es el pasado: un «hasta» posterior a hoy (día de Costa Rica) se recorta a hoy, como el selector de la pantalla
+    const hoy = hoyDe(opts.reloj).toISOString().slice(0, 10);
+    const hasta = q.data.hasta !== undefined && q.data.hasta > hoy ? hoy : q.data.hasta;
     const alcance = await alcanceDe(req, opts.modoPruebas);
     const sociedadIds = await sociedadesDelAlcance(alcance);
     const porPagina = q.data.porPagina ?? (await porPaginaPorDefecto());
     const [{ total, filas }, opciones] = await Promise.all([
       listarHistorial({
         sociedadIds, sociedadId: q.data.sociedadId, usuarioId: q.data.usuarioId, campo: q.data.campo,
-        ...limitesDeDias(q.data.desde, q.data.hasta), pagina: q.data.pagina, porPagina,
+        ...limitesDeDias(q.data.desde, hasta), pagina: q.data.pagina, porPagina,
       }),
       opcionesDeHistorial(sociedadIds),
     ]);

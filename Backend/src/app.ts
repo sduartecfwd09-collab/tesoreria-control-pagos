@@ -48,7 +48,7 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
   await app.register(rutasVencimientos, { reloj, modoPruebas });
   await app.register(rutasFechas, { reloj, modoPruebas });
   await app.register(rutasHistorico, { reloj, modoPruebas });
-  await app.register(rutasHistorialCambios, { modoPruebas });
+  await app.register(rutasHistorialCambios, { modoPruebas, reloj });
 
   return app;
 }

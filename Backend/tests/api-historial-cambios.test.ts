@@ -7,7 +7,7 @@ import { asegurarRoles, mapaDeRoles } from "../src/repositories/usuarios.js";
 import { vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
 
 // Pantalla «Historial de cambios»: alcance, filtros, orden, paginación y que nada sensible salga. Datos inventados.
-const reloj = () => new Date(2026, 9, 27, 10, 0);
+const reloj = () => new Date(2026, 10, 15, 10, 0); // hoy: 15 de noviembre de 2026
 const encabezado = (id: number) => ({ "x-usuario-actual": String(id) });
 const IDENTIFICADOR = "00112233445566";
 const CUENTA = "CR05015202001026284066";
@@ -123,6 +123,19 @@ describe("filtros, orden y paginación", () => {
     expect(idsDe((await pedir(jefa, `?usuarioId=${ana}`)).cuerpo)).toEqual([inicioDelDia.id, antesDelDia.id]);
     expect(idsDe((await pedir(jefa, "?campo=mesArranque")).cuerpo)).toEqual([inicioDelDia.id]);
     expect(idsDe((await pedir(jefa, `?sociedadId=${sociedadB}&campo=frecuencia&desde=2026-10-27`)).cuerpo)).toEqual([finDelDia.id]);
+  });
+
+  it("el historial es el pasado: un «hasta» posterior a hoy se recorta a hoy (sin error); un rango entero futuro queda vacío", async () => {
+    const pasada = await linea({ sociedadId: sociedadA, obligacionId: obligacionA, usuarioId: ana, nombre: "Ana Uno", creadoEn: "2026-11-15T15:00:00Z" }); // hoy, 09:00 en Costa Rica
+    const futura = await linea({ sociedadId: sociedadA, obligacionId: obligacionA, usuarioId: ana, nombre: "Ana Uno", creadoEn: "2026-11-20T15:00:00Z" }); // no puede existir; prueba el recorte
+    expect(idsDe((await pedir(jefa)).cuerpo)).toEqual([futura.id, pasada.id]); // sin «hasta» no se recorta nada
+    const recortado = await pedir(jefa, "?desde=2026-11-01&hasta=2099-12-31");
+    expect(recortado.estado).toBe(200);
+    expect(idsDe(recortado.cuerpo)).toEqual([pasada.id]);
+    expect(idsDe((await pedir(jefa, "?hasta=2026-11-15")).cuerpo)).toEqual([pasada.id]); // igual que pedir hoy
+    expect((await pedir(jefa, "?desde=2026-11-16&hasta=2026-11-30")).cuerpo.total).toBe(0); // el rango entero es futuro: queda vacío
+    // «desde» posterior a «hasta» sigue siendo un error, aunque «hasta» se recorte después
+    expect((await pedir(jefa, "?desde=2099-01-02&hasta=2099-01-01")).estado).toBe(400);
   });
 
   it("ordena por fecha descendente y, a igual fecha, por id descendente", async () => {
