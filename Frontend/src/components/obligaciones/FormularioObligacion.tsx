@@ -22,7 +22,6 @@ function lineasCambio(v: Valores, sucios: Partial<Record<keyof Valores, unknown>
   if (sucios.moneda) l.push(`Moneda: ${NOMBRE_MONEDA[v.moneda]}`);
   if (sucios.monedaConfirmada) l.push(`Moneda: ${v.monedaConfirmada ? "confirmada" : "sin confirmar"}`);
   if (sucios.monto) l.push(`Monto esperado: ${v.monto.trim() || "Sin monto"}`);
-  if (sucios.responsable) l.push(`Responsable: ${v.responsable.trim() || "Sin asignar"}`);
   if (sucios.activa) l.push(`Estado: ${v.activa ? "Activa" : "Inactiva"}`);
   return l.join("\n");
 }
@@ -41,7 +40,6 @@ interface Valores {
   moneda: Moneda;
   monedaConfirmada: boolean;
   monto: string;
-  responsable: string;
   activa: boolean;
 }
 
@@ -66,7 +64,6 @@ function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): 
     moneda: o?.moneda ?? "CRC",
     monedaConfirmada: o ? !o.monedaPorConfirmar : false,
     monto: aTextoMonto(o?.montoEsperado ?? null),
-    responsable: o?.responsable ?? "",
     activa: o?.activa ?? true,
   };
 }
@@ -89,7 +86,6 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
   if (incluir("moneda")) c.moneda = v.moneda;
   if (incluir("monedaConfirmada")) c.monedaPorConfirmar = !v.monedaConfirmada;
   if (incluir("monto")) c.montoEsperado = aCentavos(v.monto) ?? null;
-  if (incluir("responsable")) c.responsable = v.responsable.trim() === "" ? null : v.responsable;
   if (incluir("activa")) c.activa = v.activa;
   return c;
 }
@@ -124,9 +120,7 @@ export function FormularioObligacion({
   }, []);
 
   // useWatch (y no watch) para que el React Compiler pueda optimizar el componente.
-  const [frecuencia, mesArranque, moneda, sociedad, responsable] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda", "sociedad", "responsable"] });
-  // Solo lectura: si el responsable queda vacío se usa al tesorero de la sociedad (no se guarda en la obligación).
-  const sociedadElegida = sociedades.find((s) => String(s.id) === sociedad);
+  const [frecuencia, mesArranque, moneda] = useWatch({ control, name: ["frecuencia", "mesArranque", "moneda"] });
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
 
   async function enviar(v: Valores) {
@@ -323,20 +317,6 @@ export function FormularioObligacion({
                   },
                 })}
               />
-            </Campo>
-            <Campo id="f-responsable" etiqueta="Responsable" ayuda={
-                <>
-                  Opcional. Persona de Tesorería a cargo.
-                  {responsable.trim() === "" && sociedadElegida && (
-                    <span className="mt-1 block">
-                      {sociedadElegida.tesorero ? `Si lo deja vacío, se usa al tesorero de la sociedad: ${sociedadElegida.tesorero}` : "La sociedad no tiene tesorero asignado"}
-                    </span>
-                  )}
-                </>
-              }
-              error={errors.responsable?.message}
-            >
-              <input id="f-responsable" className={`${claseControl} w-full`} placeholder="Sin asignar" aria-describedby={desc("responsable")} {...register("responsable", { maxLength: { value: 80, message: "Máximo 80 caracteres" } })} />
             </Campo>
           </fieldset>
 

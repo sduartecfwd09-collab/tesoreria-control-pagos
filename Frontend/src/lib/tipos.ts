@@ -176,9 +176,7 @@ export interface Obligacion {
   moneda: Moneda;
   monedaPorConfirmar: boolean;
   cuentaEsperada: { id: number; numero: string; banco: string | null } | null;
-  responsable: string | null; // el propio de la obligación (lo que se edita)
-  responsableEfectivo: string | null; // el que se muestra: el propio o, si falta, el tesorero de la sociedad
-  responsableDe: "obligacion" | "tesorero" | null;
+  responsableEfectivo?: string | null; // el tesorero vigente de la sociedad; solo lo recibe Jefatura
   /** fecha calculada del próximo pago (AAAA-MM-DD); null si falta el día o el mes de arranque */
   proximoPago: string | null;
   activa: boolean;
@@ -203,7 +201,6 @@ export interface CambiosObligacion {
   moneda?: Moneda;
   monedaPorConfirmar?: boolean;
   cuentaEsperadaId?: number | null;
-  responsable?: string | null;
   activa?: boolean;
 }
 
@@ -219,7 +216,7 @@ export interface FiltroObligaciones {
   categoria?: number;
   activa?: boolean;
   q?: string;
-  falta?: "monto" | "cuenta" | "responsable" | "dia";
+  falta?: "monto" | "cuenta" | "responsable" | "dia" | "frecuencia";
   pagina: number;
   porPagina: number;
 }
@@ -231,7 +228,8 @@ export interface ResumenCatalogo {
   sinDia: number;
   sinMonto: number;
   sinCuenta: number;
-  sinResponsable: number;
+  /** obligaciones activas cuya sociedad no tiene tesorero; solo lo recibe Jefatura */
+  sinResponsable?: number;
   sinMesArranque: number;
   frecuenciaPorConfirmar: number;
   monedaPorConfirmar: number;
@@ -428,7 +426,7 @@ export interface FilaAviso {
   estado: EstadoVencimiento;
   textoEstado: string;
   dias: number;
-  responsableEfectivo: string | null;
+  responsableEfectivo?: string | null; // solo lo recibe Jefatura
 }
 
 export interface GrupoAviso {

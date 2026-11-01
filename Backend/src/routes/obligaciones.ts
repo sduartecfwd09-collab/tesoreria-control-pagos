@@ -33,7 +33,7 @@ const consulta = z.object({
   categoria: z.coerce.number({ error: "La categoría debe ser un número" }).int().positive("La categoría debe ser un número").optional(),
   activa: z.enum(["true", "false"], { error: "«activa» debe ser true o false" }).transform((v) => v === "true").optional(),
   q: z.string().trim().min(1).max(80, "La búsqueda admite como máximo 80 caracteres").optional(),
-  falta: z.enum(["monto", "cuenta", "responsable", "dia"], { error: "«falta» debe ser monto, cuenta, responsable o dia" }).optional(),
+  falta: z.enum(["monto", "cuenta", "responsable", "dia", "frecuencia"], { error: "«falta» debe ser monto, cuenta, responsable, dia o frecuencia" }).optional(),
   pagina: z.coerce.number().int().min(1, "La página debe ser 1 o más").default(1),
   porPagina: z.coerce.number().int().min(1).max(500, "Se pueden pedir como máximo 500 por página").default(50),
 });
@@ -44,7 +44,7 @@ const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
   ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad), responsable: responsableEfectivo(o).nombre,
 });
 
-function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null) {
+function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null, conResponsable: boolean) {
   const observaciones = etiquetasDe(aCalidad(o), repetidos);
   return {
     id: o.id,
@@ -55,8 +55,8 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     frecuencia: o.frecuencia, frecuenciaPorConfirmar: o.frecuenciaPorConfirmar, mesArranque: o.mesArranque,
     montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
     cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: enmascararCuenta(o.cuentaEsperada.numero), banco: o.cuentaEsperada.banco } : null,
-    // `responsable` es el propio de la obligación (lo que se edita); `responsableEfectivo` es el que se muestra (el propio o el tesorero)
-    responsable: o.responsable, responsableEfectivo: responsableEfectivo(o).nombre, responsableDe: responsableEfectivo(o).de,
+    // el responsable es el tesorero de la sociedad y solo se informa a Jefatura (a un tesorero le repetiría que es él)
+    ...(conResponsable ? { responsableEfectivo: responsableEfectivo(o).nombre } : {}),
     activa: o.activa, origen: o.origen,
     controlDesde: periodoDeControl(o.controlDesde),
     proximoPago, // dato calculado: el próximo vencimiento con fecha igual o posterior a hoy, según la frecuencia
@@ -88,6 +88,13 @@ async function errorCuenta(cuentaId: number | null | undefined, sociedadId: numb
   return null;
 }
 
+/** «Sin responsable» (sociedad sin tesorero) solo lo ve Jefatura. */
+function calidadParaPersona<T extends { sinResponsable: number }>(c: T, esJefatura: boolean): Omit<T, "sinResponsable"> & { sinResponsable?: number } {
+  if (esJefatura) return c;
+  const { sinResponsable: _quitado, ...resto } = c;
+  return resto;
+}
+
 const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.code(422).send({ error, ...(campo ? { campo } : {}) });
 
 export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
@@ -110,7 +117,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const proximos = await proximosPagos(datos, opts.reloj);
     return {
       alcance: alcanceParaRespuesta(alcance),
-      datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null)),
+      datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null, alcance.tipo === "todo")),
       total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
     };
   });
@@ -125,7 +132,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     return {
       alcance: alcanceParaRespuesta(alcance),
       datos: {
-        ...calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) }))),
+        ...calidadParaPersona(calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) }))), alcance.tipo === "todo"),
         porSociedad: { ...Object.fromEntries(sociedades.map((s) => [etiquetaSociedad(s), 0])), ...contar(activas.map((o) => etiquetaSociedad(o.sociedad))) },
         porCategoria: contar(activas.map((o) => o.categoria.nombre)),
       },
@@ -138,7 +145,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const o = await obtenerObligacion(id.data);
     const propias = await obligacionesDelAlcance(await alcanceDe(req, opts.modoPruebas));
     if (!o || (propias && !propias.includes(o.id))) return reply.code(404).send({ error: "Obligación no encontrada" });
-    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null) };
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo") };
   });
 
   app.post("/api/obligaciones", async (req, reply) => {
@@ -188,7 +195,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       origen: "manual",
     });
     const regeneracion = (await actualizarVencimientos(opts.reloj, o.id)).calendario;
-    return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null), regeneracion, advertencias: advertencia ? [advertencia] : [] });
+    return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion, advertencias: advertencia ? [advertencia] : [] });
   });
 
   // Cambio masivo de frecuencia sobre las filas elegidas: la frecuencia queda confirmada y el calendario se ajusta una sola vez.
@@ -250,7 +257,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
     });
     const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? (await actualizarVencimientos(opts.reloj, o.id)).calendario : null;
-    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null), regeneracion };
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion };
   });
 
   app.post("/api/catalogo/importar", async (_req, reply) => {

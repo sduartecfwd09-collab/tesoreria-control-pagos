@@ -89,11 +89,9 @@ export function errorMesArranque(frecuencia: string, mesArranque: number | null 
 
 // --- Etiquetas y calidad ------------------------------------------------------------------------
 
-/** El responsable de la obligación es el suyo y, si no lo tiene, el tesorero de su sociedad. */
-export function responsableEfectivo(o: { responsable: string | null; sociedad: { tesorero: { nombre: string } | null } }): { nombre: string | null; de: "obligacion" | "tesorero" | null } {
-  if (o.responsable) return { nombre: o.responsable, de: "obligacion" };
-  if (o.sociedad.tesorero) return { nombre: o.sociedad.tesorero.nombre, de: "tesorero" };
-  return { nombre: null, de: null };
+/** El responsable de una obligación es el tesorero vigente de su sociedad (cambiarlo = reasignar la sociedad). */
+export function responsableEfectivo(o: { sociedad: { tesorero: { nombre: string } | null } }): { nombre: string | null; de: "tesorero" | null } {
+  return o.sociedad.tesorero ? { nombre: o.sociedad.tesorero.nombre, de: "tesorero" } : { nombre: null, de: null };
 }
 
 export interface ObligacionCalidad {

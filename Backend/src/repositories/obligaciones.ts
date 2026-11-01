@@ -106,7 +106,7 @@ export interface FiltroObligaciones {
   categoria?: number;
   activa?: boolean;
   q?: string;
-  falta?: "monto" | "cuenta" | "responsable" | "dia";
+  falta?: "monto" | "cuenta" | "responsable" | "dia" | "frecuencia";
   pagina: number;
   porPagina: number;
 }
@@ -114,9 +114,10 @@ export interface FiltroObligaciones {
 const FALTA: Record<NonNullable<FiltroObligaciones["falta"]>, Prisma.ObligacionWhereInput> = {
   monto: { montoEsperado: null },
   cuenta: { cuentaEsperadaId: null },
-  // sin responsable propio y sin tesorero en su sociedad (el responsable efectivo es el propio o, si falta, el tesorero)
-  responsable: { responsable: null, sociedad: { tesoreroId: null } },
+  // el responsable es el tesorero de la sociedad: sin responsable = la sociedad no tiene tesorero asignado
+  responsable: { sociedad: { tesoreroId: null } },
   dia: { diaEsperadoPago: null },
+  frecuencia: { frecuenciaPorConfirmar: true },
 };
 
 /** Lo mínimo para decidir el alcance de una persona: responsable propio y tesorero de la sociedad de cada obligación (y las sociedades de las que es tesorero). */
@@ -137,7 +138,7 @@ export async function listarObligaciones(f: FiltroObligaciones) {
     ...(f.activa !== undefined ? { activa: f.activa } : {}),
     ...(f.falta ? FALTA[f.falta] : {}),
     ...(f.q
-      ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }, { responsable: { contains: f.q } }, { responsable: null, sociedad: { tesorero: { nombre: { contains: f.q } } } }] }
+      ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }, { sociedad: { tesorero: { nombre: { contains: f.q } } } }] }
       : {}),
   };
   const [total, datos] = await Promise.all([

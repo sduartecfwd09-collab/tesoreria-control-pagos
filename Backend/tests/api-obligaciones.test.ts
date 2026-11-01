@@ -160,14 +160,14 @@ describe("identificador duplicado: avisa, no bloquea", () => {
 describe("catálogo: edición y alta", () => {
   it("PATCH guarda los campos editables, confirma los supuestos y protege el día de la reimportación", async () => {
     const o = await porId("00012346");
-    const r = await patch(o.id, { frecuencia: "trimestral", mesArranque: 2, montoEsperado: 1_500_000, moneda: "USD", responsable: " Ana " });
+    const r = await patch(o.id, { frecuencia: "trimestral", mesArranque: 2, montoEsperado: 1_500_000, moneda: "USD" });
     expect(r.statusCode).toBe(200);
     expect(r.json().datos).toMatchObject({
       frecuencia: "trimestral", frecuenciaPorConfirmar: false, mesArranque: 2, diaEsperadoPago: 10,
-      montoEsperado: 1_500_000, moneda: "USD", monedaPorConfirmar: false, responsable: "Ana",
+      montoEsperado: 1_500_000, moneda: "USD", monedaPorConfirmar: false,
     });
     await app.inject({ method: "POST", url: "/api/catalogo/importar" });
-    expect(await porId("00012346")).toMatchObject({ diaEsperadoPago: 10, frecuencia: "trimestral", montoEsperado: 1_500_000, responsable: "Ana" });
+    expect(await porId("00012346")).toMatchObject({ diaEsperadoPago: 10, frecuencia: "trimestral", montoEsperado: 1_500_000 });
     // al volver a mensual se limpia el mes de arranque
     expect((await patch(o.id, { frecuencia: "mensual" })).json().datos.mesArranque).toBeNull();
   });

@@ -60,7 +60,8 @@ export async function rutasAvisos(app: FastifyInstance, opts: { reloj: Reloj; mo
         estado: v.estado,
         textoEstado,
         dias,
-        responsableEfectivo: responsableEfectivo({ responsable: v.obligacion.responsable, sociedad: { tesorero: v.sociedad.tesorero } }).nombre,
+        // el tesorero de la sociedad; solo se informa a Jefatura
+        ...(alcance.tipo === "todo" ? { responsableEfectivo: responsableEfectivo({ sociedad: { tesorero: v.sociedad.tesorero } }).nombre } : {}),
       });
     }
     const grupos = GRUPOS_AVISO.map((g) => ({ clave: g.clave, titulo: g.titulo, total: filas.get(g.clave)!.length, filas: filas.get(g.clave)! }));

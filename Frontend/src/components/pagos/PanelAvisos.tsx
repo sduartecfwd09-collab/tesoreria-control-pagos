@@ -39,6 +39,8 @@ export function PanelAvisos() {
 
   // El número de cada tarjeta y las filas que deja su filtro salen de la misma lista y la misma regla (lib/filtro-tarjetas).
   const porTarjeta = contarPorTarjeta(planas, TARJETAS_AVISOS);
+  // el servidor solo envía el responsable a Jefatura: sin ese dato no hay columna
+  const conResponsable = datos.grupos.some((g) => g.filas.some((f) => f.responsableEfectivo !== undefined));
   const grupos = datos.grupos.map((g) => ({ ...g, filas: visibles.filter((x) => x.clave === g.clave).map((x) => x.fila) }));
 
   return (
@@ -75,6 +77,7 @@ export function PanelAvisos() {
                   <th scope="col" className={th}>Identificador</th>
                   <th scope="col" className={th}>Mes</th>
                   <th scope="col" className={th}>Fecha habitual de pago</th>
+                  {conResponsable && <th scope="col" className={th}>Responsable</th>}
                   <th scope="col" className={th}>Estado</th>
                   <th scope="col" className={th}><span className="sr-only">Acciones</span></th>
                 </tr>
@@ -87,6 +90,7 @@ export function PanelAvisos() {
                     <td className="px-3.5 py-4 align-top font-mono text-[13px] text-suave whitespace-nowrap">{f.identificador}</td>
                     <td className="px-3.5 py-4 align-top whitespace-nowrap">{nombrePeriodo(f.periodo)}</td>
                     <td className="px-3.5 py-4 align-top whitespace-nowrap">{nombreFecha(f.fecha)}</td>
+                    {conResponsable && <td className="px-3.5 py-4 align-top">{f.responsableEfectivo ?? <span className="text-suave">—</span>}</td>}
                     <td className="px-3.5 py-4 align-top">
                       <EstadoPago estado={f.estado} />
                       <span className="mt-1 block max-w-72 text-xs text-suave">{f.textoEstado}</span>

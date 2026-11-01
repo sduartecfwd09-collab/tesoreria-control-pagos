@@ -32,6 +32,8 @@ function Observaciones({ o }: { o: Obligacion }) {
 const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
 
 export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; alEditar: (o: Obligacion) => void }) {
+  // el servidor solo envía el responsable (el tesorero de la sociedad) a Jefatura: sin ese dato no hay columna
+  const conResponsable = datos.some((o) => o.responsableEfectivo !== undefined);
   const columnas = useMemo(
     () => [
       col.accessor("sociedad", { header: "Sociedad", cell: (c) => <NombreSociedad nombre={c.getValue()} className="min-w-28 max-w-44" /> }),
@@ -68,18 +70,12 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
         header: "Próximo pago",
         cell: (c) => (c.getValue() ? <span>{nombreFecha(c.getValue()!)}</span> : <span className="text-suave">—</span>),
       }),
-      col.accessor("responsableEfectivo", {
-        header: "Responsable",
-        cell: ({ row: { original: o } }) =>
-          o.responsableEfectivo === null ? (
-            <span className="text-suave">—</span>
-          ) : (
-            <>
-              {o.responsableEfectivo}
-              {o.responsableDe === "tesorero" && <span className="block text-xs text-suave">Tesorero de la sociedad</span>}
-            </>
-          ),
-      }),
+      ...(conResponsable
+        ? [col.accessor("responsableEfectivo", {
+            header: "Responsable",
+            cell: ({ row: { original: o } }) => (o.responsableEfectivo ? <span>{o.responsableEfectivo}</span> : <span className="text-suave">—</span>),
+          })]
+        : []),
       col.display({
         id: "estado",
         header: "Estado",
@@ -101,7 +97,7 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
         ),
       }),
     ],
-    [alEditar],
+    [alEditar, conResponsable],
   );
 
   const tabla = useReactTable({ data: datos, columns: columnas, getCoreRowModel: getCoreRowModel(), getRowId: (o) => String(o.id) });

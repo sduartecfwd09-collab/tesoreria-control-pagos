@@ -16,7 +16,7 @@ import { ResumenCalidad } from "./ResumenCalidad";
 import { TablaObligaciones } from "./TablaObligaciones";
 
 const POR_PAGINA = 100;
-const TEXTO_FALTA = { monto: "falta monto", cuenta: "falta cuenta de pago", responsable: "sin responsable", dia: "falta día" } as const;
+const TEXTO_FALTA = { monto: "falta monto", cuenta: "falta cuenta de pago", responsable: "sin responsable", dia: "falta día", frecuencia: "frecuencia sin confirmar" } as const;
 type Filtro = Omit<FiltroObligaciones, "porPagina" | "pagina">;
 const FILTRO_INICIAL: Filtro = { activa: true };
 
@@ -225,7 +225,7 @@ export function PanelObligaciones() {
             <input
               type="search"
               className={`${claseControl} mt-1 w-full`}
-              placeholder="Proveedor, identificador o responsable"
+              placeholder={lista.alcance?.tipo === "mio" ? "Proveedor o identificador" : "Proveedor, identificador o responsable"}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
             />

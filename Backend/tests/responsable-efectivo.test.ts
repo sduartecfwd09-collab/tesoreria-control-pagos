@@ -6,12 +6,9 @@ import { sembrarCategoriasDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
 
 describe("responsableEfectivo", () => {
-  it("es el de la obligación y, si no lo tiene, el tesorero de su sociedad", () => {
-    const conTesorero = { tesorero: { nombre: "Tesorera Uno" } };
-    expect(responsableEfectivo({ responsable: "Persona Propia", sociedad: conTesorero })).toEqual({ nombre: "Persona Propia", de: "obligacion" });
-    expect(responsableEfectivo({ responsable: null, sociedad: conTesorero })).toEqual({ nombre: "Tesorera Uno", de: "tesorero" });
-    expect(responsableEfectivo({ responsable: "", sociedad: conTesorero })).toEqual({ nombre: "Tesorera Uno", de: "tesorero" });
-    expect(responsableEfectivo({ responsable: null, sociedad: { tesorero: null } })).toEqual({ nombre: null, de: null });
+  it("es el tesorero vigente de la sociedad; sin tesorero, nadie", () => {
+    expect(responsableEfectivo({ sociedad: { tesorero: { nombre: "Tesorera Uno" } } })).toEqual({ nombre: "Tesorera Uno", de: "tesorero" });
+    expect(responsableEfectivo({ sociedad: { tesorero: null } })).toEqual({ nombre: null, de: null });
   });
 });
 
@@ -41,22 +38,23 @@ describe("API: responsable efectivo y sociedades sin obligaciones (datos inventa
     await vaciarUsuarios();
   });
 
-  const listar = async (qs = "") => (await app.inject(`/api/obligaciones${qs}`)).json().datos as { proveedor: string; responsable: string | null; responsableEfectivo: string | null; responsableDe: string | null }[];
+  const listar = async (qs = "") => (await app.inject(`/api/obligaciones${qs}`)).json().datos as { proveedor: string; responsableEfectivo?: string | null }[];
 
-  it("cada obligación trae su responsable efectivo y de dónde viene; el propio sigue siendo lo que se edita", async () => {
+  it("el responsable es el tesorero de la sociedad, aunque la obligación tenga un texto propio guardado", async () => {
     const por = Object.fromEntries((await listar()).map((o) => [o.proveedor, o]));
-    expect(por.P1).toMatchObject({ responsable: null, responsableEfectivo: "Tesorera Uno", responsableDe: "tesorero" });
-    expect(por.P2).toMatchObject({ responsable: "Persona Propia", responsableEfectivo: "Persona Propia", responsableDe: "obligacion" });
-    expect(por.P3).toMatchObject({ responsable: null, responsableEfectivo: null, responsableDe: null });
+    expect(por.P1!.responsableEfectivo).toBe("Tesorera Uno");
+    expect(por.P2!.responsableEfectivo).toBe("Tesorera Uno");
+    expect(por.P3!.responsableEfectivo).toBeNull();
+    expect(por.P1).not.toHaveProperty("responsable");
   });
 
-  it("«Sin responsable» cuenta y filtra solo las que no tienen responsable propio ni tesorero", async () => {
+  it("«Sin responsable» cuenta y filtra las obligaciones activas cuya sociedad no tiene tesorero", async () => {
     expect((await app.inject("/api/obligaciones/resumen")).json().datos.sinResponsable).toBe(1);
     expect((await listar("?falta=responsable")).map((o) => o.proveedor)).toEqual(["P3"]);
   });
 
-  it("la búsqueda encuentra por el nombre del tesorero", async () => {
-    expect((await listar("?q=Tesorera")).map((o) => o.proveedor)).toEqual(["P1"]);
+  it("la búsqueda encuentra por el nombre del tesorero de la sociedad", async () => {
+    expect((await listar("?q=Tesorera")).map((o) => o.proveedor).sort()).toEqual(["P1", "P2"]);
   });
 
   it("sociedades sin obligaciones: con estados de cuenta, aviso individual; sin estados, un solo grupo", async () => {
