@@ -7,6 +7,8 @@ import { vencimientoParaAsociar } from "../src/repositories/vencimientos.js";
 import { asociarPago } from "../src/vencimientos/asociar-pago.js";
 import { actualizarVencimientos } from "../src/vencimientos/mantenimiento.js";
 import { fijarRango, vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // Asociar un pago a mano: permisos, estados, candidatos, el cruce con la decisión, invariantes e historial. Datos inventados. Hoy = 2026-10-27.
 const reloj = () => new Date(2026, 9, 27, 10, 0);
@@ -370,6 +372,48 @@ describe("sin efecto y huella estable", () => {
     await actualizarVencimientos(reloj);
     expect((await quitar(luz)).statusCode).toBe(200);
     expect((await lista(ana)).asociadoAMano).toBeNull();
+  });
+});
+
+// Las funciones que arman los textos del Historial viven en el Frontend (módulo puro, sin React ni red): se cargan tal cual para probar de punta a punta
+// lo que devuelve la API real.
+interface FormatoFrontend {
+  rotuloDeFila: (f: { accion: string; campo: string; antes?: string | null; despues?: string | null }) => string;
+  cambioEnPalabras: (f: { accion: string; campo: string; antes: string | null; despues: string | null }) => { tipo: string; antes?: string; despues?: string };
+  agruparCampos: (campos: string[]) => { titulo: string; campos: string[] }[];
+}
+const cargarFormato = async () => (await import(/* @vite-ignore */ pathToFileURL(resolve(process.cwd(), "../Frontend/src/lib/formato.ts")).href)) as FormatoFrontend;
+
+describe("de la API a lo que se lee en el Historial (de punta a punta)", () => {
+  it("asociar, quitar, editar y dar de alta: los mismos objetos de GET /api/historial-cambios pasan por las funciones del Frontend", async () => {
+    const f = await cargarFormato();
+    const elegido = await movA(dia(2026, 10, 14), "COBRO BETA");
+    expect((await asociar(luz, elegido.id)).statusCode).toBe(200);
+    expect((await quitar(luz)).statusCode).toBe(200);
+    const categoriaId = (await prisma.categoria.findFirstOrThrow()).id;
+    expect((await pedir("POST", "/api/obligaciones", ana, { sociedadId: sociedadA, categoriaId, proveedor: "Nueva", identificador: "50", diaEsperadoPago: 5 })).statusCode).toBe(201);
+    expect((await app.inject({ method: "PATCH", url: `/api/obligaciones/${luz}`, headers: enc(ana), payload: { frecuencia: "anual", mesArranque: 3 } })).statusCode).toBe(200);
+
+    const r = (await pedir("GET", "/api/historial-cambios", ana)).json() as { datos: { accion: string; campo: string; antes: string | null; despues: string | null }[]; opciones: { campos: string[] } };
+    const de = (accion: string, campo?: string) => r.datos.find((x) => x.accion === accion && (campo === undefined || x.campo === campo))!;
+    const quePasa = (x: { accion: string; campo: string; antes: string | null; despues: string | null }) => ({ que: f.rotuloDeFila(x), cambio: f.cambioEnPalabras(x) });
+
+    expect(quePasa(de("asociar_pago"))).toEqual({ que: "Pago del vencimiento de oct 2026", cambio: { tipo: "valores", antes: "Sin asociar", despues: "Asociado a mano" } });
+    expect(quePasa(de("quitar_asociacion"))).toEqual({ que: "Pago del vencimiento de oct 2026", cambio: { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" } });
+    expect(quePasa(de("crear"))).toEqual({ que: "Obligación nueva", cambio: { tipo: "vacio" } });
+    expect(quePasa(de("editar", "frecuencia"))).toEqual({ que: "Frecuencia", cambio: { tipo: "valores", antes: "Mensual", despues: "Anual" } });
+    expect(quePasa(de("editar", "mesArranque"))).toEqual({ que: "Mes de arranque", cambio: { tipo: "valores", antes: "Sin definir", despues: "Marzo" } });
+    expect(quePasa(de("editar", "frecuenciaPorConfirmar"))).toEqual({ que: "Frecuencia confirmada", cambio: { tipo: "valores", antes: "No", despues: "Sí" } });
+
+    // el filtro «Qué cambió» con lo que existe de verdad dentro del alcance, en sus dos grupos
+    expect(f.agruparCampos(r.opciones.campos)).toEqual([
+      { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "obligacion"] },
+      { titulo: "Decisiones manuales", campos: ["pago_asociado"] },
+    ]);
+    // y filtrar por «Pago del vencimiento» (pago_asociado) en el servidor trae las dos filas: asociar y quitar
+    expect(((await pedir("GET", "/api/historial-cambios?campo=pago_asociado", ana)).json().datos as unknown[]).length).toBe(2);
+    // sin decisiones manuales en el alcance, el grupo no existe (Beto no ve nada de AAA)
+    expect(f.agruparCampos((await pedir("GET", "/api/historial-cambios", beto)).json().opciones.campos)).toEqual([]);
   });
 });
 

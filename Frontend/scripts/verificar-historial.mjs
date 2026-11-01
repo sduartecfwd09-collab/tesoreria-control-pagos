@@ -56,17 +56,55 @@ test("fecha y hora de Costa Rica; el año solo si no es el año en curso", () =>
   assert.equal(f.fechaHoraDeCambio("no es fecha", "2026"), null);
 });
 
-test("asociar y quitar un pago a mano: cada dato en su columna, sin flecha ni antes y después", () => {
-  assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago asociado a mano");
-  assert.equal(f.rotuloDeFila({ accion: "asociar_pago", campo: "pago_asociado" }), "Pago asociado a mano");
-  assert.deepEqual(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: "2026-10" }), { tipo: "texto", texto: "Vencimiento de oct 2026" });
-  assert.equal(f.rotuloDeFila({ accion: "quitar_asociacion", campo: "pago_asociado" }), "Asociación quitada");
-  assert.deepEqual(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "2026-10", despues: null }), { tipo: "texto", texto: "Vencimiento de oct 2026" });
+test("asociar y quitar un pago a mano: el vencimiento va en «Qué cambió» y «Antes → Después» es Sin asociar / Asociado a mano", () => {
+  const asociar = { accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: "2026-10" };
+  const quitar = { accion: "quitar_asociacion", campo: "pago_asociado", antes: "2026-10", despues: null };
+  assert.equal(f.rotuloDeFila(asociar), "Pago del vencimiento de oct 2026"); // el mes sale de «después»
+  assert.deepEqual(f.cambioEnPalabras(asociar), { tipo: "valores", antes: "Sin asociar", despues: "Asociado a mano" });
+  assert.equal(f.rotuloDeFila(quitar), "Pago del vencimiento de oct 2026"); // el mes sale de «antes»
+  assert.deepEqual(f.cambioEnPalabras(quitar), { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" });
   // el rótulo de las demás filas sigue siendo el del dato
-  assert.equal(f.rotuloDeFila({ accion: "editar", campo: "frecuencia" }), "Frecuencia");
-  // sin periodo legible no se inventa uno
-  assert.deepEqual(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: null }), { tipo: "vacio" });
-  assert.deepEqual(f.cambioEnPalabras({ accion: "quitar_asociacion", campo: "pago_asociado", antes: "raro", despues: null }), { tipo: "vacio" });
+  assert.equal(f.rotuloDeFila({ accion: "editar", campo: "frecuencia", antes: "mensual", despues: "anual" }), "Frecuencia");
+  assert.equal(f.rotuloDeFila({ accion: "crear", campo: "obligacion", antes: null, despues: null }), "Obligación nueva");
+});
+
+test("período ilegible: «Pago del vencimiento» sin mes, nunca una celda rota; la flecha solo con dos valores", () => {
+  for (const periodo of [null, "", "raro", "2026-1", "2026-10-01"]) {
+    assert.equal(f.rotuloDeFila({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: periodo }), "Pago del vencimiento", String(periodo));
+    assert.equal(f.rotuloDeFila({ accion: "quitar_asociacion", campo: "pago_asociado", antes: periodo, despues: null }), "Pago del vencimiento", String(periodo));
+  }
+  // aun así hay dos valores (el antes y el después de la asociación): la flecha nunca queda sola
+  assert.equal(f.cambioEnPalabras({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: null }).tipo, "valores");
+  // los tipos que no tienen dos valores no dibujan flecha: el alta queda vacía y monto/moneda/cuenta dicen «Cambió»
+  assert.deepEqual(f.cambioEnPalabras({ accion: "crear", campo: "obligacion", antes: null, despues: null }), { tipo: "vacio" });
+  assert.deepEqual(f.cambioEnPalabras({ accion: "editar", campo: "moneda", antes: null, despues: null }), { tipo: "sin_valores" });
+  const tipos = ["vacio", "sin_valores", "valores"];
+  for (const campo of Object.keys({ frecuencia: 1, activa: 1, mesArranque: 1, obligacion: 1, pago_asociado: 1, montoEsperado: 1 })) {
+    for (const accion of ["editar", "crear", "asociar_pago", "quitar_asociacion"]) {
+      const c = f.cambioEnPalabras({ accion, campo, antes: null, despues: null });
+      assert.ok(tipos.includes(c.tipo), accion + campo);
+      if (c.tipo === "valores") assert.ok(c.antes !== "" && c.despues !== "", accion + campo); // nunca un lado vacío con flecha
+    }
+  }
+});
+
+test("filtro «Qué cambió»: dos grupos, un único mapa campo -> grupo, y un grupo sin opciones no se muestra", () => {
+  assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago del vencimiento");
+  assert.deepEqual(f.GRUPOS_DE_CAMPOS.map((g) => g.titulo), ["Datos de la obligación", "Decisiones manuales"]);
+  // con todo lo que hay: cada campo en su grupo y en el orden del mapa (no el de llegada)
+  const todo = ["pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
+  assert.deepEqual(f.agruparCampos(todo), [
+    { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
+    { titulo: "Decisiones manuales", campos: ["pago_asociado"] },
+  ]);
+  // un grupo sin opciones dentro del alcance no se muestra; si solo hay uno, se muestra con su título
+  assert.deepEqual(f.agruparCampos(["frecuencia", "activa"]), [{ titulo: "Datos de la obligación", campos: ["frecuencia", "activa"] }]);
+  assert.deepEqual(f.agruparCampos(["pago_asociado"]), [{ titulo: "Decisiones manuales", campos: ["pago_asociado"] }]);
+  assert.deepEqual(f.agruparCampos([]), []);
+  // un campo desconocido no se pierde: va al final del primer grupo
+  assert.deepEqual(f.agruparCampos(["campoRaro", "frecuencia"]), [{ titulo: "Datos de la obligación", campos: ["frecuencia", "campoRaro"] }]);
+  // todos los rótulos del filtro existen (ningún «Otro dato» entre los campos conocidos)
+  for (const g of f.GRUPOS_DE_CAMPOS) for (const c of g.campos) assert.notEqual(f.rotuloDeCampo(c), "Otro dato", c);
 });
 
 test("frase del detalle: «Asociado a mano por {nombre} el {fecha}. Motivo: {motivo}.»", () => {

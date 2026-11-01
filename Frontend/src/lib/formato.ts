@@ -136,9 +136,30 @@ const ROTULO_CAMPO: Record<string, string> = {
   moneda: "Moneda",
   cuentaEsperadaId: "Cuenta de pago",
   obligacion: "Obligación nueva",
-  pago_asociado: "Pago asociado a mano",
+  pago_asociado: "Pago del vencimiento",
 };
 export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
+
+/**
+ * ÚNICO mapa campo -> grupo del filtro «Qué cambió» (y el orden de las opciones dentro de cada grupo). Para agregar una decisión nueva (una
+ * justificación, una nota de revisión...), se agrega su campo al grupo «Decisiones manuales» y su rótulo en ROTULO_CAMPO.
+ */
+export const GRUPOS_DE_CAMPOS: { titulo: string; campos: string[] }[] = [
+  { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
+  { titulo: "Decisiones manuales", campos: ["pago_asociado"] },
+];
+
+/**
+ * Los tipos de dato que hay dentro del alcance de la persona, en sus grupos. Un grupo sin opciones no se muestra. Un campo que ningún grupo
+ * conoce (no debería pasar) se agrega al final del primero, para que nunca quede fuera del filtro.
+ */
+export function agruparCampos(disponibles: string[]): { titulo: string; campos: string[] }[] {
+  const conocidos = new Set(GRUPOS_DE_CAMPOS.flatMap((g) => g.campos));
+  return GRUPOS_DE_CAMPOS.map((g, i) => ({
+    titulo: g.titulo,
+    campos: [...g.campos.filter((x) => disponibles.includes(x)), ...(i === 0 ? disponibles.filter((x) => !conocidos.has(x)) : [])],
+  })).filter((g) => g.campos.length > 0);
+}
 
 /** De estos datos no se guarda el valor (confidencial): solo se sabe que cambiaron. */
 const CAMPOS_SIN_VALOR = ["montoEsperado", "moneda", "cuentaEsperadaId"];
@@ -165,22 +186,29 @@ export function valorEnPalabras(campo: string, valor: string | null): string {
   }
 }
 
-/** `texto`: un solo dato (sin antes ni después); `vacio`: no hay nada que mostrar (la celda queda en blanco). */
-export type CambioEnPalabras = { tipo: "vacio" } | { tipo: "texto"; texto: string } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
-
-/** «Qué cambió» de una fila: el rótulo del dato; al quitar una asociación manual, «Asociación quitada». */
-export const rotuloDeFila = (f: { accion: string; campo: string }): string => (f.accion === "quitar_asociacion" ? "Asociación quitada" : rotuloDeCampo(f.campo));
+/** `vacio`: no hay nada que mostrar (la celda queda en blanco); `valores`: hay un antes y un después (y solo entonces va la flecha). */
+export type CambioEnPalabras = { tipo: "vacio" } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
 
 /**
- * Lo que va en «Antes → Después»: el alta no tiene valores (vacío); asociar o quitar un pago a mano es un solo dato, «Vencimiento de oct 2026»
- * (solo se guardó el periodo); monto/moneda/cuenta dicen «Cambió»; el resto, antes y después.
+ * «Qué cambió» de una fila: el rótulo del dato. Al asociar o quitar un pago a mano dice de qué vencimiento, «Pago del vencimiento de oct 2026»
+ * (el periodo AAAA-MM guardado: en «después» al asociar y en «antes» al quitar); si el periodo no se puede leer, «Pago del vencimiento».
+ */
+export function rotuloDeFila(f: { accion: string; campo: string; antes?: string | null; despues?: string | null }): string {
+  if (f.accion === "asociar_pago" || f.accion === "quitar_asociacion") {
+    const periodo = f.accion === "asociar_pago" ? f.despues : f.antes;
+    return periodo && /^\d{4}-\d{2}$/.test(periodo) ? `Pago del vencimiento de ${mesCorto(periodo)}` : "Pago del vencimiento";
+  }
+  return rotuloDeCampo(f.campo);
+}
+
+/**
+ * Lo que va en «Antes → Después»: el alta no tiene valores (vacío); asociar y quitar un pago a mano pasan de «Sin asociar» a «Asociado a mano»
+ * y al revés; monto/moneda/cuenta dicen «Cambió»; el resto, antes y después. La flecha solo se dibuja cuando hay dos valores.
  */
 export function cambioEnPalabras(f: { accion: string; campo: string; antes: string | null; despues: string | null }): CambioEnPalabras {
   if (f.accion === "crear") return { tipo: "vacio" };
-  if (f.accion === "asociar_pago" || f.accion === "quitar_asociacion") {
-    const periodo = f.accion === "asociar_pago" ? f.despues : f.antes;
-    return periodo && /^\d{4}-\d{2}$/.test(periodo) ? { tipo: "texto", texto: `Vencimiento de ${mesCorto(periodo)}` } : { tipo: "vacio" };
-  }
+  if (f.accion === "asociar_pago") return { tipo: "valores", antes: "Sin asociar", despues: "Asociado a mano" };
+  if (f.accion === "quitar_asociacion") return { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" };
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
   return { tipo: "valores", antes: valorEnPalabras(f.campo, f.antes), despues: valorEnPalabras(f.campo, f.despues) };
 }

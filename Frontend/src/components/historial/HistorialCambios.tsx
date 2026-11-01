@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { limitesDeNavegacion, opcionesDePeriodo, type IdAtajo, type Rango } from "@/lib/fechas";
-import { cambioEnPalabras, fechaHoraDeCambio, rotuloDeCampo, rotuloDeFila } from "@/lib/formato";
+import { agruparCampos, cambioEnPalabras, fechaHoraDeCambio, rotuloDeCampo, rotuloDeFila } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { LimitesFechas, RespuestaHistorial } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
@@ -80,8 +80,12 @@ export function HistorialCambios() {
           <FiltroConEtiqueta id="historial-campo" etiqueta="Qué cambió">
             <select id="historial-campo" value={campo} onChange={(e) => setCampo(e.target.value)} className={`${claseControl} text-sm`}>
               <option value="">Todo lo que cambió</option>
-              {opciones.campos.map((c) => (
-                <option key={c} value={c}>{rotuloDeCampo(c)}</option>
+              {agruparCampos(opciones.campos).map((g) => (
+                <optgroup key={g.titulo} label={g.titulo}>
+                  {g.campos.map((c) => (
+                    <option key={c} value={c}>{rotuloDeCampo(c)}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </FiltroConEtiqueta>
@@ -133,8 +137,6 @@ export function HistorialCambios() {
                           </>
                         ) : cambio.tipo === "sin_valores" ? (
                           "Cambió"
-                        ) : cambio.tipo === "texto" ? (
-                          cambio.texto
                         ) : null}
                       </td>
                       <td className={celda}>
