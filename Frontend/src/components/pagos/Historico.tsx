@@ -9,13 +9,14 @@ import { LineaAlcance } from "../LineaAlcance";
 import { SelectorPeriodo } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { CajaError, claseControl, FinDeLista, NombreSociedad } from "../ui";
+import { CajaFiltros, claseBotonTabla, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh, FiltroConEtiqueta } from "../estilo-tabla";
 import { DetallePago } from "./DetallePago";
 import { ESTADO, EstadoPago, ORDEN } from "./EstadoPago";
 
 const POR_PAGINA = 50;
 const ESTADOS = (Object.keys(ESTADO) as EstadoVencimiento[]).sort((a, b) => ORDEN[a] - ORDEN[b]);
 const OPCIONES: IdAtajo[] = ["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"];
-const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
+const th = claseTh;
 
 /**
  * Histórico: los vencimientos de las obligaciones del catálogo con su pago cruzado, por fecha de vencimiento. El filtro y la paginación
@@ -71,33 +72,38 @@ export function Historico() {
     <>
       <LineaAlcance alcance={lista.alcance} />
 
-      <section aria-label="Filtros del histórico" className="mt-5">
+      <CajaFiltros etiqueta="Filtros del histórico">
         {limites && (
           <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites.hoy, limitesHistorico)} inicial="ultimos_12_meses" rangoActual={rango ?? aplicado} limites={limitesHistorico} alCambiar={setRango} />
         )}
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <label className="flex min-w-60 max-w-sm flex-1 items-center gap-2 rounded-[10px] border border-control px-3 py-1.5 text-suave">
+        <FiltroConEtiqueta id="historico-buscar" etiqueta="Buscar">
+          <div className="flex min-w-60 items-center gap-2 rounded-[10px] border border-control bg-fondo px-3 py-1.5 text-suave">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-            <input type="search" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Buscar proveedor o servicio" aria-label="Buscar proveedor o servicio" className="min-w-0 flex-1 bg-transparent text-sm text-texto outline-none" />
-          </label>
+            <input id="historico-buscar" type="search" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Buscar proveedor o servicio" className="min-w-0 flex-1 bg-transparent text-sm text-texto outline-none" />
+          </div>
+        </FiltroConEtiqueta>
+        <FiltroConEtiqueta id="historico-sociedad" etiqueta="Sociedad">
           <div className="w-72">
             <SelectorSociedad id="historico-sociedad" opciones={sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombreLargo }))} valor={sociedad} alCambiar={setSociedad} textoTodas="Todas las sociedades" />
           </div>
-          <select aria-label="Categoría" value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${claseControl} text-sm`}>
+        </FiltroConEtiqueta>
+        <FiltroConEtiqueta id="historico-categoria" etiqueta="Categoría">
+          <select id="historico-categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)} className={`${claseControl} text-sm`}>
             <option value="">Todas las categorías</option>
             {categorias.map((c) => (
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          <select aria-label="Estado" value={estado} onChange={(e) => setEstado(e.target.value)} className={`${claseControl} text-sm`}>
+        </FiltroConEtiqueta>
+        <FiltroConEtiqueta id="historico-estado" etiqueta="Estado">
+          <select id="historico-estado" value={estado} onChange={(e) => setEstado(e.target.value)} className={`${claseControl} text-sm`}>
             <option value="">Todos los estados</option>
             {ESTADOS.map((e) => (
               <option key={e} value={e}>{ESTADO[e].texto}</option>
             ))}
           </select>
-        </div>
-      </section>
+        </FiltroConEtiqueta>
+      </CajaFiltros>
 
       {lista.datos === null ? (
         <p className="mt-8 text-suave" role="status">Cargando el histórico…</p>
@@ -109,10 +115,10 @@ export function Historico() {
         </p>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1000px] border-collapse text-sm">
+          <div className={claseContenedorTabla}>
+            <table className={`${claseTabla} min-w-[1000px]`}>
               <caption className="sr-only">Histórico de vencimientos</caption>
-              <thead>
+              <thead className={claseEncabezadoTabla}>
                 <tr>
                   <th scope="col" className={th}>Sociedad</th>
                   <th scope="col" className={th}>Proveedor y categoría</th>
@@ -126,16 +132,16 @@ export function Historico() {
               </thead>
               <tbody>
                 {lista.datos.map((v) => (
-                  <tr key={v.id} tabIndex={0} aria-label={`Ver ${v.proveedor} ${nombrePeriodo(v.periodo)}`} onClick={() => alAbrir(v.id)} onKeyDown={(e) => e.key === "Enter" && alAbrir(v.id)} className="cursor-pointer border-t border-linea hover:bg-fondo-suave">
-                    <td className="px-3.5 py-4 align-top"><NombreSociedad nombre={v.sociedad} /></td>
-                    <td className="px-3.5 py-4 align-top">
+                  <tr key={v.id} tabIndex={0} aria-label={`Ver ${v.proveedor} ${nombrePeriodo(v.periodo)}`} onClick={() => alAbrir(v.id)} onKeyDown={(e) => e.key === "Enter" && alAbrir(v.id)} className={`cursor-pointer ${claseFila}`}>
+                    <td className={`${claseCelda}`}><NombreSociedad nombre={v.sociedad} /></td>
+                    <td className={`${claseCelda}`}>
                       <span className="block font-semibold">{v.proveedor}</span>
                       <span className="mt-0.5 block text-xs text-suave">{v.categoria}</span>
                     </td>
-                    <td className="px-3.5 py-4 align-top whitespace-nowrap font-semibold">{nombreFecha(v.fecha)}</td>
-                    <td className="px-3.5 py-4 align-top"><EstadoPago estado={v.estado} /></td>
-                    <td className="px-3.5 py-4 align-top whitespace-nowrap">{v.pago ? nombreFecha(v.pago.fecha) : <span className="text-suave">—</span>}</td>
-                    <td className="px-3.5 py-4 align-top whitespace-nowrap">
+                    <td className={`${claseCelda} whitespace-nowrap font-semibold`}>{nombreFecha(v.fecha)}</td>
+                    <td className={`${claseCelda}`}><EstadoPago estado={v.estado} /></td>
+                    <td className={`${claseCelda} whitespace-nowrap`}>{v.pago ? nombreFecha(v.pago.fecha) : <span className="text-suave">—</span>}</td>
+                    <td className={`${claseCelda} whitespace-nowrap`}>
                       {v.pago ? (
                         <>
                           <span className="block font-mono text-[13px]">{v.pago.cuenta}</span>
@@ -145,9 +151,9 @@ export function Historico() {
                         <span className="text-suave">—</span>
                       )}
                     </td>
-                    <td className="px-3.5 py-4 align-top text-right whitespace-nowrap tabular-nums">{v.pago ? <b>{montoPagado(v.pago.monto, v.pago.moneda)}</b> : <span className="text-suave">—</span>}</td>
-                    <td className="px-3.5 py-4 align-top text-right">
-                      <button type="button" onClick={(e) => (e.stopPropagation(), alAbrir(v.id))} className="rounded border-2 border-control px-3 py-1.5 text-xs font-semibold hover:bg-fondo-suave">
+                    <td className={`${claseCelda} text-right whitespace-nowrap tabular-nums`}>{v.pago ? <b>{montoPagado(v.pago.monto, v.pago.moneda)}</b> : <span className="text-suave">—</span>}</td>
+                    <td className={`${claseCelda} text-right`}>
+                      <button type="button" onClick={(e) => (e.stopPropagation(), alAbrir(v.id))} className={claseBotonTabla}>
                         Ver detalle
                       </button>
                     </td>

@@ -9,10 +9,11 @@ import { LineaAlcance } from "../LineaAlcance";
 import { SelectorPeriodo } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { CajaError, claseControl, FinDeLista, NombreSociedad } from "../ui";
+import { CajaFiltros, claseCelda, claseContenedorTabla, claseEncabezadoTabla, claseFila, claseTabla, claseTh, FiltroConEtiqueta } from "../estilo-tabla";
 
 const OPCIONES: IdAtajo[] = ["ultimos_12_meses", "mes", "mes_anterior", "ultimos_3_meses", "anio"];
-const th = "px-3.5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-suave";
-const celda = "px-3.5 py-4 align-top";
+const th = claseTh;
+const celda = claseCelda;
 
 /**
  * Historial de cambios: una fila por cada dato que una persona cambió en una obligación, del más reciente al más antiguo. El alcance, los
@@ -43,7 +44,8 @@ export function HistorialCambios() {
 
   if (lista.error) return <CajaError mensaje={lista.error} alReintentar={() => setIntento((n) => n + 1)} />;
 
-  const navegable = limites ? limitesDeNavegacion(limites) : undefined;
+  // el historial es el pasado: no se elige después de hoy (ni en «Elegir fechas»)
+  const navegable = limites ? limitesDeNavegacion(limites, true) : undefined;
   const opciones = meta?.opciones;
   const hayFiltros = Boolean(rango || sociedad || persona || campo);
 
@@ -51,37 +53,39 @@ export function HistorialCambios() {
     <>
       <LineaAlcance alcance={lista.alcance} />
 
-      <section aria-label="Filtros del historial" className="mt-5">
+      <CajaFiltros etiqueta="Filtros del historial">
         {navegable && limites && (
           <SelectorPeriodo etiqueta="Período" opciones={opcionesDePeriodo(OPCIONES, limites.hoy, navegable, true)} inicial="todo" rangoActual={rango} limites={navegable} alCambiar={setRango} />
         )}
         {/* un filtro con una sola opción no deja elegir nada: no se muestra */}
-        {opciones && (opciones.sociedades.length > 1 || opciones.personas.length > 1 || opciones.campos.length > 1) && (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {opciones.sociedades.length > 1 && (
-              <div className="w-72">
-                <SelectorSociedad id="historial-sociedad" opciones={opciones.sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombre }))} valor={sociedad} alCambiar={setSociedad} textoTodas="Todas las sociedades" />
-              </div>
-            )}
-            {opciones.personas.length > 1 && (
-              <select aria-label="Quién" value={persona} onChange={(e) => setPersona(e.target.value)} className={`${claseControl} text-sm`}>
-                <option value="">Todas las personas</option>
-                {opciones.personas.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-            )}
-            {opciones.campos.length > 1 && (
-              <select aria-label="Qué cambió" value={campo} onChange={(e) => setCampo(e.target.value)} className={`${claseControl} text-sm`}>
-                <option value="">Todo lo que cambió</option>
-                {opciones.campos.map((c) => (
-                  <option key={c} value={c}>{rotuloDeCampo(c)}</option>
-                ))}
-              </select>
-            )}
-          </div>
+        {opciones && opciones.sociedades.length > 1 && (
+          <FiltroConEtiqueta id="historial-sociedad" etiqueta="Sociedad">
+            <div className="w-72">
+              <SelectorSociedad id="historial-sociedad" opciones={opciones.sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombre }))} valor={sociedad} alCambiar={setSociedad} textoTodas="Todas las sociedades" />
+            </div>
+          </FiltroConEtiqueta>
         )}
-      </section>
+        {opciones && opciones.personas.length > 1 && (
+          <FiltroConEtiqueta id="historial-quien" etiqueta="Quién">
+            <select id="historial-quien" value={persona} onChange={(e) => setPersona(e.target.value)} className={`${claseControl} text-sm`}>
+              <option value="">Todas las personas</option>
+              {opciones.personas.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+          </FiltroConEtiqueta>
+        )}
+        {opciones && opciones.campos.length > 1 && (
+          <FiltroConEtiqueta id="historial-campo" etiqueta="Qué cambió">
+            <select id="historial-campo" value={campo} onChange={(e) => setCampo(e.target.value)} className={`${claseControl} text-sm`}>
+              <option value="">Todo lo que cambió</option>
+              {opciones.campos.map((c) => (
+                <option key={c} value={c}>{rotuloDeCampo(c)}</option>
+              ))}
+            </select>
+          </FiltroConEtiqueta>
+        )}
+      </CajaFiltros>
 
       {lista.datos === null ? (
         <p className="mt-8 text-suave" role="status">Cargando el historial…</p>
@@ -89,10 +93,10 @@ export function HistorialCambios() {
         <p className="mt-8 text-suave" role="status">{hayFiltros ? "No hay cambios con estos filtros." : "Todavía no hay cambios registrados."}</p>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1000px] border-collapse text-sm">
+          <div className={claseContenedorTabla}>
+            <table className={`${claseTabla} min-w-[1000px]`}>
               <caption className="sr-only">Historial de cambios de las obligaciones</caption>
-              <thead>
+              <thead className={claseEncabezadoTabla}>
                 <tr>
                   <th scope="col" className={th}>Fecha y hora</th>
                   <th scope="col" className={th}>Sociedad</th>
@@ -107,7 +111,7 @@ export function HistorialCambios() {
                 {lista.datos.map((f) => {
                   const cambio = cambioEnPalabras(f);
                   return (
-                    <tr key={f.id} className="border-t border-linea">
+                    <tr key={f.id} className={claseFila}>
                       <td className={`${celda} whitespace-nowrap`}>{fechaHoraDeCambio(f.creadoEn) ?? "—"}</td>
                       <td className={celda}><NombreSociedad nombre={f.sociedad} /></td>
                       <td className={celda}>
@@ -124,7 +128,13 @@ export function HistorialCambios() {
                       ) : (
                         <>
                           <td className={`${celda} font-semibold`}>{rotuloDeCampo(f.campo)}</td>
-                          <td className={celda}>{cambio.tipo === "sin_valores" ? "Cambió" : `${cambio.antes} → ${cambio.despues}`}</td>
+                          <td className={celda}>{cambio.tipo === "sin_valores" ? (
+                              "Cambió"
+                            ) : (
+                              <>
+                                <span className="text-suave">{cambio.antes}</span> → <span className="font-semibold text-texto">{cambio.despues}</span>
+                              </>
+                            )}</td>
                         </>
                       )}
                       <td className={celda}>
