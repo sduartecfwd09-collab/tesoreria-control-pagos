@@ -138,6 +138,20 @@ describe("filtros, orden y paginación", () => {
     expect((await pedir(jefa, "?desde=2099-01-02&hasta=2099-01-01")).estado).toBe(400);
   });
 
+  it("«hoy» es el día de Costa Rica, no el de UTC: a las 21:00 del 1 de noviembre (03:00 UTC del 2) todavía es 1 de noviembre", async () => {
+    const tarde = () => new Date(Date.UTC(2026, 10, 2, 3, 0)); // 1 nov, 21:00 en Costa Rica
+    const app = await crearApp({ reloj: tarde, modoPruebas: true });
+    try {
+      expect((await app.inject("/api/hoy")).json().hoy).toBe("2026-11-01");
+      const hoyCR = await linea({ sociedadId: sociedadA, obligacionId: obligacionA, usuarioId: ana, nombre: "Ana Uno", creadoEn: "2026-11-02T05:00:00Z" }); // 1 nov, 23:00 en Costa Rica
+      await linea({ sociedadId: sociedadA, obligacionId: obligacionA, usuarioId: ana, nombre: "Ana Uno", creadoEn: "2026-11-02T06:00:00Z" }); // ya es 2 de noviembre en Costa Rica
+      const r = await app.inject({ method: "GET", url: "/api/historial-cambios?desde=2026-11-01&hasta=2026-11-02", headers: encabezado(jefa) });
+      expect(idsDe(r.json())).toEqual([hoyCR.id]); // «hasta» se recortó al 1 de noviembre
+    } finally {
+      await app.close();
+    }
+  });
+
   it("ordena por fecha descendente y, a igual fecha, por id descendente", async () => {
     const mismo = "2026-10-20T15:00:00Z";
     const x = await linea({ sociedadId: sociedadA, obligacionId: obligacionA, usuarioId: ana, nombre: "Ana Uno", creadoEn: mismo });
