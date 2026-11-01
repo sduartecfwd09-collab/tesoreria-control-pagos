@@ -3,6 +3,13 @@ import { responsableEfectivo } from "../domain/obligaciones.js";
 import { detalleDeVencimiento } from "../vencimientos/detalle.js";
 import { avisosDeDatos } from "../domain/cobertura-corte.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance, sociedadesDelAlcance } from "../identidad/alcance.js";
+import { asociacionSinEfecto, claveObligacionPeriodo, ESTADOS_ASOCIABLES } from "../domain/asociacion.js";
+import { normalizarMotivo } from "../domain/cambio-dia.js";
+import { ErrorDeServicio } from "../domain/permisos.js";
+import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
+import { usuarioActual, type UsuarioActual } from "../identidad/usuario-actual.js";
+import { asociacionesVigentesDe, asociacionVigente } from "../repositories/decisiones.js";
+import { asociarPago, listarCandidatos, quitarAsociacion } from "../vencimientos/asociar-pago.js";
 import { MOTIVOS } from "../domain/cruce.js";
 import { inicioDeDatos } from "../domain/cobertura-corte.js";
 import { TEXTO_SALDO_IMAGEN, TEXTO_SALDO_NO_CUADRA, textoDatosDesactualizados, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
@@ -16,7 +23,7 @@ import { cargarCoberturaCuentas } from "../repositories/cruce.js";
 import { listarSociedades, sociedadesConObligacionesActivas } from "../repositories/obligaciones.js";
 import { diasDeAviso } from "../vencimientos/generar.js";
 import { ultimoCalculoDeEstados, valorGlobal } from "../repositories/parametros.js";
-import { listarVencimientos, periodosGenerados } from "../repositories/vencimientos.js";
+import { listarVencimientos, periodosGenerados, vencimientoParaAsociar } from "../repositories/vencimientos.js";
 
 const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"] as const;
 
@@ -52,8 +59,81 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     const alcance = await alcanceDe(req, opts.modoPruebas);
     const ids = await obligacionesDelAlcance(alcance);
     if (!d || (ids && !ids.includes(d.obligacionId))) return reply.code(404).send({ error: "Vencimiento no encontrado" });
+    // asociación manual: quién, cuándo y por qué; y si hay una acción posible para quien consulta
+    const paraAsociar = await vencimientoParaAsociar(id.data);
+    const decision = paraAsociar ? await asociacionVigente(paraAsociar.obligacionId, paraAsociar.periodo) : null;
+    const persona = await usuarioActual(req, opts.modoPruebas);
+    const gestion = {
+      asociadoAMano: decision ? { quien: decision.nombreUsuario, cuando: decision.creadoEn.toISOString(), motivo: decision.motivo } : null,
+      sinEfecto: decision && paraAsociar ? asociacionSinEfecto(paraAsociar.estado, paraAsociar.movimiento?.claveDedup ?? null, decision.claveMovimiento) : false,
+      puedeGestionar: Boolean(persona && paraAsociar && puedeEscribirEnSociedad(persona, paraAsociar.sociedad) && (ESTADOS_ASOCIABLES.includes(paraAsociar.estado) || decision)),
+    };
     // el responsable solo se informa a Jefatura: a un tesorero le repetiría que es él
-    return { datos: alcance.tipo === "todo" ? d : { ...d, responsableEfectivo: undefined } };
+    return { datos: { ...(alcance.tipo === "todo" ? d : { ...d, responsableEfectivo: undefined }), ...gestion } };
+  });
+
+  // Asociar a mano un pago a un vencimiento. Todas exigen persona identificada (401) y la sociedad propia (403; Jefatura todas).
+  const paraGestionar = async (req: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply): Promise<{ persona: UsuarioActual; v: NonNullable<Awaited<ReturnType<typeof vencimientoParaAsociar>>> } | null> => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return null;
+    const id = z.coerce.number().int().positive().safeParse((req.params as { id: string }).id);
+    if (!id.success) {
+      reply.code(400).send({ error: "Identificador inválido" });
+      return null;
+    }
+    const v = await vencimientoParaAsociar(id.data);
+    if (!v) {
+      reply.code(404).send({ error: "Vencimiento no encontrado" });
+      return null;
+    }
+    if (!puedeEscribirEnSociedad(persona, v.sociedad)) {
+      reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+      return null;
+    }
+    return { persona, v };
+  };
+  const errorDeServicio = (reply: import("fastify").FastifyReply, e: unknown) => {
+    if (!(e instanceof ErrorDeServicio)) throw e;
+    const estado = { permiso: 403, validacion: 422, no_encontrado: 404, conflicto: 409 }[e.codigo];
+    return reply.code(estado).send({ error: e.message });
+  };
+  const MENSAJE_MOTIVO = "Indique el motivo (entre 3 y 300 caracteres)";
+
+  app.get("/api/vencimientos/:id/pagos-candidatos", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    try {
+      return { datos: await listarCandidatos(g.v) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/vencimientos/:id/asociar-pago", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    const cuerpo = (req.body ?? {}) as { movimiento?: unknown; motivo?: unknown };
+    const movimiento = z.number().int().positive().safeParse(cuerpo.movimiento);
+    if (!movimiento.success) return reply.code(422).send({ error: "Elija un pago de la lista", campo: "movimiento" });
+    const motivo = normalizarMotivo(cuerpo.motivo);
+    if (motivo === null) return reply.code(422).send({ error: MENSAJE_MOTIVO, campo: "motivo" });
+    try {
+      return { datos: await asociarPago({ vencimiento: g.v, movimientoId: movimiento.data, motivo, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/vencimientos/:id/quitar-asociacion", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    const motivo = normalizarMotivo(((req.body ?? {}) as { motivo?: unknown }).motivo);
+    if (motivo === null) return reply.code(422).send({ error: MENSAJE_MOTIVO, campo: "motivo" });
+    try {
+      return { datos: await quitarAsociacion({ vencimiento: g.v, motivo, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
   });
 
   // Aviso de datos: sociedades cuyos estados de cuenta llegan hasta una fecha anterior a hoy menos N días.
@@ -84,6 +164,9 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     const { estado, ...resto } = q.data;
     const obligacionIds = (await obligacionesDelAlcance(alcance)) ?? undefined;
     const { total, datos, resumen } = await listarVencimientos({ ...resto, estados: estado, obligacionIds });
+    // decisiones manuales de lo que se ve, y quién puede gestionar (sin persona identificada nadie)
+    const persona = await usuarioActual(req, opts.modoPruebas);
+    const asociaciones = await asociacionesVigentesDe(datos.map((v) => v.obligacionId), datos.map((v) => v.periodo));
     // «Sin información» por inicio de datos: desde cuándo hay estados de cuenta de cada sociedad
     const datosDesde = new Map<number, string | null>();
     if (datos.some((v) => v.estado === "sin_informacion" && v.motivo === MOTIVOS.sinInformacionDesde)) {
@@ -115,6 +198,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         pago: v.movimiento ? { fecha: v.movimiento.fecha.toISOString().slice(0, 10), monto: aNumero(v.movimiento.debito), moneda: v.movimiento.cuenta.moneda, banco: v.movimiento.cuenta.banco, cuenta: enmascararCuenta(v.movimiento.cuenta.numero) } : null,
         diferenciaDias: v.diferenciaDias,
         sinInfoHasta: v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null,
+        ...gestionDe(v, asociaciones.get(claveObligacionPeriodo(v.obligacionId, v.periodo)) ?? null, persona),
         conciliado: v._count.conciliaciones > 0,
         futuro: v.fecha >= hoy,
         // días de hoy a la fecha vigente (negativo = ya pasó): «Hace N días» / «En N días»
@@ -124,4 +208,19 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
       hoy: hoy.toISOString().slice(0, 10),
     };
   });
+}
+
+type DecisionVigente = Awaited<ReturnType<typeof asociacionVigente>>;
+
+/** Lo que la lista dice de la gestión de un vencimiento: la asociación manual (quién, cuándo y por qué), si no tiene efecto y si esta persona puede actuar. */
+function gestionDe(
+  v: { estado: string; sociedad: { tesoreroId: number | null }; movimiento: { claveDedup: string } | null },
+  decision: DecisionVigente,
+  persona: UsuarioActual | null,
+) {
+  return {
+    asociadoAMano: decision ? { quien: decision.nombreUsuario, cuando: decision.creadoEn.toISOString(), motivo: decision.motivo } : null,
+    sinEfecto: decision ? asociacionSinEfecto(v.estado, v.movimiento?.claveDedup ?? null, decision.claveMovimiento) : false,
+    puedeGestionar: Boolean(persona && puedeEscribirEnSociedad(persona, v.sociedad) && (ESTADOS_ASOCIABLES.includes(v.estado) || decision)),
+  };
 }

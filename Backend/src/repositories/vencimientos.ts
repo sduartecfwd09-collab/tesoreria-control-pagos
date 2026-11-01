@@ -110,7 +110,7 @@ export async function listarVencimientos(f: FiltroVencimientos) {
       include: {
         obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } }, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } },
         // el pago que respalda el estado: solo fecha, monto y la cuenta (para su moneda, banco y últimos 4)
-        movimiento: { select: { fecha: true, debito: true, cuenta: { select: { numero: true, banco: true, moneda: true } } } },
+        movimiento: { select: { fecha: true, debito: true, claveDedup: true, cuenta: { select: { numero: true, banco: true, moneda: true } } } },
       },
       orderBy: [{ fecha: f.orden ?? "asc" }, { sociedad: { codigo: "asc" } }, { proveedor: "asc" }, { id: f.orden ?? "asc" }],
       skip: (f.pagina - 1) * f.porPagina,
@@ -190,5 +190,31 @@ export async function vencimientosParaAvisos(estados: string[]) {
       obligacion: { select: { identificador: true, sociedad: { select: { tesorero: { select: { nombre: true } } } } } },
     },
     orderBy: [{ fecha: "asc" }, { id: "asc" }],
+  });
+}
+
+/** Lo que hace falta para decidir si se puede asociar un pago a un vencimiento: su estado, su sociedad (y su tesorero) y el pago que hoy lo respalda. */
+export async function vencimientoParaAsociar(id: number) {
+  return prisma.vencimiento.findUnique({
+    where: { id },
+    select: {
+      id: true, obligacionId: true, sociedadId: true, periodo: true, fecha: true, estado: true,
+      sociedad: { select: { id: true, tesoreroId: true } },
+      movimiento: { select: { claveDedup: true } },
+    },
+  });
+}
+
+/**
+ * Débitos de la sociedad (archivos vigentes) con fecha entre desde y hasta (hasta, exclusivo) que NO respaldan ningún vencimiento y cuya huella
+ * no está en `excluirHuellas` (pagos con una asociación vigente aunque el cruce aún no se haya recalculado). El orden y el tope los pone el dominio.
+ */
+export async function debitosLibresDeSociedad(sociedadId: number, desde: Date, hastaExclusivo: Date, excluirHuellas: string[]) {
+  return prisma.movimiento.findMany({
+    where: {
+      debito: { gt: 0n }, archivo: { retiradoEn: null }, cuenta: { sociedadId }, fecha: { gte: desde, lt: hastaExclusivo },
+      vencimientos: { none: {} }, ...(excluirHuellas.length > 0 ? { claveDedup: { notIn: excluirHuellas } } : {}),
+    },
+    select: { id: true, fecha: true, descripcion: true, claveDedup: true, debito: true, cuenta: { select: { numero: true, moneda: true, banco: true } } },
   });
 }
