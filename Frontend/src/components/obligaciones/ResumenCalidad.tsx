@@ -21,6 +21,7 @@ export function ResumenCalidad({
     { falta: "monto", titulo: "Falta monto", n: r.sinMonto, ayuda: "dato opcional", estado: "proyectado", texto: "Dato opcional" },
     // solo Jefatura: el servidor no envía este conteo a un tesorero
     ...(r.sinResponsable !== undefined ? [{ falta: "responsable" as const, titulo: "Sin responsable", n: r.sinResponsable, ayuda: "su sociedad no tiene tesorero", ...pide(r.sinResponsable) }] : []),
+    { falta: "frecuencia", titulo: "Frecuencia sin confirmar", n: r.frecuenciaPorConfirmar, ayuda: "confírmela al editar", ...pide(r.frecuenciaPorConfirmar) },
     ...(r.sinDia > 0 ? [{ falta: "dia" as const, titulo: "Falta día", n: r.sinDia, ayuda: "no generan vencimientos", ...pide(r.sinDia) }] : []),
   ];
 
