@@ -152,11 +152,11 @@ describe("identificador duplicado: avisa, no bloquea", () => {
   it("la otra obligación cuenta aunque esté inactiva", async () => {
     const cat = (await app.inject("/api/categorias")).json().datos[0];
     const o = await porId("000999888777");
-    await patch(o.id, { activa: false });
+    await patch(o.id, { activa: false, motivo: "Prueba" });
     const r = await crear({ sociedad: "DM", categoriaId: cat.id, proveedor: "Otro Nuevo", identificador: "999888777" });
     expect(r.statusCode).toBe(409);
     expect(r.json().advertencia.otras[0]).toMatchObject({ activa: false, sociedad: "Sociedad BBB" });
-    await patch(o.id, { activa: true });
+    await patch(o.id, { activa: true, motivo: "Prueba" });
   });
 });
 
@@ -201,10 +201,10 @@ describe("catálogo: edición y alta", () => {
 
   it("PATCH desactiva sin borrar, y al desactivar una del par repetido la alerta desaparece", async () => {
     const o = await porId("77777777", "Fono Dos");
-    expect((await patch(o.id, { activa: false })).json().datos.activa).toBe(false);
+    expect((await patch(o.id, { activa: false, motivo: "Prueba" })).json().datos.activa).toBe(false);
     expect((await listar("?activa=false")).total).toBe(1);
     expect((await app.inject("/api/obligaciones/resumen")).json().datos.identificadoresRepetidos).toEqual([]);
-    await patch(o.id, { activa: true });
+    await patch(o.id, { activa: true, motivo: "Prueba" });
   });
 
   it("PATCH valida con mensajes claros y el campo afectado", async () => {

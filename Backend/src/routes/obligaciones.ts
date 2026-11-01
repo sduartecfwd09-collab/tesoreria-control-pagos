@@ -11,6 +11,7 @@ import {
   CAMPOS_EDITABLES, calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe,
   estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
+import { normalizarMotivo } from "../domain/cambio-dia.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
 import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
@@ -246,13 +247,18 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const actual = await obtenerObligacion(id.data);
     if (!actual) return reply.code(404).send({ error: "Obligación no encontrada" });
     if (!puedeEscribirEnSociedad(persona, actual.sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
-    const cuerpo = (req.body ?? {}) as Record<string, unknown>;
+    // «motivo» no es un campo de la obligación: acompaña al cambio de «activa» y va al historial
+    const { motivo: motivoCrudo, ...cuerpo } = (req.body ?? {}) as Record<string, unknown>;
     const ajeno = Object.keys(cuerpo).find((k) => !CAMPOS_EDITABLES.includes(k));
     if (ajeno) {
       return invalido(reply, `El campo «${ajeno}» no se puede editar. Si la sociedad, el proveedor o el identificador están mal, desactive esta obligación y cree una nueva.`, ajeno);
     }
     const r = esquemaEdicion.safeParse(cuerpo);
     if (!r.success) return reply.code(422).send(primerError(r.error));
+    // Desactivar o reactivar exige motivo (3 a 300 caracteres); el resto de las ediciones no lo pide.
+    const cambiaActiva = r.data.activa !== undefined && r.data.activa !== actual.activa;
+    const motivo = cambiaActiva ? normalizarMotivo(motivoCrudo) : null;
+    if (cambiaActiva && motivo === null) return invalido(reply, "Indique el motivo (entre 3 y 300 caracteres)", "motivo");
 
     // Cambiar un día ya definido exige motivo y deja historial (servicio cambiar-dia, que verifica el permiso de quien actúa):
     // hasta que exista el inicio de sesión no se hace por esta ruta. Indicar el día cuando falta sí se permite.
@@ -277,7 +283,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       ...(d.diaEsperadoPago !== undefined ? { diaEditado: true } : {}),
       ...(d.frecuencia !== undefined && d.frecuenciaPorConfirmar === undefined ? { frecuenciaPorConfirmar: false } : {}),
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
-    } }], autorDe(persona, opts.modoPruebas)))[0]!;
+    } }], autorDe(persona, opts.modoPruebas), motivo))[0]!;
     const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? (await actualizarVencimientos(opts.reloj, o.id)).calendario : null;
     return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion };
   });

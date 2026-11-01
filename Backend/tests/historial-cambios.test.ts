@@ -129,6 +129,39 @@ describe("registro de ediciones", () => {
   });
 });
 
+describe("motivo al desactivar o reactivar", () => {
+  it("desactivar y reactivar exigen motivo (422 sin él o fuera de 3 a 300 caracteres) y no guardan nada si falta", async () => {
+    const app = await crearApp({ reloj, modoPruebas: true });
+    for (const payload of [{ activa: false }, { activa: false, motivo: "" }, { activa: false, motivo: "ab" }, { activa: false, motivo: "x".repeat(301) }, { activa: false, motivo: 123 }]) {
+      const r = await patch(app, obligacionA, ana, payload);
+      expect(r.statusCode, JSON.stringify(payload)).toBe(422);
+      expect(r.json().campo).toBe("motivo");
+    }
+    expect((await prisma.obligacion.findUniqueOrThrow({ where: { id: obligacionA } })).activa).toBe(true);
+    expect(await prisma.historialCambio.count()).toBe(0);
+  });
+
+  it("con motivo válido guarda, y el motivo (normalizado) queda en la línea de «activa»", async () => {
+    const app = await crearApp({ reloj, modoPruebas: true });
+    expect((await patch(app, obligacionA, ana, { activa: false, motivo: "  Ya no   se paga  " })).statusCode).toBe(200);
+    expect((await patch(app, obligacionA, ana, { activa: true, motivo: "Se retomó el servicio" })).statusCode).toBe(200);
+    const l = await lineas(obligacionA);
+    expect(l.map((x) => [x.accion, x.campo, x.antes, x.despues, x.motivo])).toEqual([
+      ["desactivar", "activa", "activa", "inactiva", "Ya no se paga"],
+      ["activar", "activa", "inactiva", "activa", "Se retomó el servicio"],
+    ]);
+  });
+
+  it("no pide motivo si «activa» no cambia, y el motivo solo acompaña a «activa» cuando hay otros cambios", async () => {
+    const app = await crearApp({ reloj, modoPruebas: true });
+    expect((await patch(app, obligacionA, ana, { activa: true, frecuenciaPorConfirmar: false })).statusCode).toBe(200); // ya estaba activa
+    expect((await patch(app, obligacionA, ana, { activa: false, frecuencia: "anual", mesArranque: 6, motivo: "Cierre del servicio" })).statusCode).toBe(200);
+    const l = await lineas(obligacionA);
+    expect(l.find((x) => x.campo === "activa")!.motivo).toBe("Cierre del servicio");
+    expect(l.filter((x) => x.campo !== "activa").every((x) => x.motivo === null)).toBe(true);
+  });
+});
+
 describe("el registro y la edición van juntos", () => {
   it("si el registro falla, la edición no se guarda", async () => {
     const antes = await prisma.obligacion.findUniqueOrThrow({ where: { id: obligacionA } });
