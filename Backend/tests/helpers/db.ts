@@ -6,6 +6,7 @@ import { sincronizarVencimientos } from "../../src/vencimientos/generar.js";
 export async function vaciarImportaciones() {
   exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL"); // borra datos: solo en la base _test
   await prisma.historialCambio.deleteMany();
+  await prisma.decisionManual.deleteMany();
   await prisma.catalogoRevision.deleteMany();
   await prisma.cambioDia.deleteMany();
   await prisma.conciliacion.deleteMany();
@@ -23,6 +24,7 @@ export async function vaciarImportaciones() {
 export async function vaciarUsuarios() {
   exigirBaseDePruebas(process.env.DATABASE_URL, "DATABASE_URL");
   await prisma.historialCambio.deleteMany();
+  await prisma.decisionManual.deleteMany();
   await prisma.sociedadTesoreroHistorial.deleteMany();
   await prisma.sociedad.updateMany({ data: { tesoreroId: null } });
   await prisma.usuario.deleteMany();

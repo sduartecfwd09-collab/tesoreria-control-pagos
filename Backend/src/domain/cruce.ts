@@ -31,6 +31,11 @@
 //  9. No cubre por otra causa -> Sin información con la fecha hasta la que hay datos.
 // Por eso un pago candidato con duda (1 o 2) prevalece sobre Sin información: Por revisar se decide antes de mirar la cobertura.
 // Los créditos nunca cuentan como pago: solo se cruzan débitos.
+//
+// DECISIONES MANUALES (antes de todo lo anterior): una asociación de pago vigente (obligación + periodo + huella del movimiento) deja ese
+// vencimiento en Pagado con ese movimiento, gana a lo automático y a Por revisar, y saca el movimiento de los candidatos de cualquier
+// otro vencimiento (esos se recalculan solos). Si el movimiento ya no se encuentra (o no es de la misma sociedad), la decisión sigue
+// vigente pero no tiene efecto y el vencimiento vuelve a su estado calculado. Sin decisiones vigentes el resultado es idéntico al de siempre.
 import { nombresEnDescripcion } from "../config/alias-proveedores.js";
 import { normalizar } from "../ingest/utiles.js";
 import { coberturaDeSociedad, noCuadraEnRango, sinLecturaEnRango, type CuentaCorte } from "./cobertura-corte.js";
@@ -43,6 +48,7 @@ export const MOTIVOS = {
   otraSociedad: "Pagado por otra sociedad",
   repetido: "Pago repetido",
   empate: "El pago podría corresponder a dos meses distintos de este servicio",
+  asociadoAMano: "Pago asociado a mano",
   compartido: "No se pudo saber con certeza a cuál servicio corresponde el pago: el número de servicio está en varias obligaciones",
   vencido: "Pasó la fecha de pago y no hay pago en los estados de cuenta",
   vencidoBuscando: "El pago no aparece todavía; se sigue buscando",
@@ -56,7 +62,16 @@ export const MOTIVOS = {
 
 export interface ObligacionCruce { id: number; sociedadId: number; proveedor: string; identificador: string }
 export interface VencimientoCruce { id: number; obligacionId: number; sociedadId: number; fecha: Date; /** AAAA-MM; si falta se toma de la fecha */ periodo?: string }
-export interface MovimientoCruce { id: number; sociedadId: number; fecha: Date; descripcion: string | null }
+export interface MovimientoCruce {
+  id: number;
+  sociedadId: number;
+  fecha: Date;
+  descripcion: string | null;
+  /** huella estable del movimiento (claveDedup); solo hace falta para localizar las asociaciones manuales */
+  clave?: string;
+}
+/** Asociación manual de un pago a un vencimiento (obligación + periodo), por la huella del movimiento. */
+export interface AsociacionManual { obligacionId: number; periodo: string; claveMovimiento: string }
 
 export interface EntradaCruce {
   /** solo obligaciones activas */
@@ -64,6 +79,8 @@ export interface EntradaCruce {
   vencimientos: VencimientoCruce[];
   /** solo débitos de archivos que no están retirados */
   movimientos: MovimientoCruce[];
+  /** asociaciones manuales vigentes; sin ellas (o vacías) el cruce es el automático de siempre */
+  asociaciones?: AsociacionManual[];
   /** cuentas conocidas por sociedad */
   cuentas: Map<number, CuentaCorte[]>;
   diasAntes: number;
@@ -132,6 +149,22 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
   for (const v of e.vencimientos) agregar(vencDe, v.obligacionId, v);
   const enVentana = (m: { dia: number }, v: VencimientoCruce) => m.dia >= diaDe(v.fecha) - e.diasAntes && m.dia <= diaDe(v.fecha) + e.diasDespues;
   const periodoDe = (v: VencimientoCruce) => v.periodo ?? v.fecha.toISOString().slice(0, 7);
+
+  // Decisiones manuales primero: vencimiento -> pago elegido; esos pagos salen de los candidatos de todos los demás.
+  const manual = new Map<number, MovimientoCruce>();
+  const excluidos = new Set<number>();
+  if (e.asociaciones && e.asociaciones.length > 0) {
+    const porClave = new Map(e.movimientos.flatMap((m) => (m.clave ? [[m.clave, m] as const] : [])));
+    const porPeriodo = new Map(e.vencimientos.map((v) => [`${v.obligacionId}|${periodoDe(v)}`, v] as const));
+    for (const a of e.asociaciones) {
+      const m = porClave.get(a.claveMovimiento);
+      const v = porPeriodo.get(`${a.obligacionId}|${a.periodo}`);
+      if (!m || !v || m.sociedadId !== v.sociedadId || excluidos.has(m.id) || manual.has(v.id)) continue; // sin efecto
+      manual.set(v.id, m);
+      excluidos.add(m.id);
+    }
+  }
+  const movimientosLibres = excluidos.size > 0 ? e.movimientos.filter((m) => !excluidos.has(m.id)) : e.movimientos;
   // Grupo: las obligaciones de una misma sociedad con el mismo identificador se evalúan juntas.
   const grupoDe = new Map(e.obligaciones.map((o) => [o.id, `${o.sociedadId}|${identificadorClave(o.identificador)}`]));
   const vencDelGrupo = new Map<string, VencimientoCruce[]>(); // grupo y periodo -> vencimientos
@@ -143,7 +176,7 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
   // Paso 1: a qué obligación pertenece cada débito (a ninguna, a una, o a varias sin poder decidir).
   const propios = new Map<number, MovPrep[]>(); // obligación -> débitos que le pertenecen
   const ambiguos = new Map<string, MovPrep[]>(); // grupo -> débitos del grupo que no se pudieron atribuir con certeza
-  for (const m of e.movimientos) {
+  for (const m of movimientosLibres) {
     const texto = (m.descripcion ?? "").toUpperCase();
     const prep: MovPrep = { ...m, plano: clave(m.descripcion ?? ""), dia: diaDe(m.fecha) };
     const coinciden = obls.filter((o) => o.patron.test(texto));
@@ -190,6 +223,9 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
   const resultados = e.vencimientos.map((v): ResultadoCruce => {
     const base = { vencimientoId: v.id, movimientoId: null, diferenciaDias: null, sinInfoHasta: null };
     const f = diaDe(v.fecha);
+    // la decisión manual gana a todo lo demás (también a Por revisar)
+    const elegido = manual.get(v.id);
+    if (elegido) return { vencimientoId: v.id, estado: "pagado", movimientoId: elegido.id, motivo: MOTIVOS.asociadoAMano, diferenciaDias: diaDe(elegido.fecha) - f, sinInfoHasta: null };
     const asignados = porVencimiento.get(v.id) ?? [];
     // Un movimiento del grupo sin certeza deja en revisión a TODOS los vencimientos del grupo de ese mes, no solo al que lo contiene.
     const g = grupoDe.get(v.obligacionId);

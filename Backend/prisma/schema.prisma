@@ -35,6 +35,7 @@ model Sociedad {
   archivos          ArchivoImportado[]
   historialTesorero SociedadTesoreroHistorial[]
   historialCambios  HistorialCambio[]
+  decisiones        DecisionManual[]
 }
 
 // Quién fue tesorero de cada sociedad y por qué cambió. hasta = null: es el vigente.
@@ -110,6 +111,7 @@ model Obligacion {
   vencimientos           Vencimiento[]
   cambiosDia             CambioDia[]
   historialCambios       HistorialCambio[]
+  decisiones             DecisionManual[]
 
   // La categoría es parte de la identidad: un mismo proveedor puede cobrar con el mismo identificador paquetes de
   // categorías distintas (por ejemplo cable e internet combinados).
@@ -205,7 +207,7 @@ model HistorialCambio {
   entidad       String      @db.VarChar(30) // por ahora «obligacion»
   entidadId     Int
   obligacionId  Int?
-  obligacion    Obligacion? @relation(fields: [obligacionId], references: [id])
+  obligacion    Obligacion? @relation(fields: [obligacionId], references: [id], onDelete: Restrict)
   sociedadId    Int // para el alcance: quién puede ver este registro
   sociedad      Sociedad    @relation(fields: [sociedadId], references: [id])
   accion        String      @db.VarChar(30) // crear | editar | activar | desactivar
@@ -237,6 +239,7 @@ model ArchivoImportado {
   leidoEn        DateTime?    @db.DateTime(3)
   estado         String       @default("pendiente") @db.VarChar(20) // pendiente | leido | error | en_revision
   motivo         String?      @db.VarChar(200) // si estado = en_revision: texto fijo del sistema (nunca datos del archivo)
+  decisiones     DecisionManual[]
   numMovimientos Int          @default(0) // movimientos leídos del archivo
   numDuplicados  Int          @default(0) // omitidos por solaparse con otro archivo
   error          String?      @db.VarChar(1000) // mensaje si estado = error (sin datos del contenido)
@@ -271,6 +274,7 @@ model Movimiento {
   conciliaciones Conciliacion[]
   alertas        Alerta[]
   vencimientos   Vencimiento[]
+  decisiones     DecisionManual[]
 
   @@index([cuentaId, fecha])
   @@index([periodo])
@@ -343,4 +347,47 @@ model Usuario {
   cambiosDia           CambioDia[]
   historialTesorero    SociedadTesoreroHistorial[]
   historialCambios     HistorialCambio[]
+  decisiones           DecisionManual[]               @relation("DecisionDe")
+  decisionesRevertidas DecisionManual[]               @relation("DecisionRevertidaPor")
+}
+
+// Decisiones humanas que el motor y las pantallas consultan antes de calcular (asociar un pago, justificar un vencimiento o un archivo,
+// nota de revisión de una obligación). Nada se borra: revertir marca la decisión como no vigente (quién, cuándo y por qué). El repositorio
+// no ofrece borrar. Sin montos ni cuentas en los textos.
+// Invariantes en la base: las dos columnas «unica…» solo llevan valor mientras una ASOCIACIÓN DE PAGO está vigente y quedan nulas al revertir
+// (MySQL admite varios nulos en un índice único): como máximo una asociación vigente por (obligación, periodo) y una por pago.
+model DecisionManual {
+  id                     Int               @id @default(autoincrement())
+  tipo                   String            @db.VarChar(40) // asociacion_pago | justificacion_vencimiento | justificacion_archivo | nota_revision
+  sociedadId             Int
+  sociedad               Sociedad          @relation(fields: [sociedadId], references: [id], onDelete: Restrict)
+  obligacionId           Int?
+  obligacion             Obligacion?       @relation(fields: [obligacionId], references: [id], onDelete: Restrict)
+  periodo                String?           @db.VarChar(7) // AAAA-MM
+  movimientoId           Int? // el pago, mientras el movimiento exista (si se vuelve a leer el archivo cambia: manda claveMovimiento)
+  movimiento             Movimiento?       @relation(fields: [movimientoId], references: [id], onDelete: SetNull)
+  claveMovimiento        String?           @db.Char(40) // huella estable del movimiento (Movimiento.claveDedup): sobrevive a volver a leer el archivo
+  archivoId              Int?
+  archivo                ArchivoImportado? @relation(fields: [archivoId], references: [id], onDelete: SetNull)
+  rutaArchivo            String?           @db.VarChar(500)
+  motivo                 String            @db.VarChar(300)
+  datos                  String?           @db.VarChar(500) // texto o JSON corto (p. ej. el motivo elegido de una lista)
+  huella                 String?           @db.VarChar(64) // de lo revisado, para que una nota de revisión reaparezca si el dato cambia
+  usuarioId              Int
+  usuario                Usuario           @relation("DecisionDe", fields: [usuarioId], references: [id], onDelete: Restrict)
+  nombreUsuario          String            @db.VarChar(150)
+  creadoEn               DateTime          @default(now()) @db.DateTime(3)
+  modoPruebas            Boolean
+  vigente                Boolean           @default(true)
+  revertidaPorId         Int?
+  revertidaPor           Usuario?          @relation("DecisionRevertidaPor", fields: [revertidaPorId], references: [id], onDelete: Restrict)
+  nombreRevierte         String?           @db.VarChar(150)
+  revertidaEn            DateTime?         @db.DateTime(3)
+  motivoReversion        String?           @db.VarChar(300)
+  unicaObligacionPeriodo String?           @unique @db.VarChar(60) // «obligacionId|periodo» mientras una asociación de pago está vigente; nulo si no
+  unicaMovimiento        String?           @unique @db.Char(40) // claveMovimiento mientras una asociación de pago está vigente; nulo si no
+
+  @@index([sociedadId, creadoEn])
+  @@index([obligacionId, periodo])
+  @@index([claveMovimiento])
 }

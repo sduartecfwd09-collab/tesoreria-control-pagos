@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 import { esImagenNoLegible, type ContinuidadGuardada } from "../domain/saldo.js";
 import { normalizarNombrePersona } from "../domain/usuarios.js";
 import type { CuentaCorte } from "../domain/cobertura-corte.js";
-import type { MovimientoCruce, ObligacionCruce, ResultadoCruce, VencimientoCruce } from "../domain/cruce.js";
+import type { AsociacionManual, MovimientoCruce, ObligacionCruce, ResultadoCruce, VencimientoCruce } from "../domain/cruce.js";
 
 export interface VencimientoGuardado extends VencimientoCruce {
   estado: string;
@@ -19,6 +19,8 @@ export interface DatosCruce {
   obligaciones: ObligacionCruce[];
   vencimientos: VencimientoGuardado[];
   movimientos: MovimientoCruce[];
+  /** asociaciones manuales vigentes (decisiones humanas que el cruce consulta antes de calcular) */
+  asociaciones: AsociacionManual[];
   cuentas: Map<number, CuentaCorte[]>;
 }
 
@@ -98,7 +100,7 @@ export async function contarCuentasPorMoneda(): Promise<Record<string, number>> 
 
 /** Obligaciones activas con sus vencimientos, los débitos de archivos vigentes y la cobertura de cada cuenta. */
 export async function cargarDatosCruce(hasta?: Date): Promise<DatosCruce> {
-  const [obligaciones, vencimientos, movimientos, cuentas] = await Promise.all([
+  const [obligaciones, vencimientos, movimientos, cuentas, decisiones] = await Promise.all([
     prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
     prisma.vencimiento.findMany({
       where: { obligacion: { activa: true } },
@@ -106,15 +108,17 @@ export async function cargarDatosCruce(hasta?: Date): Promise<DatosCruce> {
     }),
     prisma.movimiento.findMany({
       where: { debito: { gt: 0n }, archivo: { retiradoEn: null }, ...(hasta ? { fecha: { lte: hasta } } : {}) },
-      select: { id: true, fecha: true, descripcion: true, cuenta: { select: { sociedadId: true } } },
+      select: { id: true, fecha: true, descripcion: true, claveDedup: true, cuenta: { select: { sociedadId: true } } },
     }),
     cargarCoberturaCuentas(hasta),
+    prisma.decisionManual.findMany({ where: { tipo: "asociacion_pago", vigente: true }, select: { obligacionId: true, periodo: true, claveMovimiento: true } }),
   ]);
 
   return {
     obligaciones,
     vencimientos,
-    movimientos: movimientos.map((m) => ({ id: m.id, sociedadId: m.cuenta.sociedadId, fecha: m.fecha, descripcion: m.descripcion })),
+    movimientos: movimientos.map((m) => ({ id: m.id, sociedadId: m.cuenta.sociedadId, fecha: m.fecha, descripcion: m.descripcion, clave: m.claveDedup })),
+    asociaciones: decisiones.flatMap((d) => (d.obligacionId !== null && d.periodo !== null && d.claveMovimiento !== null ? [{ obligacionId: d.obligacionId, periodo: d.periodo, claveMovimiento: d.claveMovimiento }] : [])),
     cuentas,
   };
 }

@@ -15,7 +15,10 @@ export interface DatosEditables {
   cuentaEsperadaId: number | null;
 }
 
-export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar";
+export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion";
+
+/** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
+export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion"];
 
 export interface LineaCambio {
   accion: AccionHistorial;
@@ -67,3 +70,8 @@ export function limitesDeDias(desde?: string, hasta?: string): { desde?: Date; h
     ...(hasta ? { hastaExclusivo: new Date(inicio(hasta).getTime() + MS_DIA) } : {}),
   };
 }
+
+/** Asociar a mano un pago a un vencimiento: solo se anota el periodo (AAAA-MM), nunca el monto, la cuenta ni el identificador. */
+export const lineaDeAsociarPago = (periodo: string): LineaCambio => ({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: periodo });
+/** Quitar la asociación manual: el periodo queda en «antes». */
+export const lineaDeQuitarAsociacion = (periodo: string): LineaCambio => ({ accion: "quitar_asociacion", campo: "pago_asociado", antes: periodo, despues: null });

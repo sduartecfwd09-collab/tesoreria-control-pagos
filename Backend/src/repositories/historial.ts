@@ -2,7 +2,7 @@
 // pantalla del historial. Las funciones reciben el cliente de la transacción para que el registro y la edición se guarden juntos
 // o no se guarde ninguno.
 import type { Prisma } from "../generated/prisma/client.js";
-import type { LineaCambio } from "../domain/historial.js";
+import { ACCIONES_CON_MOTIVO, type LineaCambio } from "../domain/historial.js";
 
 export interface AutorDelCambio {
   id: number;
@@ -12,21 +12,21 @@ export interface AutorDelCambio {
 
 export async function insertarHistorial(
   tx: Prisma.TransactionClient,
-  d: { obligacionId: number; sociedadId: number; autor: AutorDelCambio; lineas: LineaCambio[]; motivo?: string | null },
+  d: { obligacionId: number; sociedadId: number; autor: AutorDelCambio; lineas: LineaCambio[]; motivo?: string | null; /** por defecto «obligacion» y la propia obligación */ entidad?: string; entidadId?: number },
 ): Promise<number> {
   if (d.lineas.length === 0) return 0;
   const r = await tx.historialCambio.createMany({
     data: d.lineas.map((l) => ({
-      entidad: "obligacion",
-      entidadId: d.obligacionId,
+      entidad: d.entidad ?? "obligacion",
+      entidadId: d.entidadId ?? d.obligacionId,
       obligacionId: d.obligacionId,
       sociedadId: d.sociedadId,
       accion: l.accion,
       campo: l.campo,
       antes: l.antes,
       despues: l.despues,
-      // el motivo solo acompaña a activar y desactivar
-      motivo: l.accion === "activar" || l.accion === "desactivar" ? (d.motivo ?? null) : null,
+      // el motivo solo acompaña a activar, desactivar, asociar un pago y quitar la asociación
+      motivo: ACCIONES_CON_MOTIVO.includes(l.accion) ? (d.motivo ?? null) : null,
       usuarioId: d.autor.id,
       nombreUsuario: d.autor.nombre,
       modoPruebas: d.autor.modoPruebas,

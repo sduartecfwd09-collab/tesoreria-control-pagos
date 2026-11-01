@@ -71,6 +71,12 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "12", unidad: "meses", min: 1, max: 120, supuesto: true, visible: false,
   },
   {
+    clave: "ventana_asociacion_manual_dias",
+    etiqueta: "Días a cada lado para asociar un pago a mano",
+    ayuda: "Al asociar un pago a mano a un vencimiento, se ofrecen los pagos de la sociedad con fecha hasta este número de días antes o después de la fecha del vencimiento. No cambia ningún estado.",
+    tipo: "entero", ambito: "global", valorInicial: "30", unidad: "días", min: 1, max: 120, supuesto: true, visible: false,
+  },
+  {
     clave: "historial_por_pagina",
     etiqueta: "Filas por página del Historial de cambios",
     ayuda: "Cuántas filas trae cada página de la pantalla Historial de cambios. No cambia ningún estado.",
