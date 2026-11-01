@@ -12,11 +12,11 @@ import {
   estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
-import { exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
+import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
-  actualizarObligacion, buscarPorClave, buscarPorIdentificador, crearObligacion, listarCategorias, listarObligaciones, listarSociedades,
+  actualizarObligacionesConHistorial, buscarPorClave, buscarPorIdentificador, crearObligacionConHistorial, listarCategorias, listarObligaciones, listarSociedades,
   obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorId, sociedadesConEstados, todasLasObligaciones,
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
@@ -193,15 +193,16 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const controlDesde = d.controlDesde === undefined ? mesDeAlta(hoy) : d.controlDesde;
     const advertencia = advertenciaDiaYaPaso(d.diaEsperadoPago, hoy, d.controlDesde !== undefined);
 
+    const autor = autorDe(persona, opts.modoPruebas);
     const { esIntencional: _intencional, controlDesde: _control, ...resto } = d;
-    const o = await crearObligacion({
+    const o = await crearObligacionConHistorial({
       ...resto,
       controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde),
       frecuencia,
       frecuenciaPorConfirmar: d.frecuenciaPorConfirmar ?? d.frecuencia === undefined,
       monedaPorConfirmar: d.monedaPorConfirmar ?? d.moneda === undefined,
       origen: "manual",
-    });
+    }, autor);
     const regeneracion = (await actualizarVencimientos(opts.reloj, o.id)).calendario;
     return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion, advertencias: advertencia ? [advertencia] : [] });
   });
@@ -226,11 +227,13 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       if (o) existentes.push(o);
     }
     if (existentes.some((o) => !puedeEscribirEnSociedad(persona, o.sociedad))) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
-    let actualizadas = 0;
-    for (const o of existentes) {
-      await actualizarObligacion(o.id, { frecuencia, mesArranque: mes, frecuenciaPorConfirmar: false });
-      actualizadas++;
-    }
+    // todas en una sola transacción junto con su historial: si algo falla, no se guarda ninguna
+    const actualizadas = (
+      await actualizarObligacionesConHistorial(
+        existentes.map((o) => ({ id: o.id, data: { frecuencia, mesArranque: mes, frecuenciaPorConfirmar: false } })),
+        autorDe(persona, opts.modoPruebas),
+      )
+    ).length;
     const { calendario } = await actualizarVencimientos(opts.reloj);
     return { datos: { actualizadas, calendario } };
   });
@@ -268,13 +271,13 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 
     const { controlDesde, ...resto } = d;
-    const o = await actualizarObligacion(id.data, {
+    const o = (await actualizarObligacionesConHistorial([{ id: id.data, data: {
       ...resto,
       ...(controlDesde !== undefined ? { controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde) } : {}),
       ...(d.diaEsperadoPago !== undefined ? { diaEditado: true } : {}),
       ...(d.frecuencia !== undefined && d.frecuenciaPorConfirmar === undefined ? { frecuenciaPorConfirmar: false } : {}),
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
-    });
+    } }], autorDe(persona, opts.modoPruebas)))[0]!;
     const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? (await actualizarVencimientos(opts.reloj, o.id)).calendario : null;
     return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion };
   });

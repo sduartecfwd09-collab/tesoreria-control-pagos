@@ -5,7 +5,9 @@ import { codigoPorAlias } from "../config/alias-sociedades.js";
 import { claveCategoria } from "../domain/categorias.js";
 import { primerDiaDelPeriodo } from "../domain/control-desde.js";
 import { identificadorClave, MOTIVO_IDENTIFICADOR_DUPLICADO } from "../domain/identificadores.js";
+import { lineaDeAlta, lineasDeEdicion } from "../domain/historial.js";
 import { resolutorDeSociedades } from "../domain/sociedades.js";
+import { insertarHistorial, type AutorDelCambio } from "./historial.js";
 
 export const MOTIVO_CATEGORIA_DESCONOCIDA = "La categoría no existe: solo Jefatura puede crearla";
 export const MOTIVO_ESTADO_DESCONOCIDO = "El estado de la fila no es «ACTIVA» ni «INACTIVA»: no se cargó, una persona decide";
@@ -177,12 +179,34 @@ export async function buscarPorIdentificador(identificador: string, excluirId?: 
   return candidatas.filter((o) => o.id !== excluirId && identificadorClave(o.identificador) === clave);
 }
 
-export async function crearObligacion(data: Prisma.ObligacionUncheckedCreateInput) {
-  return prisma.obligacion.create({ data, include: incluir });
+/** Alta manual: la obligación y su línea del historial se guardan en la misma transacción (si el registro falla, no se crea). */
+export async function crearObligacionConHistorial(data: Prisma.ObligacionUncheckedCreateInput, autor: AutorDelCambio): Promise<ObligacionCompleta> {
+  return prisma.$transaction(async (tx) => {
+    const o = await tx.obligacion.create({ data, include: incluir });
+    await insertarHistorial(tx, { obligacionId: o.id, sociedadId: o.sociedadId, autor, lineas: [lineaDeAlta()] });
+    return o;
+  });
 }
 
-export async function actualizarObligacion(id: number, data: Prisma.ObligacionUncheckedUpdateInput) {
-  return prisma.obligacion.update({ where: { id }, data, include: incluir });
+/**
+ * Edita una o varias obligaciones en UNA transacción junto con su historial: una línea por campo que realmente cambió
+ * (sin montos ni cuentas). Si el registro falla, no se guarda ninguna edición. `motivo` acompaña solo a activar y desactivar.
+ */
+export async function actualizarObligacionesConHistorial(
+  cambios: { id: number; data: Prisma.ObligacionUncheckedUpdateInput }[],
+  autor: AutorDelCambio,
+  motivo: string | null = null,
+): Promise<ObligacionCompleta[]> {
+  return prisma.$transaction(async (tx) => {
+    const salida: ObligacionCompleta[] = [];
+    for (const { id, data } of cambios) {
+      const antes = await tx.obligacion.findUniqueOrThrow({ where: { id } });
+      const o = await tx.obligacion.update({ where: { id }, data, include: incluir });
+      await insertarHistorial(tx, { obligacionId: id, sociedadId: o.sociedadId, autor, lineas: lineasDeEdicion(antes, o), motivo });
+      salida.push(o);
+    }
+    return salida;
+  });
 }
 
 /** Identificadores de las sociedades que tienen algún estado de cuenta cargado. */
