@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { fraseAsociadoAMano, fraseJustificado, montoPagado, nombreFecha } from "@/lib/formato";
+import { fraseAsociadoAMano, fraseJustificado, fraseMovida, montoPagado, nombreFecha } from "@/lib/formato";
 import type { DetalleVencimiento, EstadoVencimiento, MovimientoDetalle } from "@/lib/tipos";
 import { Ficha } from "../Ficha";
 import { AccionesPago, EtiquetaAsociadoAMano } from "./AccionesPago";
@@ -119,6 +119,7 @@ export function DetallePago({ id, alCerrar, acciones }: { id: number; alCerrar: 
             </p>
             {d.textos.resumen !== "" && <p className="mt-3 font-semibold">{d.textos.resumen}</p>}
             {d.justificado && <p className="mt-3 font-semibold">{fraseJustificado(d.justificado)}</p>}
+            {d.movida && d.movidaPor && <p className="mt-2 text-sm">{fraseMovida(d.movidaPor)}</p>}
             {d.asociadoAMano && !d.sinEfecto && <p className="mt-2 text-sm">{fraseAsociadoAMano(d.asociadoAMano)}</p>}
             {d.sinEfecto && <p role="status" className="mt-3 rounded border-l-4 border-acento bg-fondo-suave p-3 text-sm font-semibold">El pago asociado ya no aparece en los estados de cuenta.</p>}
             {d.textos.parrafos.map((p, i) => (
@@ -144,7 +145,8 @@ export function DetallePago({ id, alCerrar, acciones }: { id: number; alCerrar: 
                 {fila("Proveedor", d.proveedor)}
                 {fila("Número de servicio", <span className="font-mono">{d.identificador}</span>)}
                 {fila("Sociedad", d.sociedad)}
-                {fila("Vence", <>{nombreFecha(d.fecha)}{d.movida && <span className="block text-xs font-normal text-suave">Antes: {nombreFecha(d.fechaOriginal)}{d.fechaMovidaPor ? ` · lo cambió ${d.fechaMovidaPor}` : ""}</span>}</>)}
+                {fila("Vence", nombreFecha(d.fecha))}
+                {d.movida && fila("Fecha original", nombreFecha(d.fechaOriginal))}
                 {d.responsableEfectivo !== undefined && fila("Responsable", d.responsableEfectivo ?? "Sin responsable")}
               </dl>
             </Seccion>

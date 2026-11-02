@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
-import { ErrorApi } from "@/lib/api";
-import { FRECUENCIAS, MESES, MESES_CORTOS, mesesQueVence, NOMBRE_FRECUENCIA } from "@/lib/formato";
+import { api, ErrorApi } from "@/lib/api";
+import { FRECUENCIAS, limitesDeDesdeMes, MESES, MESES_CORTOS, mesCorto, mesesQueVence, NOMBRE_FRECUENCIA, periodoActual, textoDiaProgramado } from "@/lib/formato";
 import type { CambiosObligacion, Categoria, Frecuencia, Obligacion, Sociedad } from "@/lib/tipos";
 import { ConfirmarCambio, ConfirmarSalida, type CambioPendiente } from "../ConfirmarCambio";
 import { Campo, claseBoton, claseBotonSecundario, claseControl, describir } from "../ui";
+import { SelectorMes } from "../SelectorFechas";
 import { SelectorSociedad } from "../SelectorSociedad";
 
 /** Texto del antes o el después de los campos que cambiaron, una línea por campo, para la confirmación. */
@@ -57,7 +58,7 @@ function valoresIniciales(o: Obligacion | null, frecuenciaDefecto: Frecuencia): 
 }
 
 /** Convierte los valores del formulario al formato del API. En edición solo los campos que cambiaron. */
-function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | null): CambiosObligacion {
+function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | null, sinDia = false): CambiosObligacion {
   const incluir = (k: keyof Valores) => sucios === null || !!sucios[k];
   const c: CambiosObligacion = {};
   if (sucios === null) {
@@ -66,7 +67,7 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
     c.proveedor = v.proveedor;
     c.identificador = v.identificador;
   }
-  if (incluir("diaEsperadoPago")) c.diaEsperadoPago = v.diaEsperadoPago === "" ? null : Number(v.diaEsperadoPago);
+  if (!sinDia && incluir("diaEsperadoPago")) c.diaEsperadoPago = v.diaEsperadoPago === "" ? null : Number(v.diaEsperadoPago);
   if (incluir("frecuencia")) c.frecuencia = v.frecuencia;
   if (incluir("frecuenciaConfirmada")) c.frecuenciaPorConfirmar = !v.frecuenciaConfirmada;
   // Mensual no usa mes de arranque: se limpia. Las demás frecuencias lo exigen (el formulario lo valida).
@@ -79,13 +80,15 @@ function aCambios(v: Valores, sucios: Partial<Record<keyof Valores, unknown>> | 
 }
 
 export function FormularioObligacion({
-  obligacion, sociedades, categorias, frecuenciaDefecto, alGuardar, alCerrar,
+  obligacion, sociedades, categorias, frecuenciaDefecto, alGuardar, alCambiarDia, alCerrar,
 }: {
   obligacion: Obligacion | null; // null = nueva
   sociedades: Sociedad[];
   categorias: Categoria[];
   frecuenciaDefecto: Frecuencia;
   alGuardar: (c: CambiosObligacion) => Promise<void>;
+  /** el cambio permanente del día se guardó; recibe la obligación para avisar y actualizar la lista */
+  alCambiarDia: (o: Obligacion) => void;
   alCerrar: () => void;
 }) {
   const dialogo = useRef<HTMLDialogElement>(null);
@@ -93,6 +96,13 @@ export function FormularioObligacion({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
   const [confirmandoSalida, setConfirmandoSalida] = useState(false);
+  // cambio permanente del día: desde qué mes rige, por qué y, si el servidor lo pide, si también aplica al mes en curso
+  const mesActual = periodoActual();
+  const [desdeMes, setDesdeMes] = useState(mesActual);
+  const [motivoDia, setMotivoDia] = useState("");
+  const [preguntaMes, setPreguntaMes] = useState(false);
+  const [aplicaMes, setAplicaMes] = useState<boolean | null>(null);
+  const [erroresDia, setErroresDia] = useState<{ motivo?: string; pregunta?: string }>({});
   const { register, handleSubmit, control, setError, formState } = useForm<Valores>({
     defaultValues: valoresIniciales(obligacion, frecuenciaDefecto),
     mode: "onBlur",
@@ -108,7 +118,9 @@ export function FormularioObligacion({
   }, []);
 
   // useWatch (y no watch) para que el React Compiler pueda optimizar el componente.
-  const [frecuencia, mesArranque, activa] = useWatch({ control, name: ["frecuencia", "mesArranque", "activa"] });
+  const [frecuencia, mesArranque, activa, diaEscrito] = useWatch({ control, name: ["frecuencia", "mesArranque", "activa", "diaEsperadoPago"] });
+  // cambiar un día que ya estaba definido es un cambio permanente: pide desde qué mes y por qué (indicar el día por primera vez, no)
+  const cambiaDia = !nueva && obligacion.diaEsperadoPago !== null && /^\d+$/.test(diaEscrito) && Number(diaEscrito) !== obligacion.diaEsperadoPago;
   // el motivo aparece solo cuando se cambia el interruptor «Obligación activa» respecto a lo guardado
   const cambiaActiva = !nueva && activa !== obligacion.activa;
   const vence = mesesQueVence(frecuencia, mesArranque === "" ? null : Number(mesArranque));
@@ -121,14 +133,39 @@ export function FormularioObligacion({
         const m = v.motivo.trim();
         if (m.length < 3 || m.length > 300) return setError("motivo", { message: "Escriba el motivo (entre 3 y 300 caracteres)" }, { shouldFocus: true });
       }
+      // Un nuevo día de pago exige el mes desde el que rige, el motivo y, si el servidor lo pide, la respuesta sobre el mes en curso.
+      if (cambiaDia) {
+        const e: typeof erroresDia = {};
+        const m = motivoDia.trim();
+        if (m.length < 3 || m.length > 300) e.motivo = "Indique el motivo (entre 3 y 300 caracteres)";
+        if (preguntaMes && aplicaMes === null) e.pregunta = "Elija una opción";
+        setErroresDia(e);
+        if (e.motivo || e.pregunta) return;
+      }
       // Toda edición manual pide confirmación con el valor de antes y el de después.
       const antes = valoresIniciales(obligacion, frecuenciaDefecto);
       const sucios = dirtyFields;
+      const lineasAntes = lineasCambio(antes, sucios);
+      const lineasDespues = lineasCambio(v, sucios);
       setConfirmacion({
         titulo: `Guardar los cambios de ${obligacion.proveedor} (${obligacion.sociedad})`,
-        antes: lineasCambio(antes, sucios),
-        despues: lineasCambio(v, sucios),
-        ejecutar: () => alGuardar(aCambios(v, sucios)),
+        antes: lineasAntes,
+        despues: cambiaDia ? lineasDespues.replace(/^(Día de pago: \d+)/m, `$1 desde ${mesCorto(desdeMes)}`) : lineasDespues,
+        ejecutar: async () => {
+          const resto = aCambios(v, sucios, cambiaDia);
+          const hayResto = Object.keys(resto).length > 0;
+          if (cambiaDia) {
+            try {
+              await api.cambiarDia(obligacion.id, { nuevoDia: Number(v.diaEsperadoPago), desdeMes, ...(aplicaMes === null ? {} : { aplicaAlMesEnCurso: aplicaMes }), motivo: motivoDia.trim() });
+            } catch (err) {
+              // el pago de este mes sigue pendiente: se cierra la confirmación y se muestra la pregunta (antes de guardar nada más)
+              if (err instanceof ErrorApi && err.campo === "aplicaAlMesEnCurso") return setPreguntaMes(true);
+              throw err;
+            }
+          }
+          if (hayResto) await alGuardar(resto);
+          else alCambiarDia(obligacion);
+        },
       });
       return;
     }
@@ -234,6 +271,38 @@ export function FormularioObligacion({
                 })}
               />
             </Campo>
+            {!nueva && obligacion.diaProgramado && <p className="text-sm font-semibold sm:col-span-2">{textoDiaProgramado(obligacion.diaProgramado)}</p>}
+            {cambiaDia && (
+              <div className="rounded border border-divisor p-4 sm:col-span-2">
+                <h3 className="font-bold">Cambio del día de pago</h3>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <span id="f-desdeMes-etiqueta" className="font-semibold">Desde el mes</span>
+                    <div className="mt-1 flex">
+                      <SelectorMes valor={desdeMes} alCambiar={(m) => (setDesdeMes(m), setPreguntaMes(false), setAplicaMes(null))} limites={limitesDeDesdeMes(mesActual)} />
+                    </div>
+                    <p className="mt-1 text-sm text-suave">Los meses anteriores no cambian.</p>
+                  </div>
+                  <Campo id="f-motivoDia" etiqueta="Motivo" error={erroresDia.motivo}>
+                    <input id="f-motivoDia" value={motivoDia} onChange={(e) => setMotivoDia(e.target.value)} maxLength={300} className={`${claseControl} w-full`} aria-invalid={erroresDia.motivo ? true : undefined} aria-describedby={erroresDia.motivo ? "f-motivoDia-error" : undefined} />
+                  </Campo>
+                </div>
+                {preguntaMes && (
+                  <fieldset className="mt-4" aria-describedby={erroresDia.pregunta ? "f-pregunta-error" : undefined}>
+                    <legend className="font-semibold">Este mes todavía hay un pago pendiente. ¿El nuevo día también aplica a este mes?</legend>
+                    <label className="mt-2 flex items-center gap-2 text-sm">
+                      <input type="radio" name="aplicaMes" className="h-4 w-4" checked={aplicaMes === true} onChange={() => setAplicaMes(true)} />
+                      Sí, también este mes
+                    </label>
+                    <label className="mt-1 flex items-center gap-2 text-sm">
+                      <input type="radio" name="aplicaMes" className="h-4 w-4" checked={aplicaMes === false} onChange={() => setAplicaMes(false)} />
+                      No, solo desde el mes elegido
+                    </label>
+                    {erroresDia.pregunta && <p id="f-pregunta-error" role="alert" className="mt-1 text-sm font-medium text-rojo">{erroresDia.pregunta}</p>}
+                  </fieldset>
+                )}
+              </div>
+            )}
             <Campo
               id="f-frecuencia"
               etiqueta="Frecuencia de pago de esta obligación"

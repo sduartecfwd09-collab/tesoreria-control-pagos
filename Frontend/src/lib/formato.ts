@@ -140,6 +140,7 @@ const ROTULO_CAMPO: Record<string, string> = {
   justificacion_vencimiento: "Justificación del vencimiento",
   justificacion_archivo: "Justificación del archivo",
   revision_obligacion: "Revisión de la obligación",
+  fecha_vencimiento: "Fecha del vencimiento",
 };
 export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
 
@@ -149,7 +150,7 @@ export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "
  */
 export const GRUPOS_DE_CAMPOS: { titulo: string; campos: string[] }[] = [
   { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion"] },
+  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento"] },
 ];
 
 /**
@@ -172,6 +173,18 @@ const mayuscula = (t: string) => (t ? t[0]!.toUpperCase() + t.slice(1) : t);
 /** "2026-10" -> "oct 2026". */
 export const mesCorto = (p: string) => `${MESES_CORTOS[Number(p.slice(5, 7)) - 1] ?? p} ${p.slice(0, 4)}`;
 
+/** «20» -> «día 20»; el cambio permanente se guarda como «20 desde 2026-11» y se lee «día 20 desde nov 2026». */
+function diaEnPalabras(valor: string): string {
+  const m = /^(\d{1,2}) desde (\d{4}-\d{2})$/.exec(valor.trim());
+  if (m) return `día ${Number(m[1])} desde ${mesCorto(m[2]!)}`;
+  return Number.isInteger(Number(valor)) ? `día ${Number(valor)}` : "Otro valor";
+}
+
+/** Una fecha guardada (AAAA-MM-DD) en palabras: «15 oct» (con año si no es el año en curso); si no se puede leer, «Sin definir». */
+function fechaGuardadaEnPalabras(valor: string | null): string {
+  return valor !== null && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? nombreFecha(valor) : "Sin definir";
+}
+
 /**
  * Un valor guardado, en palabras. «Frecuencia confirmada» se guarda al revés (sin confirmar = porConfirmar verdadero) y aquí se
  * muestra como la casilla de Editar: porConfirmar verdadero = «No», falso = «Sí».
@@ -183,7 +196,7 @@ export function valorEnPalabras(campo: string, valor: string | null): string {
     case "frecuenciaPorConfirmar": return valor === "sin confirmar" || valor === "true" ? "No" : "Sí";
     case "activa": return valor === "activa" || valor === "true" ? "Sí" : "No";
     case "mesArranque": return mayuscula(MESES[Number(valor) - 1] ?? "Otro valor");
-    case "diaEsperadoPago": return `día ${Number(valor)}`;
+    case "diaEsperadoPago": return diaEnPalabras(valor);
     case "controlDesde": return /^\d{4}-\d{2}$/.test(valor) ? mesCorto(valor) : "Otro valor";
     default: return "Otro valor";
   }
@@ -220,6 +233,8 @@ export function cambioEnPalabras(f: { accion: string; campo: string; antes: stri
   if (f.accion === "quitar_asociacion") return { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" };
   if (f.accion === "marcar_revisada") return { tipo: "valores", antes: "En revisión", despues: "Revisada" };
   if (f.accion === "quitar_revision") return { tipo: "valores", antes: "Revisada", despues: "En revisión" };
+  // mover la fecha de un vencimiento: las dos fechas, nunca una flecha sola (si falta una se dice «Sin definir»)
+  if (f.accion === "mover_fecha" || f.accion === "quitar_movimiento") return { tipo: "valores", antes: fechaGuardadaEnPalabras(f.antes), despues: fechaGuardadaEnPalabras(f.despues) };
   if (f.accion === "justificar") return { tipo: "valores", antes: "Sin justificar", despues: "Justificado" };
   if (f.accion === "quitar_justificacion") return { tipo: "valores", antes: "Justificado", despues: "Sin justificar" };
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
@@ -279,3 +294,18 @@ export function fraseRevisada(r: { quien: string; cuando: string; nota: string }
 
 /** Detalle de la tarjeta «Falta día»: «no generan vencimientos» y, si las hay, cuántas de esas están revisadas («2 revisadas · no generan vencimientos»). */
 export const textoFaltaDia = (revisadas: number): string => (revisadas > 0 ? `${revisadas} ${revisadas === 1 ? "revisada" : "revisadas"} · no generan vencimientos` : "no generan vencimientos");
+
+/** Estados en los que se puede mover la fecha de un vencimiento (el servidor es quien decide): Programado, Por vencer, Vencido y Sin información. */
+export const ESTADOS_MOVIBLES = ["proyectado", "por_vencer", "vencido", "sin_informacion"];
+
+/** «Movida por Ana Uno el 28 oct. Motivo: Prórroga del proveedor.» (sin punto doble). */
+export function fraseMovida(m: { quien: string; cuando: string; motivo: string }, anio?: string): string {
+  const fecha = fechaDeCambio(m.cuando, anio);
+  return `Movida por ${m.quien}${fecha ? ` el ${fecha}` : ""}. Motivo: ${m.motivo.replace(/[.\s]+$/, "")}.`;
+}
+
+/** «Cambia al día 20 desde nov 2026» (el cambio de día ya programado para un mes posterior). */
+export const textoDiaProgramado = (p: { dia: number; desde: string }): string => `Cambia al día ${p.dia} desde ${mesCorto(p.desde)}`;
+
+/** Meses que se pueden elegir en «Desde el mes»: el actual y los siguientes hasta dos años por delante. */
+export const limitesDeDesdeMes = (actual: string): { primera: string; ultima: string } => ({ primera: `${actual}-01`, ultima: `${sumarMeses(actual, 24)}-28` });

@@ -92,10 +92,10 @@ test("filtro «Qué cambió»: dos grupos, un único mapa campo -> grupo, y un g
   assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago del vencimiento");
   assert.deepEqual(f.GRUPOS_DE_CAMPOS.map((g) => g.titulo), ["Datos de la obligación", "Decisiones manuales"]);
   // con todo lo que hay: cada campo en su grupo y en el orden del mapa (no el de llegada)
-  const todo = ["revision_obligacion", "justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
+  const todo = ["fecha_vencimiento", "revision_obligacion", "justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
   assert.deepEqual(f.agruparCampos(todo), [
     { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion"] },
+    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento"] },
   ]);
   // un grupo sin opciones dentro del alcance no se muestra; si solo hay uno, se muestra con su título
   assert.deepEqual(f.agruparCampos(["frecuencia", "activa"]), [{ titulo: "Datos de la obligación", campos: ["frecuencia", "activa"] }]);
@@ -169,7 +169,7 @@ test("filtro «Qué cambió»: las justificaciones van en «Decisiones manuales�
   assert.equal(f.rotuloDeCampo("justificacion_vencimiento"), "Justificación del vencimiento");
   assert.equal(f.rotuloDeCampo("justificacion_archivo"), "Justificación del archivo");
   const decisiones = f.GRUPOS_DE_CAMPOS.find((g) => g.titulo === "Decisiones manuales");
-  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion"]);
+  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento"]);
   // un grupo solo con justificaciones se muestra solo con ese grupo; sin ellas, no aparece
   assert.deepEqual(f.agruparCampos(["justificacion_archivo"]), [{ titulo: "Decisiones manuales", campos: ["justificacion_archivo"] }]);
   assert.deepEqual(f.agruparCampos(["frecuencia"]).map((g) => g.titulo), ["Datos de la obligación"]);
@@ -225,4 +225,58 @@ test("tarjeta «Falta día»: sigue contando el dato faltante y dice cuántas es
   assert.equal(f.textoFaltaDia(0), "no generan vencimientos");
   assert.equal(f.textoFaltaDia(1), "1 revisada · no generan vencimientos");
   assert.equal(f.textoFaltaDia(3), "3 revisadas · no generan vencimientos");
+});
+
+test("mover la fecha de un vencimiento: «Fecha del vencimiento» con las dos fechas (en un sentido y en el otro); la flecha nunca queda sola", () => {
+  const mover = { accion: "mover_fecha", campo: "fecha_vencimiento", antes: "2026-10-15", despues: "2026-10-22" };
+  const quitar = { accion: "quitar_movimiento", campo: "fecha_vencimiento", antes: "2026-10-22", despues: "2026-10-15" };
+  assert.equal(f.rotuloDeCampo("fecha_vencimiento"), "Fecha del vencimiento");
+  assert.equal(f.rotuloDeFila(mover), "Fecha del vencimiento");
+  assert.equal(f.rotuloDeFila(quitar), "Fecha del vencimiento");
+  const anio = new Date().getFullYear();
+  f.fijarAnioEnCurso(`${anio}-01-01`);
+  const es = (d) => f.nombreFecha(d);
+  assert.deepEqual(f.cambioEnPalabras(mover), { tipo: "valores", antes: es("2026-10-15"), despues: es("2026-10-22") });
+  assert.deepEqual(f.cambioEnPalabras(quitar), { tipo: "valores", antes: es("2026-10-22"), despues: es("2026-10-15") });
+  // si faltara una de las fechas, igual hay dos valores legibles (nunca una flecha con un solo lado)
+  for (const accion of ["mover_fecha", "quitar_movimiento"]) {
+    for (const [antes, despues] of [[null, null], ["2026-10-15", null], [null, "2026-10-22"], ["no es fecha", "tampoco"]]) {
+      const r = f.cambioEnPalabras({ accion, campo: "fecha_vencimiento", antes, despues });
+      assert.equal(r.tipo, "valores", accion);
+      assert.ok(r.antes !== "" && r.despues !== "", accion);
+    }
+  }
+});
+
+test("cambio permanente del día: «Día de pago» con el día de antes y «día N desde mes año»; sin «desde» legible no se rompe", () => {
+  const cambio = { accion: "cambiar_dia", campo: "diaEsperadoPago", antes: "15", despues: "20 desde 2026-11" };
+  assert.equal(f.rotuloDeFila(cambio), "Día de pago");
+  assert.deepEqual(f.cambioEnPalabras(cambio), { tipo: "valores", antes: "día 15", despues: "día 20 desde nov 2026" });
+  assert.deepEqual(f.cambioEnPalabras({ ...cambio, antes: null }), { tipo: "valores", antes: "Sin día", despues: "día 20 desde nov 2026" });
+  assert.deepEqual(f.cambioEnPalabras({ accion: "editar", campo: "diaEsperadoPago", antes: "10", despues: "12" }), { tipo: "valores", antes: "día 10", despues: "día 12" }); // lo de siempre no cambia
+  const raro = f.cambioEnPalabras({ ...cambio, despues: "texto raro" });
+  assert.equal(raro.tipo, "valores");
+  assert.notEqual(raro.despues, "");
+  for (const accion of ["mover_fecha", "quitar_movimiento", "cambiar_dia"]) {
+    const r = f.cambioEnPalabras({ accion, campo: "diaEsperadoPago", antes: null, despues: null });
+    if (r.tipo === "valores") assert.ok(r.antes !== "" && r.despues !== "", accion);
+  }
+});
+
+test("filtro «Qué cambió»: la fecha del vencimiento va en «Decisiones manuales» y el día de pago sigue en «Datos de la obligación»", () => {
+  assert.deepEqual(f.agruparCampos(["fecha_vencimiento"]), [{ titulo: "Decisiones manuales", campos: ["fecha_vencimiento"] }]);
+  assert.deepEqual(f.agruparCampos(["diaEsperadoPago", "fecha_vencimiento"]).map((g) => [g.titulo, g.campos]), [["Datos de la obligación", ["diaEsperadoPago"]], ["Decisiones manuales", ["fecha_vencimiento"]]]);
+  // cada campo vive en un solo grupo (un único mapa)
+  const todos = f.GRUPOS_DE_CAMPOS.flatMap((g) => g.campos);
+  assert.equal(new Set(todos).size, todos.length);
+});
+
+test("frases de la ficha: «Movida por {nombre} el {fecha}. Motivo: …» (sin punto doble) y el cambio ya programado", () => {
+  const m = { quien: "Ana Uno", cuando: "2026-10-28T15:30:00.000Z", motivo: "Prórroga del proveedor" };
+  assert.equal(f.fraseMovida(m, "2026"), "Movida por Ana Uno el 28 oct. Motivo: Prórroga del proveedor.");
+  assert.equal(f.fraseMovida({ ...m, motivo: "Prórroga. " }, "2026"), "Movida por Ana Uno el 28 oct. Motivo: Prórroga.");
+  assert.equal(f.fraseMovida({ ...m, cuando: "no es fecha" }, "2026"), "Movida por Ana Uno. Motivo: Prórroga del proveedor.");
+  assert.equal(f.textoDiaProgramado({ dia: 20, desde: "2026-11" }), "Cambia al día 20 desde nov 2026");
+  assert.deepEqual(f.ESTADOS_MOVIBLES, ["proyectado", "por_vencer", "vencido", "sin_informacion"]);
+  assert.deepEqual(f.limitesDeDesdeMes("2026-10"), { primera: "2026-10-01", ultima: "2028-10-28" });
 });

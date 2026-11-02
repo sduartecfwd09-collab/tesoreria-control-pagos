@@ -91,6 +91,12 @@ export const api = {
   pagosCandidatos: async (id: number) => (await pedir<{ datos: CandidatoPago[] }>(`/api/vencimientos/${id}/pagos-candidatos`)).datos,
   asociarPago: (id: number, movimiento: number, motivo: string) =>
     pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/asociar-pago`, { method: "POST", body: JSON.stringify({ movimiento, motivo }) }),
+  moverFecha: (id: number, nuevaFecha: string, motivo: string) =>
+    pedir<{ datos: { fecha: string; fechaOriginal: string } }>(`/api/vencimientos/${id}/mover-fecha`, { method: "POST", body: JSON.stringify({ nuevaFecha, motivo }) }),
+  quitarMovimiento: (id: number, motivo: string) =>
+    pedir<{ datos: { fecha: string } }>(`/api/vencimientos/${id}/quitar-movimiento`, { method: "POST", body: JSON.stringify({ motivo }) }),
+  cambiarDia: (id: number, c: { nuevoDia: number; desdeMes: string; aplicaAlMesEnCurso?: boolean; motivo: string }) =>
+    pedir<{ datos: { desde: string; dia: number; actualizados: number } }>(`/api/obligaciones/${id}/cambiar-dia`, { method: "POST", body: JSON.stringify(c) }),
   justificarVencimiento: (id: number, motivo: string, nota: string) =>
     pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/justificar`, { method: "POST", body: JSON.stringify({ motivo, nota }) }),
   quitarJustificacionDeVencimiento: (id: number, motivo: string) =>

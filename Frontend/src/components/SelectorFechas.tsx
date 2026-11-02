@@ -4,7 +4,7 @@ import {
   aTextoDMA, evaluarFechasEscritas, mensajeDeFechas, mesDentroDeLimites, nombreDelPeriodo, OPCION_ELEGIR, sumarMeses,
   type Limites, type OpcionPeriodo, type Rango,
 } from "@/lib/fechas";
-import { claseControl } from "./ui";
+import { Campo, claseControl } from "./ui";
 
 // Selectores de fechas. «Mes»: flechas y un panel para saltar de mes y de año. «Período»: lista desplegable con opciones válidas y, solo con «Elegir fechas»,
 // «Desde» y «Hasta». La lógica (validación, opciones, límites) está en lib/fechas.ts y se prueba con `npm run fechas`.
@@ -205,5 +205,20 @@ export function SelectorPeriodo({ etiqueta, opciones, inicial, rangoActual, limi
       </div>
       {mensaje && !contexto && <p id={idMensaje} role="alert" className="mt-2 text-sm font-semibold text-rojo">{mensaje}</p>}
     </div>
+  );
+}
+
+/**
+ * Una sola fecha escrita como día/mes/año: el mismo formato y la misma lógica (lib/fechas.ts) que «Desde» y «Hasta» de «Elegir fechas».
+ * El mensaje de error lo pone quien lo usa (se valida al intentar guardar, no mientras se escribe).
+ */
+export function CampoFecha({ id, etiqueta, valor, alCambiar, error, ayuda }: { id: string; etiqueta: string; valor: string; alCambiar: (texto: string) => void; error?: string; ayuda?: string }) {
+  return (
+    <Campo id={id} etiqueta={etiqueta} ayuda={ayuda} error={error}>
+      <input
+        id={id} value={valor} onChange={(e) => alCambiar(e.target.value)} inputMode="numeric" autoComplete="off" maxLength={10} placeholder="dd/mm/aaaa"
+        aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : ayuda ? `${id}-ayuda` : undefined} className={claseEntrada}
+      />
+    </Campo>
   );
 }

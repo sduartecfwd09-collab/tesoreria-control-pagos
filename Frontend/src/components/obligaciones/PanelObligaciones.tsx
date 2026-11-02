@@ -100,6 +100,13 @@ export function PanelObligaciones() {
     recargar();
   }
 
+  /** El cambio permanente del día ya se guardó (con o sin otros cambios): se cierra la edición y se actualiza la lista. */
+  function terminarCambioDeDia(o: Obligacion) {
+    setAviso(`Día de pago cambiado: ${o.proveedor} (${o.sociedad}).`);
+    setEditando(null);
+    recargar();
+  }
+
   async function importar() {
     setImportando(true);
     try {
@@ -285,6 +292,7 @@ export function PanelObligaciones() {
           obligacion={editando === "nueva" ? null : editando}
           {...catalogos}
           alGuardar={guardar}
+          alCambiarDia={terminarCambioDeDia}
           alCerrar={() => setEditando(null)}
         />
       )}

@@ -184,6 +184,8 @@ export interface Obligacion {
   proveedor: string;
   identificador: string;
   diaEsperadoPago: number | null;
+  /** el próximo cambio de día ya programado (empieza en un mes posterior al actual); null si no hay */
+  diaProgramado: { desde: string; dia: number } | null;
   diaEditado: boolean;
   frecuencia: Frecuencia;
   frecuenciaPorConfirmar: boolean;
@@ -466,6 +468,12 @@ export interface DetalleVencimiento {
   fechaOriginal: string;
   movida: boolean;
   fechaMovidaPor: string | null;
+  /** quién movió la fecha, cuándo (instante UTC) y por qué; null si no está movida */
+  movidaPor: { quien: string; cuando: string; motivo: string } | null;
+  /** hasta dónde se puede mover la fecha (ISO, extremos incluidos) */
+  rangoMoverFecha: { desde: string; hasta: string };
+  puedeMoverFecha: boolean;
+  puedeQuitarMovimiento: boolean;
   estado: EstadoVencimiento;
   motivo: string | null;
   textoEstado: string | null;

@@ -2,8 +2,10 @@
 import { useEffect, useState } from "react";
 import { api, ErrorApi } from "@/lib/api";
 import { avisar } from "@/lib/avisos";
+import { evaluarFechaEscrita } from "@/lib/fechas";
 import { ESTADOS_ASOCIABLES, ESTADOS_JUSTIFICABLES, etiquetasDeCandidato, montoPagado, nombreFecha } from "@/lib/formato";
 import type { CandidatoPago, DetalleVencimiento } from "@/lib/tipos";
+import { CampoFecha } from "../SelectorFechas";
 import { Campo, claseBoton, claseBotonSecundario, claseControl } from "../ui";
 import { PanelJustificar, PanelQuitarJustificacion } from "./Justificar";
 
@@ -26,13 +28,16 @@ const motivoValido = (m: string) => m.trim().length >= 3 && m.trim().length <= 3
  * vuelve a comprobar el permiso). `alCambiar` avisa a la pantalla para que actualice la fila.
  */
 export function AccionesPago({ d, alCambiar }: { d: DetalleVencimiento; alCambiar: () => void }) {
-  const [modo, setModo] = useState<"ninguno" | "asociar" | "quitar" | "justificar" | "quitar_justificacion">("ninguno");
+  const [modo, setModo] = useState<"ninguno" | "asociar" | "quitar" | "justificar" | "quitar_justificacion" | "mover" | "quitar_movimiento">("ninguno");
   const puedeAsociar = ESTADOS_ASOCIABLES.includes(d.estado) && d.asociadoAMano === null;
   const puedeQuitar = d.asociadoAMano !== null;
   // un Vencido o Sin información se puede justificar; un Justificado ofrece quitar la justificación (y asociar un pago, que gana)
   const puedeJustificar = ESTADOS_JUSTIFICABLES.includes(d.estado) && d.justificado === null;
   const puedeQuitarJustificacion = d.justificado !== null;
-  if (!d.puedeGestionar || (!puedeAsociar && !puedeQuitar && !puedeJustificar && !puedeQuitarJustificacion)) return null;
+  // «Mover fecha» (solo este mes) y devolverla a la original: lo decide el servidor según el estado y el permiso
+  const puedeMover = d.puedeMoverFecha;
+  const puedeQuitarMov = d.puedeQuitarMovimiento;
+  if (!d.puedeGestionar || (!puedeAsociar && !puedeQuitar && !puedeJustificar && !puedeQuitarJustificacion && !puedeMover && !puedeQuitarMov)) return null;
 
   const terminar = (texto: string) => {
     avisar.exito(texto);
@@ -45,6 +50,8 @@ export function AccionesPago({ d, alCambiar }: { d: DetalleVencimiento; alCambia
   if (modo === "justificar") {
     return <PanelJustificar motivos={d.motivosDeJustificacion} enviar={(motivo, nota) => api.justificarVencimiento(d.id, motivo, nota)} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Vencimiento justificado.")} />;
   }
+  if (modo === "mover") return <PanelMover d={d} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Fecha movida.")} />;
+  if (modo === "quitar_movimiento") return <PanelQuitarMovimiento id={d.id} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Movimiento quitado.")} />;
   if (modo === "quitar_justificacion") {
     return <PanelQuitarJustificacion enviar={(motivo) => api.quitarJustificacionDeVencimiento(d.id, motivo)} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Justificación quitada.")} />;
   }
@@ -54,6 +61,8 @@ export function AccionesPago({ d, alCambiar }: { d: DetalleVencimiento; alCambia
       {puedeQuitar && <button type="button" onClick={() => setModo("quitar")} className={claseBotonSecundario}>Quitar asociación</button>}
       {puedeJustificar && <button type="button" onClick={() => setModo("justificar")} className={claseBotonSecundario}>Justificar</button>}
       {puedeQuitarJustificacion && <button type="button" onClick={() => setModo("quitar_justificacion")} className={claseBotonSecundario}>Quitar justificación</button>}
+      {puedeMover && <button type="button" onClick={() => setModo("mover")} className={claseBotonSecundario}>Mover fecha</button>}
+      {puedeQuitarMov && <button type="button" onClick={() => setModo("quitar_movimiento")} className={claseBotonSecundario}>Quitar movimiento</button>}
     </div>
   );
 }
@@ -173,6 +182,84 @@ function PanelQuitar({ id, alCancelar, alTerminar }: { id: number; alCancelar: (
       {error.general && <p role="alert" className="mt-3 rounded border-2 border-rojo bg-rojo-fondo p-3 font-medium text-rojo">{error.general}</p>}
       <div className="mt-4 flex flex-wrap gap-3">
         <button type="button" onClick={quitar} disabled={guardando} className={claseBoton}>{guardando ? "Guardando…" : "Quitar asociación"}</button>
+        <button type="button" onClick={alCancelar} className={claseBotonSecundario}>Cancelar</button>
+      </div>
+    </section>
+  );
+}
+
+function PanelMover({ d, alCancelar, alTerminar }: { d: DetalleVencimiento; alCancelar: () => void; alTerminar: () => void }) {
+  const [texto, setTexto] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [errores, setErrores] = useState<{ fecha?: string; motivo?: string; general?: string }>({});
+  const [guardando, setGuardando] = useState(false);
+  const { desde, hasta } = d.rangoMoverFecha;
+
+  async function mover() {
+    const f = evaluarFechaEscrita(texto, { minimo: desde, maximo: hasta });
+    const nuevos: typeof errores = {};
+    if (f.estado !== "valido") nuevos.fecha = f.mensaje;
+    else if (f.fecha === d.fecha) nuevos.fecha = "Esa ya es la fecha de este vencimiento";
+    if (!motivoValido(motivo)) nuevos.motivo = MENSAJE_MOTIVO;
+    setErrores(nuevos);
+    if (f.estado !== "valido" || nuevos.fecha || nuevos.motivo) return;
+    setGuardando(true);
+    try {
+      await api.moverFecha(d.id, f.fecha, motivo.trim());
+      alTerminar();
+    } catch (e) {
+      const campo = e instanceof ErrorApi ? e.campo : undefined;
+      const mensaje = e instanceof Error ? e.message : "No se pudo mover la fecha";
+      setErrores(campo === "nuevaFecha" ? { fecha: mensaje } : campo === "motivo" ? { motivo: mensaje } : { general: mensaje });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <section className="mt-5 border-t border-linea pt-4">
+      <h3 className="text-sm font-bold">Mover fecha</h3>
+      <p className="mt-1 text-sm text-suave">Solo cambia la fecha de este mes. Fecha original: {nombreFecha(d.fechaOriginal)}.</p>
+      <div className="mt-3">
+        <CampoFecha id="nueva-fecha" etiqueta="Nueva fecha" valor={texto} alCambiar={setTexto} error={errores.fecha} />
+      </div>
+      <CampoMotivo valor={motivo} alCambiar={setMotivo} error={errores.motivo} />
+      {errores.general && <p role="alert" className="mt-3 rounded border-2 border-rojo bg-rojo-fondo p-3 font-medium text-rojo">{errores.general}</p>}
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button type="button" onClick={mover} disabled={guardando} className={claseBoton}>{guardando ? "Guardando…" : "Mover fecha"}</button>
+        <button type="button" onClick={alCancelar} className={claseBotonSecundario}>Cancelar</button>
+      </div>
+    </section>
+  );
+}
+
+function PanelQuitarMovimiento({ id, alCancelar, alTerminar }: { id: number; alCancelar: () => void; alTerminar: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const [error, setError] = useState<{ motivo?: string; general?: string }>({});
+  const [guardando, setGuardando] = useState(false);
+
+  async function quitar() {
+    if (!motivoValido(motivo)) return setError({ motivo: MENSAJE_MOTIVO });
+    setError({});
+    setGuardando(true);
+    try {
+      await api.quitarMovimiento(id, motivo.trim());
+      alTerminar();
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : "No se pudo quitar el movimiento";
+      setError(e instanceof ErrorApi && e.campo === "motivo" ? { motivo: mensaje } : { general: mensaje });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <section className="mt-5 border-t border-linea pt-4">
+      <h3 className="text-sm font-bold">Quitar movimiento</h3>
+      <CampoMotivo valor={motivo} alCambiar={setMotivo} error={error.motivo} />
+      {error.general && <p role="alert" className="mt-3 rounded border-2 border-rojo bg-rojo-fondo p-3 font-medium text-rojo">{error.general}</p>}
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button type="button" onClick={quitar} disabled={guardando} className={claseBoton}>{guardando ? "Guardando…" : "Quitar movimiento"}</button>
         <button type="button" onClick={alCancelar} className={claseBotonSecundario}>Cancelar</button>
       </div>
     </section>

@@ -239,3 +239,22 @@ export function evaluarFechasEscritas(desde: string, hasta: string, opciones: { 
 export function mensajeDeFechas(f: FechasEscritas, mostrar: boolean): string | null {
   return mostrar && (f.estado === "incompleto" || f.estado === "invalido") ? f.mensaje : null;
 }
+
+// --- Una sola fecha escrita a mano («Nueva fecha» de Mover fecha) ------------------------------------------------------------
+
+const MENSAJE_FORMATO_UNA = "Escriba la fecha como día/mes/año, por ejemplo 15/10/2026.";
+
+/** Una fecha escrita: `vacio`, `invalido` (no es una fecha real o queda fuera de los límites) o `valido` (con la fecha ISO). Los límites son ISO e incluyen los extremos. */
+export type FechaEscrita = { estado: "vacio"; mensaje: string } | { estado: "invalido"; mensaje: string } | { estado: "valido"; fecha: string };
+
+export function evaluarFechaEscrita(texto: string, limites: { minimo?: string; maximo?: string } = {}): FechaEscrita {
+  if (texto.trim() === "") return { estado: "vacio", mensaje: "Elija la nueva fecha" };
+  const iso = deTextoDMA(texto);
+  if (iso === null) return { estado: "invalido", mensaje: MENSAJE_FORMATO_UNA };
+  if ((limites.minimo && iso < limites.minimo) || (limites.maximo && iso > limites.maximo)) {
+    const desde = limites.minimo ? aTextoDMA(limites.minimo) : null;
+    const hasta = limites.maximo ? aTextoDMA(limites.maximo) : null;
+    return { estado: "invalido", mensaje: desde && hasta ? `Elija una fecha entre el ${desde} y el ${hasta}.` : desde ? `Elija una fecha desde el ${desde}.` : `Elija una fecha hasta el ${hasta}.` };
+  }
+  return { estado: "valido", fecha: iso };
+}

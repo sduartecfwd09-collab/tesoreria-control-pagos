@@ -198,3 +198,24 @@ test("límites del Historial: la ventana cerrada en hoy; sin cortar, la ventana 
   assert.deepEqual(f.limitesDeNavegacion(r, true), { primera: "2021-11-01", ultima: "2026-11-01" });
   assert.deepEqual(f.limitesDeNavegacion(r), { primera: "2021-11-01", ultima: "2027-11-30" });
 });
+
+test("una sola fecha escrita («Nueva fecha»): vacía, mal escrita, fuera del rango y válida; los extremos se incluyen", () => {
+  const rango = { minimo: "2026-08-16", maximo: "2026-12-14" };
+  assert.equal(f.evaluarFechaEscrita("", rango).estado, "vacio");
+  assert.equal(f.evaluarFechaEscrita("   ", rango).estado, "vacio");
+  for (const t of ["2026-10-15", "30/02/2026", "5/10/26", "abc"]) {
+    const r = f.evaluarFechaEscrita(t, rango);
+    assert.equal(r.estado, "invalido", t);
+    assert.equal(r.mensaje, "Escriba la fecha como día/mes/año, por ejemplo 15/10/2026.", t);
+  }
+  assert.deepEqual(f.evaluarFechaEscrita("22/10/2026", rango), { estado: "valido", fecha: "2026-10-22" });
+  assert.deepEqual(f.evaluarFechaEscrita("16/08/2026", rango), { estado: "valido", fecha: "2026-08-16" });
+  assert.deepEqual(f.evaluarFechaEscrita("14/12/2026", rango), { estado: "valido", fecha: "2026-12-14" });
+  for (const t of ["15/08/2026", "15/12/2026"]) {
+    const r = f.evaluarFechaEscrita(t, rango);
+    assert.equal(r.estado, "invalido", t);
+    assert.equal(r.mensaje, "Elija una fecha entre el 16/08/2026 y el 14/12/2026.", t);
+  }
+  // sin límites cualquier fecha real vale
+  assert.deepEqual(f.evaluarFechaEscrita("1/1/2030"), { estado: "valido", fecha: "2030-01-01" });
+});
