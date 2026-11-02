@@ -28,7 +28,7 @@ describe("API: responsable efectivo y sociedades sin obligaciones (datos inventa
     await prisma.archivoImportado.create({ data: { ruta: "ejemplo/estado.xlsx", hash: "hash-de-ejemplo", sociedadId: conEstados.id, estado: "leido" } });
     const base = { categoriaId, frecuencia: "mensual", diaEsperadoPago: 5 };
     await prisma.obligacion.create({ data: { ...base, sociedadId: con.id, proveedor: "P1", identificador: "1" } }); // toma al tesorero
-    await prisma.obligacion.create({ data: { ...base, sociedadId: con.id, proveedor: "P2", identificador: "2", responsable: "Persona Propia" } });
+    await prisma.obligacion.create({ data: { ...base, sociedadId: con.id, proveedor: "P2", identificador: "2" } });
     await prisma.obligacion.create({ data: { ...base, sociedadId: sin.id, proveedor: "P3", identificador: "3" } }); // nadie
     app = await crearApp();
   });
@@ -40,7 +40,7 @@ describe("API: responsable efectivo y sociedades sin obligaciones (datos inventa
 
   const listar = async (qs = "") => (await app.inject(`/api/obligaciones${qs}`)).json().datos as { proveedor: string; responsableEfectivo?: string | null }[];
 
-  it("el responsable es el tesorero de la sociedad, aunque la obligación tenga un texto propio guardado", async () => {
+  it("el responsable es el tesorero de la sociedad (la obligación no guarda uno propio)", async () => {
     const por = Object.fromEntries((await listar()).map((o) => [o.proveedor, o]));
     expect(por.P1!.responsableEfectivo).toBe("Tesorera Uno");
     expect(por.P2!.responsableEfectivo).toBe("Tesorera Uno");

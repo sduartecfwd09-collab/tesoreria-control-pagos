@@ -13,7 +13,7 @@ import { ErrorLectura, LECTOR_VERSION, TOLERANCIA_SALDO_DEFECTO, leerEstadoDeCue
 import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
 import type { ResultadoLectura } from "./tipos.js";
 import {
-  ArchivoConConciliaciones, buscarArchivoPorRuta, buscarSociedadPorCodigo, marcarRetirados, reactivarArchivo,
+buscarArchivoPorRuta, buscarSociedadPorCodigo, marcarRetirados, reactivarArchivo,
   guardarArchivoConError, guardarArchivoEnRevision, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
 } from "../repositories/importaciones.js";
 import { completarControlDesdePendientes } from "../repositories/obligaciones.js";
@@ -203,7 +203,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
       resumen.duplicados += duplicados;
       resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: r.formato, estado: "leido", movimientos: movs.length, duplicados });
     } catch (e) {
-      const msg = e instanceof ArchivoConConciliaciones ? e.message : "No se pudo guardar el archivo en la base de datos";
+      const msg = "No se pudo guardar el archivo en la base de datos";
       await guardarArchivoConError({ ...archivoBase, cuentaId: cuenta.id, formato: r.formato }, msg, detalle);
       resumen.conError++;
       resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: r.formato, estado: "error", movimientos: 0, duplicados: 0, error: msg });

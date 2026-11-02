@@ -32,7 +32,7 @@ describe.skipIf(!hayArchivo)("importación del catálogo real", () => {
     expect(await prisma.sociedad.count()).toBe(5); // el importador no crea sociedades
 
     const c = calidadCatalogo(
-      (await todasLasObligaciones()).map((o) => ({ ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad) })),
+      (await todasLasObligaciones()).map((o) => ({ ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad), responsable: o.sociedad.tesorero?.nombre ?? null })),
       (await listarSociedades()).map((s) => ({ nombre: etiquetaSociedad(s), conEstados: false })),
     );
     expect(c.total).toBe(r.creadas);

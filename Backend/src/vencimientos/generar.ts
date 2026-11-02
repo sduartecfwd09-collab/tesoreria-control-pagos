@@ -2,7 +2,7 @@
 // «Control desde» hasta el fin del mes de hoy + N meses (parámetro `meses_vencimientos_adelante`, 12; o hoy + los días de aviso si
 // eso llega más lejos) y mantiene al día los futuros. Los de fechas futuras quedan «Programado» (el motor de cruce no los marca Vencido
 // ni Sin información, y Programado no genera avisos). Todos nacen «proyectado»: el estado real lo calcula el motor de cruce. Es idempotente y nunca toca un vencimiento
-// pasado, pagado, conciliado o con avisos.
+// pasado, pagado o con avisos.
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
 import { copiaDe, diaDelPeriodo, ESTADOS_PAGADOS, periodosEntre, planificar, type VencimientoPlan } from "../domain/vencimientos.js";
@@ -18,7 +18,7 @@ export interface ResumenSincronizacion {
   creados: number;
   actualizados: number;
   eliminados: number;
-  /** vencimientos futuros que no se tocaron por estar pagados, conciliados, con avisos o movidos a mano */
+  /** vencimientos futuros que no se tocaron por estar pagados, con avisos o movidos a mano */
   protegidos: number;
 }
 
@@ -78,7 +78,7 @@ export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: numbe
 
     for (const v of propios) {
       if (v.fecha < hoy) continue; // pasado: no se toca
-      if (v._count.conciliaciones > 0 || v._count.alertas > 0 || ESTADOS_PAGADOS.includes(v.estado)) { r.protegidos++; continue; }
+      if (v._count.alertas > 0 || ESTADOS_PAGADOS.includes(v.estado)) { r.protegidos++; continue; }
       const d = deseados.get(v.periodo);
       const movido = v.fechaOriginal !== null; // movido «de una sola vez»: conserva su fecha vigente y su historial
       if (!d) {
@@ -88,7 +88,7 @@ export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: numbe
       }
       const fecha = movido ? v.fecha : d.fecha;
       const fechaOriginal = movido && d.fecha.getTime() !== v.fecha.getTime() ? d.fecha : null;
-      // la copia de los datos de la obligación también se actualiza (solo en estos vencimientos futuros, no pagados y sin conciliación)
+      // la copia de los datos de la obligación también se actualiza (solo en estos vencimientos futuros, no pagados)
       const copia = copiaDe(o, v.periodo);
       const copiaIgual = (Object.keys(copia) as (keyof typeof copia)[]).every((k) => v[k] === copia[k]);
       if (!copiaIgual || fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {

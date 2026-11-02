@@ -410,7 +410,7 @@ describe("cambio permanente: efecto", () => {
     expect(iso((await venc("2026-10")).fecha)).toBe("2026-10-05");
   });
 
-  it("un cambio permanente no mueve lo pagado ni lo conciliado", async () => {
+  it("un cambio permanente no mueve lo pagado", async () => {
     await prisma.vencimiento.update({ where: { id: (await venc("2026-10")).id }, data: { estado: "pagado" } });
     await cambiar({ nuevoDia: 20, desdeMes: "2026-09", motivo: "Nuevo día" });
     expect(await fechas()).toEqual(["2026-08-15", "2026-09-20", "2026-10-15", "2026-11-20"]);

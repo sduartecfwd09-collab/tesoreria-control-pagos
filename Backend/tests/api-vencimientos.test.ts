@@ -39,7 +39,8 @@ describe("GET /api/vencimientos", () => {
   it("lista por periodo con el estado proyectado y marca los futuros según el reloj", async () => {
     const r = (await app.inject("/api/vencimientos?periodo=2026-09")).json();
     expect(r).toMatchObject({ total: 2, hoy: "2026-09-10" });
-    expect(r.datos[0]).toMatchObject({ sociedad: "Sociedad AAA", proveedor: "Fono", fecha: "2026-09-15", estado: "proyectado", conciliado: false, futuro: true, moneda: "CRC" });
+    expect(r.datos[0]).toMatchObject({ sociedad: "Sociedad AAA", proveedor: "Fono", fecha: "2026-09-15", estado: "proyectado", futuro: true, moneda: "CRC" });
+    expect(r.datos[0]).not.toHaveProperty("conciliado"); // el campo se retiró junto con la tabla
     expect(r.datos[1]).toMatchObject({ sociedad: "Sociedad BBB", fecha: "2026-09-30" });
     const ago = (await app.inject("/api/vencimientos?periodo=2026-08")).json();
     expect(ago.datos.every((v: { futuro: boolean }) => !v.futuro)).toBe(true);
@@ -79,9 +80,14 @@ describe("edición de obligaciones y vencimientos", () => {
     const r = await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, headers: actua, payload: { responsable: "Ana" } });
     expect(r.statusCode).toBe(422);
     expect(r.json().campo).toBe("responsable");
-    expect((await prisma.obligacion.findUniqueOrThrow({ where: { id: mensual } })).responsable).toBeNull();
+    // y no cambia nada de la obligación (la fila queda igual, incluida su fecha de actualización)
+    const antes = await prisma.obligacion.findUniqueOrThrow({ where: { id: mensual } });
+    await app.inject({ method: "PATCH", url: `/api/obligaciones/${mensual}`, headers: actua, payload: { responsable: "Ana", proveedor: "Otro" } });
+    expect(await prisma.obligacion.findUniqueOrThrow({ where: { id: mensual } })).toEqual(antes);
+    const totalAntes = await prisma.obligacion.count();
     const alta = await app.inject({ method: "POST", url: "/api/obligaciones", headers: actua, payload: { responsable: "Ana", sociedadId: 1, categoriaId: 1, proveedor: "X", identificador: "1" } });
     expect(alta.statusCode).toBe(422);
     expect(alta.json().campo).toBe("responsable");
+    expect(await prisma.obligacion.count()).toBe(totalAntes); // el alta rechazada no crea nada
   });
 });

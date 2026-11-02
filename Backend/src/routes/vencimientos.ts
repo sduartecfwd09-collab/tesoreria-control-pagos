@@ -251,7 +251,6 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         diferenciaDias: v.diferenciaDias,
         sinInfoHasta: v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null,
         ...gestionDe(v, asociaciones.get(claveObligacionPeriodo(v.obligacionId, v.periodo)) ?? null, justificaciones.get(claveObligacionPeriodo(v.obligacionId, v.periodo)) ?? null, persona),
-        conciliado: v._count.conciliaciones > 0,
         futuro: v.fecha >= hoy,
         // días de hoy a la fecha vigente (negativo = ya pasó): «Hace N días» / «En N días»
         dias: Math.round((v.fecha.getTime() - hoy.getTime()) / 86_400_000),

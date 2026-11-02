@@ -102,7 +102,6 @@ model Obligacion {
   monedaPorConfirmar     Boolean       @default(true)
   cuentaEsperadaId       Int?
   cuentaEsperada         Cuenta?       @relation(fields: [cuentaEsperadaId], references: [id])
-  responsable            String?       @db.VarChar(150)
   controlDesde           DateTime?     @db.Date // primer día del mes desde el cual se generan vencimientos; null = aún sin definir (sin límite)
   activa                 Boolean       @default(true) // no se borra: se desactiva
   origen                 String        @default("catalogo") @db.VarChar(20) // catalogo | manual (la importación no toca las manuales)
@@ -145,7 +144,6 @@ model Vencimiento {
   sinInfoHasta     DateTime?      @db.Date // si estado = sin_informacion: hasta qué fecha hay datos de la sociedad; null = sin datos
   creadoEn         DateTime       @default(now()) @db.DateTime(3)
   actualizado      DateTime       @updatedAt @db.DateTime(3)
-  conciliaciones   Conciliacion[]
   alertas          Alerta[]
   cambiosDia       CambioDia[]
 
@@ -271,28 +269,12 @@ model Movimiento {
   claveDedup     String           @unique @db.Char(40) // sha1 en hexadecimal (longitud fija); ver src/ingest/clave-dedup.ts
   creadoEn       DateTime         @default(now()) @db.DateTime(3)
   actualizado    DateTime         @updatedAt @db.DateTime(3)
-  conciliaciones Conciliacion[]
   alertas        Alerta[]
   vencimientos   Vencimiento[]
   decisiones     DecisionManual[]
 
   @@index([cuentaId, fecha])
   @@index([periodo])
-}
-
-model Conciliacion {
-  id              Int         @id @default(autoincrement())
-  vencimientoId   Int
-  vencimiento     Vencimiento @relation(fields: [vencimientoId], references: [id])
-  movimientoId    Int         @unique // un movimiento solo puede pagar un vencimiento
-  movimiento      Movimiento  @relation(fields: [movimientoId], references: [id])
-  tipoCruce       String      @db.VarChar(20) // automatico | manual
-  diferenciaMonto BigInt? // centavos
-  diferenciaDias  Int?
-  estado          String      @db.VarChar(20) // claro | en_revision | rechazado
-  revisadoPor     String?     @db.VarChar(150)
-  creadoEn        DateTime    @default(now()) @db.DateTime(3)
-  actualizado     DateTime    @updatedAt @db.DateTime(3)
 }
 
 model Alerta {

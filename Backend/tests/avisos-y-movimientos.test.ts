@@ -18,8 +18,8 @@ let sociedadA: number;
 let sociedadB: number;
 let categoriaId: number;
 
-async function crearObligacion(sociedadId: number, proveedor: string, identificador: string, responsable: string | null = null) {
-  return prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor, identificador, diaEsperadoPago: 10, controlDesde: dia(2026, 10, 1), responsable } });
+async function crearObligacion(sociedadId: number, proveedor: string, identificador: string) {
+  return prisma.obligacion.create({ data: { sociedadId, categoriaId, proveedor, identificador, diaEsperadoPago: 10, controlDesde: dia(2026, 10, 1) } });
 }
 async function crearVencimiento(o: Awaited<ReturnType<typeof crearObligacion>>, estado: string, fecha: Date, extra: object = {}) {
   return prisma.vencimiento.create({ data: { obligacionId: o.id, fecha, periodo: fecha.toISOString().slice(0, 7), estado, ...copiaDeObligacion(o), ...extra } });

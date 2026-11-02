@@ -100,12 +100,9 @@ export async function guardarArchivoEnRevision(a: ArchivoParaGuardar, motivo: st
   });
 }
 
-export class ArchivoConConciliaciones extends Error {}
-
 /**
  * Reemplaza los movimientos del archivo (primera importación o reimportación por cambio de hash).
  * Los que ya existan en OTRO archivo de la misma cuenta (misma clave) se omiten y se cuentan.
- * Si el archivo ya tiene conciliaciones sobre sus movimientos no se reimporta (revisión humana).
  */
 export async function guardarArchivoLeido(
   a: ArchivoParaGuardar & { cuentaId: number },
@@ -115,8 +112,6 @@ export async function guardarArchivoLeido(
   return prisma.$transaction(async (tx) => {
     const previo = await tx.archivoImportado.findUnique({ where: { ruta: a.ruta } });
     if (previo) {
-      const conc = await tx.conciliacion.count({ where: { movimiento: { archivoId: previo.id } } });
-      if (conc > 0) throw new ArchivoConConciliaciones("El archivo cambió pero tiene conciliaciones: requiere revisión humana antes de reimportar");
       await tx.movimiento.deleteMany({ where: { archivoId: previo.id } });
     }
     const existentes = new Set<string>();

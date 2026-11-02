@@ -149,7 +149,7 @@ describe("importarCatalogo", () => {
     const cuenta = await prisma.cuenta.create({ data: { sociedadId: o.sociedadId, numero: "CR00000000000000000099" } });
     const editado = {
       frecuencia: "trimestral", frecuenciaPorConfirmar: false, mesArranque: 2, montoEsperado: 1_234_500, moneda: "USD",
-      monedaPorConfirmar: false, cuentaEsperadaId: cuenta.id, responsable: "Persona de prueba", activa: false,
+      monedaPorConfirmar: false, cuentaEsperadaId: cuenta.id, activa: false,
       diaEsperadoPago: 28, diaEditado: true,
     };
     await prisma.obligacion.update({ where: { id: o.id }, data: editado });

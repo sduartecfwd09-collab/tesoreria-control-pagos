@@ -110,19 +110,25 @@ describe("importarCarpeta", () => {
     expect(await prisma.cuenta.findUnique({ where: { id: cuenta.id } })).toMatchObject({ banco: "Banco confirmado por Tesorería", bancoPorConfirmar: false });
   });
 
-  it("no reimporta un archivo cambiado si ya tiene conciliaciones", async () => {
-    const mov = (await prisma.movimiento.findFirst({ where: { archivo: { ruta: `ZFL/${IBAN_BCT} 0826 ZFL.xlsx` } } }))!;
+  it("reimportar un archivo cambiado reemplaza sus movimientos y no toca el vencimiento ni la decisión que se apoyaban en uno", async () => {
+    const ruta = `ZFL/${IBAN_BCT} 0826 ZFL.xlsx`;
+    const mov = (await prisma.movimiento.findFirst({ where: { archivo: { ruta } } }))!;
     const sociedad = (await prisma.sociedad.findFirst({ where: { codigo: "ZFL" } }))!;
     const categoria = await prisma.categoria.upsert({ where: { nombreNormalizado: "prueba" }, create: { nombre: "Prueba", nombreNormalizado: "prueba" }, update: {} });
     const ob = await prisma.obligacion.create({ data: { sociedadId: sociedad.id, categoriaId: categoria.id, proveedor: "P", identificador: "001", diaEsperadoPago: 15 } });
-    const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08", ...copiaDeObligacion(ob) } });
-    await prisma.conciliacion.create({ data: { vencimientoId: ven.id, movimientoId: mov.id, tipoCruce: "automatico", estado: "claro" } });
+    const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08", estado: "pagado", movimientoId: mov.id, ...copiaDeObligacion(ob) } });
+    const usuario = await prisma.usuario.create({ data: { correo: "u@x.cr", nombre: "U", nombreNormalizado: "u", rolId: (await prisma.rol.findFirstOrThrow()).id } });
+    const decision = await prisma.decisionManual.create({
+      data: { tipo: "asociacion_pago", sociedadId: sociedad.id, obligacionId: ob.id, periodo: "2026-08", movimientoId: mov.id, claveMovimiento: mov.claveDedup, motivo: "Prueba", usuarioId: usuario.id, nombreUsuario: "U", modoPruebas: true, unicaObligacionPeriodo: `${ob.id}|2026-08`, unicaMovimiento: mov.claveDedup },
+    });
 
-    poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1({ movs: M.MOVS_BASE.slice(0, 2) }));
+    poner(ruta, await M.e1({ movs: M.MOVS_BASE.slice(0, 2) }));
     const r = await importarCarpeta(raiz);
-    expect(r.archivos.find((a) => a.ruta.includes(`${IBAN_BCT} 0826`))).toMatchObject({ estado: "error", error: expect.stringMatching(/conciliaciones/) });
-    // los movimientos anteriores siguen intactos
-    expect(await prisma.movimiento.count({ where: { archivo: { ruta: `ZFL/${IBAN_BCT} 0826 ZFL.xlsx` } } })).toBe(3);
+    expect(r.archivos.find((a) => a.ruta.includes(`${IBAN_BCT} 0826`))).toMatchObject({ estado: "leido" });
+    expect(await prisma.movimiento.count({ where: { archivo: { ruta } } })).toBe(2);
+    // el vencimiento sigue ahí y la decisión sigue vigente con su huella del pago
+    expect(await prisma.vencimiento.findUnique({ where: { id: ven.id } })).toMatchObject({ estado: "pagado" });
+    expect(await prisma.decisionManual.findUniqueOrThrow({ where: { id: decision.id } })).toMatchObject({ vigente: true, claveMovimiento: mov.claveDedup });
   });
 
   it("DM queda como sociedad con sus movimientos (el catálogo vacío no impide importar)", async () => {

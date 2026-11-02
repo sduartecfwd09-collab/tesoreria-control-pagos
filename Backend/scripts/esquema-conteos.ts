@@ -22,6 +22,12 @@ try {
     total += Number(n);
   }
   console.log(`${tablas.length} tablas, ${total} filas en total`);
+  // Antes de la limpieza del esquema: solo dos números (nunca contenido). Si la tabla o la columna ya no existen, se dice.
+  const numero = async (consulta: string) => Number((await cliente!.$queryRawUnsafe<{ n: bigint }[]>(consulta))[0]!.n);
+  const hayConciliacion = (await numero("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'Conciliacion'")) > 0;
+  const hayResponsable = (await numero("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'Obligacion' AND column_name = 'responsable'")) > 0;
+  console.log(`limpieza · filas en Conciliacion: ${hayConciliacion ? await numero("SELECT COUNT(*) AS n FROM `Conciliacion`") : "la tabla ya no existe"}`);
+  console.log(`limpieza · obligaciones con «responsable» escrito: ${hayResponsable ? await numero("SELECT COUNT(*) AS n FROM `Obligacion` WHERE `responsable` IS NOT NULL AND TRIM(`responsable`) <> ''") : "la columna ya no existe"}`);
 } catch (e) {
   const tipo = e instanceof Error ? ((e as { code?: string }).code ?? e.name) : "desconocido";
   console.log(`conteo: falló (${tipo})`);

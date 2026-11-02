@@ -33,7 +33,7 @@ function textoRegeneracion(r: Regeneracion | null): string {
     r.creados && `${r.creados} creados`,
     r.actualizados && `${r.actualizados} ajustados`,
     r.eliminados && `${r.eliminados} eliminados`,
-    r.protegidos && `${r.protegidos} sin tocar por tener pago conciliado`,
+    r.protegidos && `${r.protegidos} sin tocar por estar pagados o con aviso`,
   ].filter(Boolean);
   return partes.length ? ` Vencimientos futuros: ${partes.join(", ")}.` : " No hubo que ajustar vencimientos futuros.";
 }

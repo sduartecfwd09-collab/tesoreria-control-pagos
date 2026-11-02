@@ -66,9 +66,6 @@ describe("el responsable es el tesorero de la sociedad y solo lo recibe Jefatura
     const app = await crearApp({ reloj, modoPruebas: true });
     const jefatura = (await app.inject({ method: "GET", url: "/api/obligaciones/resumen", headers: encabezado(jefa) })).json().datos;
     expect(jefatura.sinResponsable).toBe(1);
-    // una obligación con texto propio en la columna antigua no cambia nada: manda la sociedad
-    await prisma.obligacion.updateMany({ where: { sociedadId: sinTesoreroId }, data: { responsable: "Alguien" } });
-    expect((await app.inject({ method: "GET", url: "/api/obligaciones/resumen", headers: encabezado(jefa) })).json().datos.sinResponsable).toBe(1);
     // al asignar un tesorero a la sociedad, baja
     await prisma.sociedad.update({ where: { id: sinTesoreroId }, data: { tesoreroId: ana } });
     expect((await app.inject({ method: "GET", url: "/api/obligaciones/resumen", headers: encabezado(jefa) })).json().datos.sinResponsable).toBe(0);

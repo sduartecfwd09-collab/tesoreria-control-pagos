@@ -98,7 +98,7 @@ describe("mantenimiento de los vencimientos futuros (reloj inyectado)", () => {
     expect(await fechas(ids.mensual)).toEqual(["2026-08:2026-08-15", "2026-09:2026-09-15", "2026-11:2026-11-15"]);
   });
 
-  it("nunca toca un vencimiento con conciliación", async () => {
+  it("nunca toca un vencimiento ya pagado (con su pago asociado)", async () => {
     await prisma.obligacion.update({ where: { id: ids.mensual }, data: { controlDesde: desde("2026-09") } });
     await generarRango("2026-09", "2026-10");
     const oct = await prisma.vencimiento.findFirstOrThrow({ where: { obligacionId: ids.mensual, periodo: "2026-10" } });
@@ -107,15 +107,15 @@ describe("mantenimiento de los vencimientos futuros (reloj inyectado)", () => {
     const mov = await prisma.movimiento.create({
       data: { cuentaId: cuenta.id, archivoId: archivo.id, hoja: "H", fila: 1, periodo: "2026-10", fecha: new Date(), debito: 1, credito: 0, claveDedup: "k" },
     });
-    await prisma.conciliacion.create({ data: { vencimientoId: oct.id, movimientoId: mov.id, tipoCruce: "manual", estado: "claro" } });
+    await prisma.vencimiento.update({ where: { id: oct.id }, data: { estado: "pagado", movimientoId: mov.id } });
 
     await prisma.obligacion.update({ where: { id: ids.mensual }, data: { diaEsperadoPago: 25, activa: false } });
     const r = await sincronizarVencimientos(reloj(2026, 9, 1), ids.mensual);
-    expect(r).toEqual({ creados: 0, actualizados: 0, eliminados: 1, protegidos: 1 }); // sep se elimina (desactivada); oct se protege
+    expect(r).toEqual({ creados: 0, actualizados: 0, eliminados: 1, protegidos: 1 }); // sep se elimina (desactivada); oct se protege por estar pagado
     expect(await fechas(ids.mensual)).toEqual(["2026-10:2026-10-15"]);
   });
 
-  it("al desactivar conserva los pasados, los pagados y los futuros pagados; borra solo los futuros sin pagar ni conciliar", async () => {
+  it("al desactivar conserva los pasados, los pagados y los futuros pagados; borra solo los futuros sin pagar", async () => {
     await generarRango("2026-08", "2026-12");
     await prisma.vencimiento.updateMany({ where: { obligacionId: ids.mensual, periodo: "2026-10" }, data: { estado: "pagado" } });
     await prisma.vencimiento.updateMany({ where: { obligacionId: ids.mensual, periodo: "2026-11" }, data: { estado: "pagado_con_inconsistencia" } });

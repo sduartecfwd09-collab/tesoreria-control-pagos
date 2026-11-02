@@ -333,7 +333,6 @@ export interface Vencimiento {
   sinInfoHasta: string | null;
   textoEstado: string | null;
   pago: PagoVencimiento | null;
-  conciliado: boolean;
   futuro: boolean;
   /** pago asociado a mano: quién, cuándo (instante UTC) y por qué; null si no hay una asociación vigente */
   asociadoAMano: AsociacionManual | null;

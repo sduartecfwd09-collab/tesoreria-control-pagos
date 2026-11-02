@@ -9,7 +9,6 @@ export async function vaciarImportaciones() {
   await prisma.decisionManual.deleteMany();
   await prisma.catalogoRevision.deleteMany();
   await prisma.cambioDia.deleteMany();
-  await prisma.conciliacion.deleteMany();
   await prisma.alerta.deleteMany();
   await prisma.movimiento.deleteMany();
   await prisma.archivoImportado.deleteMany();

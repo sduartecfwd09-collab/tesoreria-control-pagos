@@ -29,7 +29,7 @@ export async function obligacionParaPlan(id: number): Promise<ObligacionPlan | n
 export async function vencimientosDeObligaciones(obligacionIds: number[]) {
   return prisma.vencimiento.findMany({
     where: { obligacionId: { in: obligacionIds } },
-    include: { _count: { select: { conciliaciones: true, alertas: true, cambiosDia: true } } },
+    include: { _count: { select: { alertas: true, cambiosDia: true } } },
   });
 }
 
@@ -47,7 +47,7 @@ export interface CambiosVencimientos {
 
 export async function aplicarCambios(c: CambiosVencimientos) {
   await prisma.$transaction(async (tx) => {
-    if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, estado: { notIn: ESTADOS_PAGADOS }, conciliaciones: { none: {} }, alertas: { none: {} }, cambiosDia: { none: {} } } });
+    if (c.eliminar.length > 0) await tx.vencimiento.deleteMany({ where: { id: { in: c.eliminar }, estado: { notIn: ESTADOS_PAGADOS }, alertas: { none: {} }, cambiosDia: { none: {} } } });
     for (const { id, ...data } of c.actualizar) await tx.vencimiento.update({ where: { id }, data });
     if (c.crear.length > 0) await tx.vencimiento.createMany({ data: c.crear });
   });
@@ -112,7 +112,7 @@ export async function listarVencimientos(f: FiltroVencimientos) {
     prisma.vencimiento.findMany({
       where,
       include: {
-        obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } }, sociedad: true, categoria: true, _count: { select: { conciliaciones: true } },
+        obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } }, sociedad: true, categoria: true,
         // el pago que respalda el estado: solo fecha, monto y la cuenta (para su moneda, banco y últimos 4)
         movimiento: { select: { fecha: true, debito: true, claveDedup: true, cuenta: { select: { numero: true, banco: true, moneda: true } } } },
       },
