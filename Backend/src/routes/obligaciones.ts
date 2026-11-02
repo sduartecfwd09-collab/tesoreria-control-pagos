@@ -17,6 +17,7 @@ import { huellaActual, revisionConEfecto, revisionesConEfecto } from "../domain/
 import { usuarioActual, type UsuarioActual } from "../identidad/usuario-actual.js";
 import { revisionesVigentes } from "../repositories/decisiones.js";
 import { marcarRevisada, quitarRevision } from "../revisiones/obligacion.js";
+import { cambiarDia } from "../obligaciones/cambiar-dia.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
 import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
@@ -28,7 +29,8 @@ import {
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { proximoPago } from "../domain/vencimientos.js";
-import { hoyDe, type Reloj } from "../domain/reloj.js";
+import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
+import { cambiosDiaProgramados } from "../repositories/cambios-dia.js";
 import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 
 // Campos que cambian los vencimientos: al editarlos se regeneran los futuros sin conciliación.
@@ -55,6 +57,9 @@ const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
 interface ContextoRevision {
   revisiones: Awaited<ReturnType<typeof revisionesVigentes>>;
   persona: UsuarioActual | null;
+  /** cambios permanentes del día con mes de inicio, por obligación, y el mes en curso (para decir cuál está programado) */
+  cambiosDia: Awaited<ReturnType<typeof cambiosDiaProgramados>>;
+  mesEnCurso: string;
 }
 
 function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null, conResponsable: boolean, ctx: ContextoRevision) {
@@ -69,6 +74,8 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     categoriaId: o.categoriaId, categoria: o.categoria.nombre,
     proveedor: o.proveedor, identificador: o.identificador,
     diaEsperadoPago: o.diaEsperadoPago, diaEditado: o.diaEditado,
+    // el próximo cambio de día ya programado (empieza en un mes posterior al actual) o null
+    diaProgramado: (ctx.cambiosDia.get(o.id) ?? []).filter((x) => x.desde > ctx.mesEnCurso).at(-1) ?? null,
     frecuencia: o.frecuencia, frecuenciaPorConfirmar: o.frecuenciaPorConfirmar, mesArranque: o.mesArranque,
     montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
     cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: enmascararCuenta(o.cuentaEsperada.numero), banco: o.cuentaEsperada.banco } : null,
@@ -90,8 +97,9 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
 /** Próximo pago calculado de cada obligación (fecha ISO o null). */
 async function proximosPagos(obs: ObligacionCompleta[], reloj: Reloj): Promise<Map<number, string | null>> {
   const hoy = hoyDe(reloj);
+  const cambios = await cambiosDiaProgramados(obs.map((o) => o.id));
   return new Map(obs.map((o) => {
-    const f = proximoPago({ ...o, controlDesde: periodoDeControl(o.controlDesde) }, hoy);
+    const f = proximoPago({ ...o, controlDesde: periodoDeControl(o.controlDesde), cambiosDia: cambios.get(o.id) ?? [] }, hoy);
     return [o.id, f ? f.toISOString().slice(0, 10) : null];
   }));
 }
@@ -119,7 +127,7 @@ function calidadParaPersona<T extends { sinResponsable: number }>(c: T, esJefatu
 const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.code(422).send({ error, ...(campo ? { campo } : {}) });
 
 export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
-  const contextoDeRevision = async (req: Parameters<typeof usuarioActual>[0]): Promise<ContextoRevision> => ({ revisiones: await revisionesVigentes(), persona: await usuarioActual(req, opts.modoPruebas) });
+  const contextoDeRevision = async (req: Parameters<typeof usuarioActual>[0]): Promise<ContextoRevision> => ({ revisiones: await revisionesVigentes(), persona: await usuarioActual(req, opts.modoPruebas), cambiosDia: await cambiosDiaProgramados(), mesEnCurso: periodoDe(hoyDe(opts.reloj)) });
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
     return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, tesorero: x.tesorero?.nombre ?? null, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
@@ -288,6 +296,24 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const estado = { permiso: 403, validacion: 422, no_encontrado: 404, conflicto: 409 }[e.codigo];
     return reply.code(estado).send({ error: e.message, ...(e.campo ? { campo: e.campo } : {}) });
   };
+
+  // Cambio permanente del día de pago desde un mes (nuevoDia, desdeMes, aplicaAlMesEnCurso si hay que decidirlo, motivo). 401 sin persona, 404, 403 fuera de su
+  // sociedad, 422 en validación (incluye pedir «aplicaAlMesEnCurso» cuando el pago de este mes sigue pendiente).
+  app.post("/api/obligaciones/:id/cambiar-dia", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
+    const id = idParam.safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
+    const o = await obtenerObligacion(id.data);
+    if (!o) return reply.code(404).send({ error: "Obligación no encontrada" });
+    if (!puedeEscribirEnSociedad(persona, o.sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+    const cuerpo = (req.body ?? {}) as { nuevoDia?: unknown; desdeMes?: unknown; aplicaAlMesEnCurso?: unknown; motivo?: unknown };
+    try {
+      return { datos: await cambiarDia({ obligacion: o, nuevoDia: cuerpo.nuevoDia, desdeMes: cuerpo.desdeMes, aplicaAlMesEnCurso: cuerpo.aplicaAlMesEnCurso, motivo: cuerpo.motivo, autor: autorDe(persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return responderErrorDeServicio(reply, e);
+    }
+  });
 
   app.post("/api/obligaciones/:id/marcar-revisada", async (req, reply) => {
     const g = await paraRevisar(req, reply);

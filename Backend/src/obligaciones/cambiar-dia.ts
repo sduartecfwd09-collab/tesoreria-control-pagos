@@ -1,62 +1,69 @@
-// Servicios del cambio del día de pago. El «día» es el día de pago interno de Tesorería (antes del vencimiento real
-// del recibo); «Vencido» = ese día pasó sin pago. Reciben a quien actúa y verifican el permiso: el tesorero asignado
-// a la sociedad (en sus sociedades) y Jefatura (en todas). No hay ruta HTTP: la identidad llega con el login (Hito 4A).
-import { diaValido, fechaDesdeTexto, normalizarMotivo } from "../domain/cambio-dia.js";
-import { ErrorDeServicio, puedeCambiarDiaDe } from "../domain/permisos.js";
-import { hoyDe, type Reloj } from "../domain/reloj.js";
-import { ESTADOS_PAGADOS } from "../domain/vencimientos.js";
-import {
-  obligacionConSociedad, registrarCambioDeUnaVez, registrarCambioPermanente, vencimientoConSociedad,
-} from "../repositories/cambios-dia.js";
-import { obtenerActor } from "../repositories/usuarios.js";
+// Cambio PERMANENTE del día de pago de una obligación, desde un mes (AAAA-MM) en adelante. No toca los meses anteriores; el calendario usa
+// el día que rige en cada periodo (domain/vencimientos.ts, diaDelPeriodo). Si el cambio rige desde un mes posterior al actual y el vencimiento del
+// mes en curso sigue pendiente, hay que decir si el nuevo día también aplica a este mes (aplicaAlMesEnCurso). Los permisos (persona y sociedad)
+// los verifica la ruta; aquí van las reglas del negocio. El registro del historial se guarda en la MISMA transacción.
+import { prisma } from "../db.js";
+import { diaValido, normalizarMotivo } from "../domain/cambio-dia.js";
+import { lineaDeCambiarDia, validarDesdeMes } from "../domain/mover-fecha.js";
+import { ErrorDeServicio } from "../domain/permisos.js";
+import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
+import { diaDelPeriodo, ESTADOS_PAGADOS } from "../domain/vencimientos.js";
+import { cambiosDiaProgramados, registrarCambioPermanente, vencimientoDelPeriodo } from "../repositories/cambios-dia.js";
+import { insertarHistorial, type AutorDelCambio } from "../repositories/historial.js";
+import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 
-const SIN_PERMISO = "No tiene permiso para cambiar el día de pago de esta sociedad";
-const MOTIVO_OBLIGATORIO = "Indique el motivo del cambio (entre 3 y 300 caracteres)";
+export type ObligacionParaCambiarDia = { id: number; sociedadId: number; diaEsperadoPago: number | null };
 
-async function actorDe(id: number) {
-  const a = await obtenerActor(id);
-  if (!a) throw new ErrorDeServicio("permiso", SIN_PERMISO);
-  return a;
+export interface ResultadoCambioDia {
+  /** el mes desde el que rige de verdad el nuevo día (el en curso si se eligió aplicarlo también a este mes) */
+  desde: string;
+  dia: number;
+  /** vencimientos futuros del calendario que se corrigieron */
+  actualizados: number;
 }
 
-export interface ResultadoPermanente {
-  vencimientosMovidos: number;
-}
+/** ¿El vencimiento del mes en curso sigue pendiente y aún no pasó su fecha? (solo entonces tiene sentido preguntar). */
+const estaPendienteYFuturo = (v: { fecha: Date; estado: string } | null, hoy: Date): boolean =>
+  v !== null && v.fecha >= hoy && !ESTADOS_PAGADOS.includes(v.estado) && v.estado !== "justificado";
 
-/** Cambio permanente: afecta solo a los vencimientos futuros no pagados. Los pasados y los pagados no se tocan. */
-export async function cambiarDiaPermanente(
-  d: { actorId: number; obligacionId: number; diaNuevo: number; motivo: unknown },
+export async function cambiarDia(
+  d: { obligacion: ObligacionParaCambiarDia; nuevoDia: unknown; desdeMes: unknown; aplicaAlMesEnCurso: unknown; motivo: unknown; autor: AutorDelCambio },
   reloj: Reloj,
-): Promise<ResultadoPermanente> {
-  const actor = await actorDe(d.actorId);
-  const o = await obligacionConSociedad(d.obligacionId);
-  if (!o) throw new ErrorDeServicio("no_encontrado", "Obligación no encontrada");
-  if (!puedeCambiarDiaDe(actor, o.sociedad)) throw new ErrorDeServicio("permiso", SIN_PERMISO);
+): Promise<ResultadoCambioDia> {
+  const o = d.obligacion;
+  const hoy = hoyDe(reloj);
+  const mesEnCurso = periodoDe(hoy);
+  if (!diaValido(d.nuevoDia)) throw new ErrorDeServicio("validacion", "El día de pago debe ser un número entero de 1 a 31", "nuevoDia");
+  const desde = validarDesdeMes(d.desdeMes, mesEnCurso);
+  if (!desde.ok) throw new ErrorDeServicio("validacion", desde.error, "desdeMes");
   const motivo = normalizarMotivo(d.motivo);
-  if (!motivo) throw new ErrorDeServicio("validacion", MOTIVO_OBLIGATORIO);
-  if (!diaValido(d.diaNuevo)) throw new ErrorDeServicio("validacion", "El día de pago debe ser un número entero de 1 a 31");
-  if (o.diaEsperadoPago === d.diaNuevo) throw new ErrorDeServicio("validacion", "El día indicado es el mismo que ya tiene la obligación");
-  return registrarCambioPermanente({
-    obligacionId: o.id, diaAnterior: o.diaEsperadoPago, diaNuevo: d.diaNuevo, motivo, usuarioId: actor.id, hoy: hoyDe(reloj),
-  });
-}
+  if (motivo === null) throw new ErrorDeServicio("validacion", "Indique el motivo (entre 3 y 300 caracteres)", "motivo");
+  if (o.diaEsperadoPago === null) throw new ErrorDeServicio("validacion", "Esta obligación todavía no tiene día de pago: indíquelo al editarla", "nuevoDia");
 
-/** De una sola vez: cambia la fecha de un vencimiento concreto; el vencimiento conserva su fecha original. */
-export async function cambiarFechaDeUnaVez(d: { actorId: number; vencimientoId: number; fechaNueva: unknown; motivo: unknown }): Promise<void> {
-  const actor = await actorDe(d.actorId);
-  const v = await vencimientoConSociedad(d.vencimientoId);
-  if (!v) throw new ErrorDeServicio("no_encontrado", "Vencimiento no encontrado");
-  if (!puedeCambiarDiaDe(actor, v.obligacion.sociedad)) throw new ErrorDeServicio("permiso", SIN_PERMISO);
-  const motivo = normalizarMotivo(d.motivo);
-  if (!motivo) throw new ErrorDeServicio("validacion", MOTIVO_OBLIGATORIO);
-  const fechaNueva = fechaDesdeTexto(d.fechaNueva);
-  if (!fechaNueva) throw new ErrorDeServicio("validacion", "La fecha nueva debe tener el formato AAAA-MM-DD y ser una fecha real");
-  if (ESTADOS_PAGADOS.includes(v.estado) || v._count.conciliaciones > 0) {
-    throw new ErrorDeServicio("conflicto", "Un vencimiento pagado o conciliado no se puede mover");
+  const cambios = (await cambiosDiaProgramados([o.id])).get(o.id) ?? [];
+  const planBase = { diaEsperadoPago: o.diaEsperadoPago, cambiosDia: cambios };
+  if (diaDelPeriodo(planBase, desde.desde) === d.nuevoDia) throw new ErrorDeServicio("validacion", "Ese ya es el día de pago que rige desde ese mes", "nuevoDia");
+
+  // ¿hay que preguntar por el mes en curso? Solo si el cambio empieza después, el pago de este mes sigue pendiente y el día cambiaría
+  let efectivo = desde.desde;
+  if (desde.desde > mesEnCurso) {
+    const actual = await vencimientoDelPeriodo(o.id, mesEnCurso);
+    const cambiaria = diaDelPeriodo(planBase, mesEnCurso) !== d.nuevoDia;
+    if (cambiaria && estaPendienteYFuturo(actual, hoy)) {
+      if (typeof d.aplicaAlMesEnCurso !== "boolean") {
+        throw new ErrorDeServicio("validacion", "Este mes todavía hay un pago pendiente de esta obligación. Indique si el nuevo día también aplica a este mes.", "aplicaAlMesEnCurso");
+      }
+      if (d.aplicaAlMesEnCurso) efectivo = mesEnCurso;
+    }
   }
-  if (fechaNueva.getTime() === v.fecha.getTime()) throw new ErrorDeServicio("validacion", "La fecha indicada es la misma que ya tiene el vencimiento");
-  await registrarCambioDeUnaVez({
-    vencimientoId: v.id, obligacionId: v.obligacionId, fechaActual: v.fecha, fechaOriginalActual: v.fechaOriginal,
-    fechaNueva, motivo, usuarioId: actor.id,
+
+  const diaAnterior = diaDelPeriodo(planBase, efectivo);
+  await prisma.$transaction(async (tx) => {
+    await registrarCambioPermanente(tx, {
+      obligacionId: o.id, diaAnterior, diaNuevo: d.nuevoDia as number, desde: efectivo, motivo, usuarioId: d.autor.id, modoPruebas: d.autor.modoPruebas, cambiaElDiaBase: efectivo <= mesEnCurso,
+    });
+    await insertarHistorial(tx, { obligacionId: o.id, sociedadId: o.sociedadId, autor: d.autor, lineas: [lineaDeCambiarDia(diaAnterior, d.nuevoDia as number, efectivo)], motivo });
   });
+  const { calendario } = await actualizarVencimientos(reloj, o.id);
+  return { desde: efectivo, dia: d.nuevoDia as number, actualizados: calendario.actualizados };
 }

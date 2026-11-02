@@ -116,6 +116,12 @@ export const DEFINICIONES: DefinicionParametro[] = [
     tipo: "entero", ambito: "global", valorInicial: "3", unidad: "días", min: 0, max: 60, supuesto: false, visible: false,
   },
   {
+    clave: "mover_fecha_max_dias",
+    etiqueta: "Días máximos para mover una fecha",
+    ayuda: "Cuántos días, hacia atrás o hacia adelante, puede quedar la fecha movida respecto de la fecha original del vencimiento.",
+    tipo: "entero", ambito: "global", valorInicial: "60", unidad: "días", min: 1, max: 365, supuesto: true, visible: false,
+  },
+  {
     clave: "dias_espera_vencido",
     etiqueta: "Días de espera antes de marcar Vencido",
     ayuda: "Cuántos días después de la fecha de pago se espera el pago antes de marcarlo como «Vencido». Durante la espera el pago sigue como «Por vencer».",

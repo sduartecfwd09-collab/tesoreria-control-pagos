@@ -15,10 +15,10 @@ export interface DatosEditables {
   cuentaEsperadaId: number | null;
 }
 
-export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion" | "marcar_revisada" | "quitar_revision";
+export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion" | "marcar_revisada" | "quitar_revision" | "mover_fecha" | "quitar_movimiento" | "cambiar_dia";
 
 /** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
-export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision"];
+export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision", "mover_fecha", "quitar_movimiento", "cambiar_dia"];
 
 export interface LineaCambio {
   accion: AccionHistorial;

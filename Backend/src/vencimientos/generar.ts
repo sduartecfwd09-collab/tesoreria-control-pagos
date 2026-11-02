@@ -5,9 +5,10 @@
 // pasado, pagado, conciliado o con avisos.
 import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
 import { aNumero } from "../domain/montos.js";
-import { copiaDe, ESTADOS_PAGADOS, periodosEntre, planificar, type VencimientoPlan } from "../domain/vencimientos.js";
+import { copiaDe, diaDelPeriodo, ESTADOS_PAGADOS, periodosEntre, planificar, type VencimientoPlan } from "../domain/vencimientos.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { mayorAvisoDeUsuarios } from "../repositories/usuarios.js";
+import { fijarDiaBase } from "../repositories/cambios-dia.js";
 import { aplicarCambios, type CambiosVencimientos, obligacionesParaPlan, obligacionParaPlan, vencimientosDeObligaciones } from "../repositories/vencimientos.js";
 
 const MS_DIA = 86_400_000;
@@ -61,6 +62,12 @@ export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: numbe
 
   const cambios: CambiosVencimientos = { crear: [], actualizar: [], eliminar: [] };
   for (const o of obligaciones) {
+    // llegó el mes de un cambio de día programado: el día base de la obligación pasa a ser el que rige hoy
+    const diaDeHoy = diaDelPeriodo(o, periodoDe(hoy));
+    if (diaDeHoy !== null && diaDeHoy !== o.diaEsperadoPago) {
+      await fijarDiaBase(o.id, diaDeHoy);
+      o.diaEsperadoPago = diaDeHoy;
+    }
     const propios = existentes.get(o.id) ?? [];
     // sin «Control desde» definido se controla desde el mes de hoy
     const desde = o.controlDesde ?? periodoDe(hoy);
@@ -82,7 +89,7 @@ export async function sincronizarVencimientos(reloj: Reloj, obligacionId?: numbe
       const fecha = movido ? v.fecha : d.fecha;
       const fechaOriginal = movido && d.fecha.getTime() !== v.fecha.getTime() ? d.fecha : null;
       // la copia de los datos de la obligación también se actualiza (solo en estos vencimientos futuros, no pagados y sin conciliación)
-      const copia = copiaDe(o);
+      const copia = copiaDe(o, v.periodo);
       const copiaIgual = (Object.keys(copia) as (keyof typeof copia)[]).every((k) => v[k] === copia[k]);
       if (!copiaIgual || fecha.getTime() !== v.fecha.getTime() || fechaOriginal?.getTime() !== v.fechaOriginal?.getTime() || d.montoEsperado !== aNumero(v.montoEsperado)) {
         cambios.actualizar.push({ id: v.id, fecha, fechaOriginal, montoEsperado: d.montoEsperado, ...copia });

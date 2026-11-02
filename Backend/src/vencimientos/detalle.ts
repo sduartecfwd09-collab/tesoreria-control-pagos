@@ -9,6 +9,7 @@ import { enmascararCuenta, enmascararSalvo } from "../domain/enmascarar.js";
 import { identificadorClave, patronIdentificador } from "../domain/identificadores.js";
 import { aNumero } from "../domain/montos.js";
 import { responsableEfectivo } from "../domain/obligaciones.js";
+import { rangoDeMover, topeDeMover } from "../domain/mover-fecha.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { normalizar } from "../ingest/utiles.js";
@@ -134,6 +135,10 @@ export async function detalleDeVencimiento(id: number, reloj: Reloj) {
     movida: v.fechaOriginal !== null,
     /** quién movió la fecha, si se guardó; solo con la fecha movida */
     fechaMovidaPor: v.fechaOriginal !== null ? v.cambiosDia[0]?.usuario.nombre ?? null : null,
+    /** quién movió la fecha, cuándo (instante UTC) y por qué; solo con la fecha movida */
+    movidaPor: v.fechaOriginal !== null && v.cambiosDia[0] ? { quien: v.cambiosDia[0].usuario.nombre, cuando: v.cambiosDia[0].creadoEn.toISOString(), motivo: v.cambiosDia[0].motivo } : null,
+    /** hasta dónde se puede mover la fecha: la original más o menos el tope de días (parámetro `mover_fecha_max_dias`) */
+    rangoMoverFecha: rangoDeMover(v.fechaOriginal ?? v.fecha, topeDeMover(await valorGlobal("mover_fecha_max_dias"))),
     estado: v.estado,
     motivo: v.motivo,
     textoEstado: v.estado === "sin_informacion" ? (v.motivo === MOTIVOS.sinInformacionSaldo ? TEXTO_SALDO_NO_CUADRA : v.motivo === MOTIVOS.sinInformacionImagen ? TEXTO_SALDO_IMAGEN : v.motivo === MOTIVOS.sinInformacionDesde ? textoSinEstadosAnteriores(datosDesde ? iso(datosDesde) : null) : textoFaltanEstados(v.sinInfoHasta ? iso(v.sinInfoHasta) : null)) : textoEstadoLista({ estado: v.estado, motivo: v.motivo, dias, fecha: iso(v.fecha), fechaHasta: iso(hasta) }),

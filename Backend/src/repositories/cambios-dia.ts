@@ -1,76 +1,76 @@
-// Historial de cambios del día de pago. Solo se inserta: este módulo no ofrece edición ni borrado (la lectura llega con la pantalla del historial).
+// Historial de cambios del día de pago y de la fecha de un vencimiento. Solo se inserta: este módulo no ofrece edición ni borrado.
+// permanente: un nuevo día de pago de la obligación desde un mes (aplicaDesde); una_vez: mueve la fecha de UN vencimiento;
+// quita_mov: devuelve ese vencimiento a su fecha original. Cada función recibe la transacción para guardarse junto al historial.
 import { prisma } from "../db.js";
-import { ESTADOS_PAGADOS, fechaVencimiento } from "../domain/vencimientos.js";
+import type { Prisma } from "../generated/prisma/client.js";
+import type { CambioDiaProgramado } from "../domain/vencimientos.js";
 
 export async function obligacionConSociedad(id: number) {
   return prisma.obligacion.findUnique({ where: { id }, include: { sociedad: { select: { id: true, tesoreroId: true } } } });
 }
 
-export async function vencimientoConSociedad(id: number) {
-  return prisma.vencimiento.findUnique({
-    where: { id },
-    include: { obligacion: { include: { sociedad: { select: { id: true, tesoreroId: true } } } }, _count: { select: { conciliaciones: true } } },
+/** Cambios permanentes con mes de inicio de cada obligación, de menor a mayor «desde» (a igual mes, el más reciente va al final y manda). */
+export async function cambiosDiaProgramados(obligacionIds?: number[]): Promise<Map<number, CambioDiaProgramado[]>> {
+  const filas = await prisma.cambioDia.findMany({
+    where: { ...(obligacionIds ? { obligacionId: { in: obligacionIds } } : {}), tipo: "permanente", aplicaDesde: { not: null }, diaNuevo: { not: null } },
+    orderBy: [{ aplicaDesde: "asc" }, { id: "asc" }],
+    select: { obligacionId: true, aplicaDesde: true, diaNuevo: true },
+  });
+  const r = new Map<number, CambioDiaProgramado[]>();
+  for (const f of filas) {
+    const lista = r.get(f.obligacionId) ?? [];
+    lista.push({ desde: f.aplicaDesde!, dia: f.diaNuevo! });
+    r.set(f.obligacionId, lista);
+  }
+  return r;
+}
+
+/** El vencimiento del periodo de una obligación con lo que hace falta para decidir si se pregunta por el mes en curso. */
+export async function vencimientoDelPeriodo(obligacionId: number, periodo: string) {
+  return prisma.vencimiento.findFirst({ where: { obligacionId, periodo }, select: { id: true, fecha: true, estado: true } });
+}
+
+/** Guarda el nuevo día. Si rige desde el mes en curso (o antes) el día base cambia ya y la obligación queda como «día editado» (el importador no lo pisa). */
+export async function registrarCambioPermanente(
+  tx: Prisma.TransactionClient,
+  c: { obligacionId: number; diaAnterior: number | null; diaNuevo: number; desde: string; motivo: string; usuarioId: number; modoPruebas: boolean; cambiaElDiaBase: boolean },
+): Promise<void> {
+  if (c.cambiaElDiaBase) await tx.obligacion.update({ where: { id: c.obligacionId }, data: { diaEsperadoPago: c.diaNuevo, diaEditado: true } });
+  await tx.cambioDia.create({
+    data: { obligacionId: c.obligacionId, tipo: "permanente", diaAnterior: c.diaAnterior, diaNuevo: c.diaNuevo, aplicaDesde: c.desde, motivo: c.motivo, usuarioId: c.usuarioId, modoPruebas: c.modoPruebas },
   });
 }
 
-export interface CambioPermanente {
-  obligacionId: number;
-  diaAnterior: number | null;
-  diaNuevo: number;
-  motivo: string;
-  usuarioId: number;
-  hoy: Date;
+/** Cuando llega el mes de un cambio programado, el día base de la obligación pasa a ser el vigente (el calendario ya lo usaba por mes). */
+export async function fijarDiaBase(obligacionId: number, dia: number): Promise<void> {
+  await prisma.obligacion.update({ where: { id: obligacionId }, data: { diaEsperadoPago: dia, diaEditado: true } });
 }
 
-/**
- * Cambia el día de la obligación y mueve solo sus vencimientos futuros, no pagados y sin conciliación.
- * Un vencimiento que ya se había movido «de una sola vez» conserva su fecha vigente: solo se actualiza su fecha original.
- * Los pasados y los pagados no se tocan. Todo en una transacción junto con el registro del historial.
- */
-export async function registrarCambioPermanente(c: CambioPermanente): Promise<{ vencimientosMovidos: number }> {
-  return prisma.$transaction(async (tx) => {
-    await tx.obligacion.update({ where: { id: c.obligacionId }, data: { diaEsperadoPago: c.diaNuevo, diaEditado: true } });
-    const afectados = await tx.vencimiento.findMany({
-      where: { obligacionId: c.obligacionId, fecha: { gte: c.hoy }, estado: { notIn: ESTADOS_PAGADOS }, conciliaciones: { none: {} } },
-    });
-    let movidos = 0;
-    for (const v of afectados) {
-      const nueva = fechaVencimiento(v.periodo, c.diaNuevo);
-      const manual = v.fechaOriginal !== null;
-      const data = { dia: c.diaNuevo, ...(manual ? { fechaOriginal: nueva.getTime() === v.fecha.getTime() ? null : nueva } : { fecha: nueva }) };
-      await tx.vencimiento.update({ where: { id: v.id }, data });
-      if (!manual && nueva.getTime() !== v.fecha.getTime()) movidos++;
-    }
-    await tx.cambioDia.create({
-      data: { obligacionId: c.obligacionId, tipo: "permanente", diaAnterior: c.diaAnterior, diaNuevo: c.diaNuevo, motivo: c.motivo, usuarioId: c.usuarioId },
-    });
-    return { vencimientosMovidos: movidos };
+/** Mueve la fecha de UN vencimiento (solo si sigue con la fecha que se vio). Devuelve false si otro cambio se adelantó. */
+export async function registrarMovimiento(
+  tx: Prisma.TransactionClient,
+  c: { vencimientoId: number; obligacionId: number; fechaVista: Date; fechaNueva: Date; fechaOriginal: Date; motivo: string; usuarioId: number; modoPruebas: boolean },
+): Promise<boolean> {
+  const r = await tx.vencimiento.updateMany({
+    where: { id: c.vencimientoId, fecha: c.fechaVista },
+    data: { fecha: c.fechaNueva, fechaOriginal: c.fechaNueva.getTime() === c.fechaOriginal.getTime() ? null : c.fechaOriginal },
   });
-}
-
-export interface CambioDeUnaVez {
-  vencimientoId: number;
-  obligacionId: number;
-  fechaActual: Date;
-  fechaOriginalActual: Date | null;
-  fechaNueva: Date;
-  motivo: string;
-  usuarioId: number;
-}
-
-/** Mueve la fecha de un vencimiento concreto; conserva la fecha original (la primera que tuvo) y deja el registro. */
-export async function registrarCambioDeUnaVez(c: CambioDeUnaVez): Promise<void> {
-  const original = c.fechaOriginalActual ?? c.fechaActual;
-  await prisma.$transaction(async (tx) => {
-    await tx.vencimiento.update({
-      where: { id: c.vencimientoId },
-      data: { fecha: c.fechaNueva, fechaOriginal: original.getTime() === c.fechaNueva.getTime() ? null : original },
-    });
-    await tx.cambioDia.create({
-      data: {
-        obligacionId: c.obligacionId, vencimientoId: c.vencimientoId, tipo: "una_vez",
-        fechaAnterior: c.fechaActual, fechaNueva: c.fechaNueva, motivo: c.motivo, usuarioId: c.usuarioId,
-      },
-    });
+  if (r.count === 0) return false;
+  await tx.cambioDia.create({
+    data: { obligacionId: c.obligacionId, vencimientoId: c.vencimientoId, tipo: "una_vez", fechaAnterior: c.fechaVista, fechaNueva: c.fechaNueva, motivo: c.motivo, usuarioId: c.usuarioId, modoPruebas: c.modoPruebas },
   });
+  return true;
+}
+
+/** Devuelve el vencimiento a su fecha original (la que tenía el calendario). */
+export async function registrarQuitarMovimiento(
+  tx: Prisma.TransactionClient,
+  c: { vencimientoId: number; obligacionId: number; fechaVista: Date; fechaOriginal: Date; motivo: string; usuarioId: number; modoPruebas: boolean },
+): Promise<boolean> {
+  const r = await tx.vencimiento.updateMany({ where: { id: c.vencimientoId, fecha: c.fechaVista, fechaOriginal: { not: null } }, data: { fecha: c.fechaOriginal, fechaOriginal: null } });
+  if (r.count === 0) return false;
+  await tx.cambioDia.create({
+    data: { obligacionId: c.obligacionId, vencimientoId: c.vencimientoId, tipo: "quita_mov", fechaAnterior: c.fechaVista, fechaNueva: c.fechaOriginal, motivo: c.motivo, usuarioId: c.usuarioId, modoPruebas: c.modoPruebas },
+  });
+  return true;
 }

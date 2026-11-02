@@ -55,6 +55,12 @@ export interface CopiaObligacion {
   moneda: string;
 }
 
+/** Un cambio permanente del día de pago que rige desde un mes (AAAA-MM) en adelante. */
+export interface CambioDiaProgramado {
+  desde: string;
+  dia: number;
+}
+
 export interface ObligacionPlan {
   id: number;
   sociedadId: number;
@@ -69,11 +75,23 @@ export interface ObligacionPlan {
   montoEsperado: number | null;
   /** «Control desde» (AAAA-MM): antes de ese mes no se genera nada. null/ausente = sin límite. */
   controlDesde?: string | null;
+  /** cambios permanentes del día con su mes de inicio, de menor a mayor «desde» (a igual mes manda el último); ausente = ninguno */
+  cambiosDia?: CambioDiaProgramado[];
 }
 
-/** La copia que se guarda en cada vencimiento a partir de la obligación. */
-export const copiaDe = (o: ObligacionPlan): CopiaObligacion => ({
-  dia: o.diaEsperadoPago,
+/**
+ * Día de pago que rige en un periodo: el del último cambio permanente cuyo «desde» no pasa de ese periodo; sin cambios que apliquen,
+ * el día base de la obligación. Sin cambios programados el resultado es siempre el día base (idéntico a antes).
+ */
+export function diaDelPeriodo(o: { diaEsperadoPago: number | null; cambiosDia?: CambioDiaProgramado[] }, periodo: string): number | null {
+  let dia = o.diaEsperadoPago;
+  for (const c of o.cambiosDia ?? []) if (c.desde <= periodo) dia = c.dia;
+  return dia;
+}
+
+/** La copia que se guarda en cada vencimiento a partir de la obligación (con el día que rige en su periodo). */
+export const copiaDe = (o: ObligacionPlan, periodo?: string): CopiaObligacion => ({
+  dia: periodo === undefined ? o.diaEsperadoPago : diaDelPeriodo(o, periodo),
   sociedadId: o.sociedadId,
   categoriaId: o.categoriaId,
   proveedor: o.proveedor,
@@ -106,7 +124,8 @@ export function planificar(obligaciones: ObligacionPlan[], periodos: string[]): 
     for (const periodo of periodos) {
       if (o.controlDesde && periodo < o.controlDesde) continue; // antes de «Control desde» no se genera nada
       if (!tocaEnPeriodo(o.frecuencia, o.mesArranque, periodo)) continue;
-      vencimientos.push({ obligacionId: o.id, periodo, fecha: fechaVencimiento(periodo, o.diaEsperadoPago), montoEsperado: o.montoEsperado, ...copiaDe(o) });
+      const dia = diaDelPeriodo(o, periodo) ?? o.diaEsperadoPago;
+      vencimientos.push({ obligacionId: o.id, periodo, fecha: fechaVencimiento(periodo, dia), montoEsperado: o.montoEsperado, ...copiaDe(o, periodo) });
     }
   }
   return { vencimientos, omitidas };
@@ -122,7 +141,7 @@ const SIGUIENTE = (p: string) => periodosEntre(p, dePeriodoIndice(aIndice(p) + 1
  * null si no se puede calcular (falta el día, o falta el mes de arranque en las frecuencias no mensuales).
  */
 export function proximoPago(
-  o: { frecuencia: string; mesArranque: number | null; diaEsperadoPago: number | null; controlDesde: string | null },
+  o: { frecuencia: string; mesArranque: number | null; diaEsperadoPago: number | null; controlDesde: string | null; cambiosDia?: CambioDiaProgramado[] },
   hoy: Date,
 ): Date | null {
   if (o.diaEsperadoPago === null || !PASO_MESES[o.frecuencia]) return null;
@@ -130,7 +149,7 @@ export function proximoPago(
   let periodo = o.controlDesde && o.controlDesde > mesDeHoy ? o.controlDesde : mesDeHoy;
   for (let i = 0; i < 24; i++, periodo = SIGUIENTE(periodo)) {
     if (!tocaEnPeriodo(o.frecuencia, o.mesArranque, periodo)) continue;
-    const fecha = fechaVencimiento(periodo, o.diaEsperadoPago);
+    const fecha = fechaVencimiento(periodo, diaDelPeriodo(o, periodo) ?? o.diaEsperadoPago);
     if (fecha >= hoy) return fecha;
   }
   return null;

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
-import { cambiarDiaPermanente } from "../src/obligaciones/cambiar-dia.js";
+import { cambiarDia } from "../src/obligaciones/cambiar-dia.js";
 import { sincronizarVencimientos } from "../src/vencimientos/generar.js";
 import { generarRango, vaciarImportaciones, vaciarUsuarios } from "./helpers/db.js";
 
@@ -79,7 +79,8 @@ describe("copia de los datos de la obligación en cada vencimiento", () => {
   it("un cambio permanente del día actualiza la copia del día solo en los vencimientos que mueve", async () => {
     const rol = await prisma.rol.findUniqueOrThrow({ where: { nombre: "Jefatura" } });
     const jefe = await prisma.usuario.create({ data: { correo: "jefe@ejemplo.invalid", nombre: "jefe", nombreNormalizado: "jefe", rolId: rol.id } });
-    await cambiarDiaPermanente({ actorId: jefe.id, obligacionId: obligacion, diaNuevo: 22, motivo: "Nuevo día interno" }, reloj);
+    const o = await prisma.obligacion.findUniqueOrThrow({ where: { id: obligacion } });
+    await cambiarDia({ obligacion: o, nuevoDia: 22, desdeMes: "2026-09", aplicaAlMesEnCurso: undefined, motivo: "Nuevo día interno", autor: { id: jefe.id, nombre: "jefe", modoPruebas: false } }, reloj);
     expect((await venc("2026-08")).dia).toBe(15); // pasado: no se toca
     expect((await venc("2026-09")).dia).toBe(22);
     expect((await venc("2026-11")).dia).toBe(22);

@@ -2,6 +2,7 @@ import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { periodoDeControl } from "../domain/control-desde.js";
 import { aNumero } from "../domain/montos.js";
+import { cambiosDiaProgramados } from "./cambios-dia.js";
 import { ESTADOS_PAGADOS, type CopiaObligacion, type ObligacionPlan, type VencimientoPlan } from "../domain/vencimientos.js";
 
 const camposPlan = { id: true, sociedadId: true, categoriaId: true, proveedor: true, cuentaEsperadaId: true, moneda: true, activa: true, frecuencia: true, mesArranque: true, diaEsperadoPago: true, montoEsperado: true, controlDesde: true } as const;
@@ -12,13 +13,16 @@ const aPlan = (o: { montoEsperado: bigint | null; controlDesde: Date | null } & 
   controlDesde: periodoDeControl(o.controlDesde),
 });
 
+/** Las obligaciones con sus cambios permanentes del día (el calendario usa el día que rige en cada periodo). */
 export async function obligacionesParaPlan(): Promise<ObligacionPlan[]> {
-  return (await prisma.obligacion.findMany({ select: camposPlan, orderBy: { id: "asc" } })).map(aPlan);
+  const filas = await prisma.obligacion.findMany({ select: camposPlan, orderBy: { id: "asc" } });
+  const cambios = await cambiosDiaProgramados(filas.map((o) => o.id));
+  return filas.map((o) => ({ ...aPlan(o), cambiosDia: cambios.get(o.id) ?? [] }));
 }
 
 export async function obligacionParaPlan(id: number): Promise<ObligacionPlan | null> {
   const o = await prisma.obligacion.findUnique({ where: { id }, select: camposPlan });
-  return o ? aPlan(o) : null;
+  return o ? { ...aPlan(o), cambiosDia: (await cambiosDiaProgramados([id])).get(id) ?? [] } : null;
 }
 
 /** Todos los vencimientos de las obligaciones dadas, con lo que impide tocarlos. */
@@ -138,7 +142,7 @@ export async function obtenerVencimientoDetalle(id: number) {
       obligacion: { include: { sociedad: { include: { tesorero: { select: { nombre: true } } } } } },
       movimiento: incluirMovimiento,
       // quién movió la fecha de este vencimiento (el último cambio de «solo este mes»)
-      cambiosDia: { where: { tipo: "una_vez" }, orderBy: { id: "desc" }, take: 1, select: { usuario: { select: { nombre: true } } } },
+      cambiosDia: { where: { tipo: "una_vez" }, orderBy: { id: "desc" }, take: 1, select: { motivo: true, creadoEn: true, usuario: { select: { nombre: true } } } },
     },
   });
 }
@@ -198,7 +202,7 @@ export async function vencimientoParaAsociar(id: number) {
   return prisma.vencimiento.findUnique({
     where: { id },
     select: {
-      id: true, obligacionId: true, sociedadId: true, periodo: true, fecha: true, estado: true,
+      id: true, obligacionId: true, sociedadId: true, periodo: true, fecha: true, fechaOriginal: true, estado: true,
       sociedad: { select: { id: true, tesoreroId: true } },
       obligacion: { select: { identificador: true, proveedor: true } }, // para las marcas «trae el número» y «trae el proveedor»
       movimiento: { select: { claveDedup: true } },

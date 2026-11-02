@@ -12,6 +12,8 @@ import { asociacionesVigentesDe, asociacionVigente } from "../repositories/decis
 import { asociarPago, listarCandidatos, quitarAsociacion } from "../vencimientos/asociar-pago.js";
 import { ESTADOS_JUSTIFICABLES, leerDatos, MOTIVOS_VENCIMIENTO } from "../domain/justificacion.js";
 import { justificacionesVigentesDeVencimientos, justificacionVigenteDeVencimiento } from "../repositories/decisiones.js";
+import { ESTADOS_MOVIBLES } from "../domain/mover-fecha.js";
+import { moverFecha, quitarMovimiento } from "../vencimientos/mover-fecha.js";
 import { justificarVencimiento, quitarJustificacionDeVencimiento } from "../justificaciones/vencimiento.js";
 import { MOTIVOS } from "../domain/cruce.js";
 import { inicioDeDatos } from "../domain/cobertura-corte.js";
@@ -150,6 +152,28 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     }
   });
 
+  // Mover la fecha de UN vencimiento (solo este mes) y devolverla a su fecha original. Mismas reglas de acceso que las demás acciones de gestión.
+  app.post("/api/vencimientos/:id/mover-fecha", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    const cuerpo = (req.body ?? {}) as { nuevaFecha?: unknown; motivo?: unknown };
+    try {
+      return { datos: await moverFecha({ vencimiento: g.v, nuevaFecha: cuerpo.nuevaFecha, motivo: cuerpo.motivo, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/vencimientos/:id/quitar-movimiento", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    try {
+      return { datos: await quitarMovimiento({ vencimiento: g.v, motivo: ((req.body ?? {}) as { motivo?: unknown }).motivo, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
+  });
+
   app.post("/api/vencimientos/:id/quitar-asociacion", async (req, reply) => {
     const g = await paraGestionar(req, reply);
     if (!g) return reply;
@@ -215,6 +239,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         mesAnterior: Boolean(q.data.pendientesAnteriores && q.data.periodo && v.periodo < q.data.periodo),
         fecha: v.fecha.toISOString().slice(0, 10),
         fechaOriginal: v.fechaOriginal ? v.fechaOriginal.toISOString().slice(0, 10) : null, // solo si se movió «de una sola vez»
+        movida: v.fechaOriginal !== null,
         montoEsperado: aNumero(v.montoEsperado),
         moneda: v.moneda,
         estado: v.estado,
@@ -245,7 +270,7 @@ type DecisionVigente = Awaited<ReturnType<typeof asociacionVigente>>;
  * o quitar lo que haya).
  */
 function gestionDe(
-  v: { estado: string; sociedad: { tesoreroId: number | null }; movimiento: { claveDedup: string } | null },
+  v: { estado: string; fechaOriginal: Date | null; sociedad: { tesoreroId: number | null }; movimiento: { claveDedup: string } | null },
   asociacion: DecisionVigente,
   justificacion: DecisionVigente,
   persona: UsuarioActual | null,
@@ -255,8 +280,11 @@ function gestionDe(
     asociadoAMano: asociacion ? { quien: asociacion.nombreUsuario, cuando: asociacion.creadoEn.toISOString(), motivo: asociacion.motivo } : null,
     sinEfecto: asociacion ? asociacionSinEfecto(v.estado, v.movimiento?.claveDedup ?? null, asociacion.claveMovimiento) : false,
     justificado: justificacion && datos && v.estado === "justificado" ? { quien: justificacion.nombreUsuario, cuando: justificacion.creadoEn.toISOString(), motivo: justificacion.motivo, nota: datos.nota } : null,
+    // mover la fecha de este mes (Programado, Por vencer, Vencido, Sin información) y devolverla a la original (si está movida)
+    puedeMoverFecha: Boolean(persona && puedeEscribirEnSociedad(persona, v.sociedad) && ESTADOS_MOVIBLES.includes(v.estado)),
+    puedeQuitarMovimiento: Boolean(persona && puedeEscribirEnSociedad(persona, v.sociedad) && ESTADOS_MOVIBLES.includes(v.estado) && v.fechaOriginal !== null),
     puedeGestionar: Boolean(
-      persona && puedeEscribirEnSociedad(persona, v.sociedad) && (ESTADOS_ASOCIABLES.includes(v.estado) || ESTADOS_JUSTIFICABLES.includes(v.estado) || asociacion || justificacion),
+      persona && puedeEscribirEnSociedad(persona, v.sociedad) && (ESTADOS_ASOCIABLES.includes(v.estado) || ESTADOS_JUSTIFICABLES.includes(v.estado) || ESTADOS_MOVIBLES.includes(v.estado) || asociacion || justificacion),
     ),
   };
 }
