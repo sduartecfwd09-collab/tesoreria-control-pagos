@@ -108,10 +108,12 @@ interface FilaAtencion {
   id?: number;
   /** muestra «Ver información completa» */
   verInfo?: boolean;
+  /** muestra «Justificar» (el servidor dice si esta persona puede) */
+  puedeJustificar?: boolean;
 }
 
 /** Cada grupo toma el estado visual que ya existe (ícono, color y borde) con un texto propio; los estados de vencimiento no se reescriben. */
-function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer, ocultarVacio }: { titulo: string; ayuda: string; vacio: string; filas: FilaAtencion[]; estado: EstadoVencimiento; etiqueta: string; alVer: (id: number) => void; ocultarVacio?: boolean }) {
+function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer, alJustificar, ocultarVacio }: { titulo: string; ayuda: string; vacio: string; filas: FilaAtencion[]; estado: EstadoVencimiento; etiqueta: string; alVer: (id: number) => void; alJustificar: (id: number) => void; ocultarVacio?: boolean }) {
   if (ocultarVacio && filas.length === 0) return null;
   return (
     <section className="mt-8" aria-label={titulo}>
@@ -123,12 +125,12 @@ function ListaAtencion({ titulo, ayuda, vacio, filas, estado, etiqueta, alVer, o
       {filas.length === 0 ? (
         <p className="mt-2 text-sm">{vacio}</p>
       ) : (
-        <FilasArchivos filas={filas} alVer={alVer} />
+        <FilasArchivos filas={filas} alVer={alVer} alJustificar={alJustificar} />
       )}
     </section>
   );
 }
-function FilasArchivos({ filas, alVer }: { filas: FilaAtencion[]; alVer: (id: number) => void }) {
+function FilasArchivos({ filas, alVer, alJustificar }: { filas: FilaAtencion[]; alVer: (id: number) => void; alJustificar?: (id: number) => void }) {
   return (
     <ul className="mt-3 divide-y divide-divisor border border-divisor rounded">
       {filas.map((f, i) => (
@@ -137,11 +139,18 @@ function FilasArchivos({ filas, alVer }: { filas: FilaAtencion[]; alVer: (id: nu
             <span className="font-medium break-all">{f.ruta}</span>
             {f.saldo ? <TextoSaldoTres saldo={f.saldo} /> : f.texto && <span className="block text-suave">{f.texto}</span>}
           </div>
-          {f.verInfo && f.id !== undefined && (
-            <button type="button" onClick={() => alVer(f.id!)} aria-label={`Ver información completa de ${f.ruta}`} className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave">
-              Ver información completa
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {f.puedeJustificar && f.id !== undefined && alJustificar && (
+              <button type="button" onClick={() => alJustificar(f.id!)} aria-label={`Justificar ${f.ruta}`} className="whitespace-nowrap rounded-lg bg-acento px-3.5 py-2 text-[13px] font-semibold text-sobre-acento">
+                Justificar
+              </button>
+            )}
+            {f.verInfo && f.id !== undefined && (
+              <button type="button" onClick={() => alVer(f.id!)} aria-label={`Ver información completa de ${f.ruta}`} className="whitespace-nowrap rounded-lg border border-texto bg-fondo px-3.5 py-2 text-[13px] font-semibold hover:bg-fondo-suave">
+                Ver información completa
+              </button>
+            )}
+          </div>
         </li>
       ))}
     </ul>
@@ -164,7 +173,7 @@ function LineaInformativa({ texto, ayuda, vacio, filas, etiqueta, alVer, ocultar
       ) : (
         <details className="mt-1">
           <summary className="cursor-pointer text-sm underline">Ver el detalle</summary>
-          <p className="mt-2 text-sm text-suave">{ayuda}</p>
+          {ayuda !== "" && <p className="mt-2 text-sm text-suave">{ayuda}</p>}
           <FilasArchivos filas={filas} alVer={alVer} />
         </details>
       )}
@@ -173,12 +182,16 @@ function LineaInformativa({ texto, ayuda, vacio, filas, etiqueta, alVer, ocultar
 }
 
 
-function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]; tarjeta: string | null; destino: RefObject<HTMLElement | null> }) {
+function Atencion({ archivos, tarjeta, destino, alCambiar }: { archivos: ArchivoImportado[]; tarjeta: string | null; destino: RefObject<HTMLElement | null>; alCambiar: () => void }) {
   // Con una tarjeta activa solo se muestran los grupos que tienen archivos de esa tarjeta.
   const ocultarVacio = tarjeta !== null;
   const [verId, setVerId] = useState<number | null>(null);
-  const errores = archivos.filter((a) => a.estado === "con_error");
-  const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad");
+  const [justificarId, setJustificarId] = useState<number | null>(null);
+  // un archivo justificado (con efecto) sale de «requieren atención» y pasa a «Para su información»; si cambió o tiene otro problema, vuelve
+  const enAtencion = (a: ArchivoImportado) => !(a.justificacion && !a.justificacion.sinEfecto);
+  const justificados = archivos.filter((a) => a.estado !== "retirado" && a.justificacion && !a.justificacion.sinEfecto);
+  const errores = archivos.filter((a) => a.estado === "con_error" && enAtencion(a));
+  const sinSociedad = archivos.filter((a) => a.estado === "sin_sociedad" && enAtencion(a));
   const retirados = archivos.filter((a) => a.estado === "retirado");
   const vigentes = archivos.filter((a) => a.estado === "leido" && a.saldo !== null);
   // Imagen no legible y sin movimientos tienen su propio grupo: no se cuentan además como saldo no cuadra ni no verificable.
@@ -188,7 +201,7 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
   const saldo = conMovimientos.filter((a) => a.saldo!.resultado === "no_cuadra");
   const noVerificable = conMovimientos.filter((a) => a.saldo!.resultado === "no_verificable");
   const cuadran = conMovimientos.filter((a) => a.saldo!.resultado === "cuadra");
-  const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0);
+  const nombre = archivos.filter((a) => a.estado !== "retirado" && a.discrepancias.length > 0 && enAtencion(a));
   return (
     <>
       <h2 ref={destino as RefObject<HTMLHeadingElement | null>} className="mt-12 scroll-mt-4 text-lg font-bold border-b-2 border-acento pb-1">Archivos que requieren atención</h2>
@@ -199,8 +212,9 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         estado="vencido"
         etiqueta="Con error"
         alVer={setVerId}
+        alJustificar={setJustificarId}
         ocultarVacio={ocultarVacio}
-        filas={errores.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "Sin motivo registrado" }))}
+        filas={errores.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "Sin motivo registrado", puedeJustificar: a.puedeJustificar }))}
       />
       <ListaAtencion
         titulo="Archivos sin sociedad"
@@ -209,8 +223,9 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         estado="por_revisar"
         etiqueta="Requiere decisión"
         alVer={setVerId}
+        alJustificar={setJustificarId}
         ocultarVacio={ocultarVacio}
-        filas={sinSociedad.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "La carpeta no tiene una sociedad asignada" }))}
+        filas={sinSociedad.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.motivo ?? "La carpeta no tiene una sociedad asignada", puedeJustificar: a.puedeJustificar }))}
       />
       {(tarjeta === null || tarjeta === "leidos") && (
       <>
@@ -228,11 +243,13 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         estado="sin_informacion"
         etiqueta="Sin información"
         alVer={setVerId}
+        alJustificar={setJustificarId}
         ocultarVacio={ocultarVacio}
-        filas={saldo.map((a) => ({
+        filas={saldo.filter(enAtencion).map((a) => ({
           id: a.id,
           ruta: a.archivo,
           saldo: a.saldo!,
+          puedeJustificar: a.puedeJustificar,
         }))}
       />
       <ListaAtencion
@@ -242,8 +259,9 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         estado="sin_informacion"
         etiqueta="Sin información"
         alVer={setVerId}
+        alJustificar={setJustificarId}
         ocultarVacio={ocultarVacio}
-        filas={imagenNoLegible.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
+        filas={imagenNoLegible.filter(enAtencion).map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true, puedeJustificar: a.puedeJustificar }))}
       />
       <ListaAtencion
         titulo="Nombre del archivo distinto del contenido"
@@ -252,8 +270,9 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         estado="por_revisar"
         etiqueta="Por revisar"
         alVer={setVerId}
+        alJustificar={setJustificarId}
         ocultarVacio={ocultarVacio}
-        filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ ruta: a.archivo, texto: d.mensaje })))}
+        filas={nombre.flatMap((a) => a.discrepancias.map((d) => ({ id: a.id, ruta: a.archivo, texto: d.mensaje, puedeJustificar: a.puedeJustificar })))}
       />
       <h3 className="mt-10 font-bold">Para su información</h3>
       <p className="mt-1 text-sm text-suave max-w-2xl">No piden ninguna acción. Despliegue cada línea para ver los archivos.</p>
@@ -278,6 +297,15 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         />
       )}
       <LineaInformativa
+        texto="Archivos justificados"
+        ayuda=""
+        vacio=""
+        etiqueta="Justificado"
+        alVer={setVerId}
+        ocultarVacio
+        filas={justificados.map((a) => ({ id: a.id, ruta: a.archivo, texto: a.justificacion!.motivo, verInfo: true }))}
+      />
+      <LineaInformativa
         texto="Archivos con saldo no verificable"
         ayuda="No se puede comprobar el saldo de estos archivos. La cobertura sigue por fechas."
         vacio="El saldo se pudo comprobar en todos los archivos."
@@ -286,7 +314,8 @@ function Atencion({ archivos, tarjeta, destino }: { archivos: ArchivoImportado[]
         ocultarVacio={ocultarVacio}
         filas={noVerificable.map((a) => ({ id: a.id, ruta: a.archivo, saldo: a.saldo!, verInfo: true }))}
       />
-      {verId !== null && <FichaArchivo id={verId} sinMovimientos={sinMovimientos.some((a) => a.id === verId)} alCerrar={() => setVerId(null)} />}
+      {verId !== null && <FichaArchivo id={verId} sinMovimientos={sinMovimientos.some((a) => a.id === verId)} alCerrar={() => setVerId(null)} alCambiar={alCambiar} />}
+      {justificarId !== null && <FichaArchivo id={justificarId} justificar alCerrar={() => setJustificarId(null)} alCambiar={alCambiar} />}
     </>
   );
 }
@@ -437,7 +466,7 @@ export function PanelArchivos() {
         </p>
       )}
 
-      <Atencion archivos={archivosVisibles} tarjeta={tarjeta.activa} destino={tarjeta.destino} />
+      <Atencion archivos={archivosVisibles} tarjeta={tarjeta.activa} destino={tarjeta.destino} alCambiar={() => setIntento((n) => n + 1)} />
     </>
   );
 }

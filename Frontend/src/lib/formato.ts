@@ -137,6 +137,8 @@ const ROTULO_CAMPO: Record<string, string> = {
   cuentaEsperadaId: "Cuenta de pago",
   obligacion: "Obligación nueva",
   pago_asociado: "Pago del vencimiento",
+  justificacion_vencimiento: "Justificación del vencimiento",
+  justificacion_archivo: "Justificación del archivo",
 };
 export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
 
@@ -146,7 +148,7 @@ export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "
  */
 export const GRUPOS_DE_CAMPOS: { titulo: string; campos: string[] }[] = [
   { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-  { titulo: "Decisiones manuales", campos: ["pago_asociado"] },
+  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo"] },
 ];
 
 /**
@@ -194,9 +196,15 @@ export type CambioEnPalabras = { tipo: "vacio" } | { tipo: "sin_valores" } | { t
  * (el periodo AAAA-MM guardado: en «después» al asociar y en «antes» al quitar); si el periodo no se puede leer, «Pago del vencimiento».
  */
 export function rotuloDeFila(f: { accion: string; campo: string; antes?: string | null; despues?: string | null }): string {
+  const periodoLegible = (p: string | null | undefined) => (p && /^\d{4}-\d{2}$/.test(p) ? mesCorto(p) : null);
   if (f.accion === "asociar_pago" || f.accion === "quitar_asociacion") {
-    const periodo = f.accion === "asociar_pago" ? f.despues : f.antes;
-    return periodo && /^\d{4}-\d{2}$/.test(periodo) ? `Pago del vencimiento de ${mesCorto(periodo)}` : "Pago del vencimiento";
+    const mes = periodoLegible(f.accion === "asociar_pago" ? f.despues : f.antes);
+    return mes ? `Pago del vencimiento de ${mes}` : "Pago del vencimiento";
+  }
+  // justificar un vencimiento dice de qué vencimiento; justificar un archivo es siempre «Justificación del archivo»
+  if ((f.accion === "justificar" || f.accion === "quitar_justificacion") && f.campo === "justificacion_vencimiento") {
+    const mes = periodoLegible(f.accion === "justificar" ? f.despues : f.antes);
+    return mes ? `Justificación del vencimiento de ${mes}` : "Justificación del vencimiento";
   }
   return rotuloDeCampo(f.campo);
 }
@@ -209,6 +217,8 @@ export function cambioEnPalabras(f: { accion: string; campo: string; antes: stri
   if (f.accion === "crear") return { tipo: "vacio" };
   if (f.accion === "asociar_pago") return { tipo: "valores", antes: "Sin asociar", despues: "Asociado a mano" };
   if (f.accion === "quitar_asociacion") return { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" };
+  if (f.accion === "justificar") return { tipo: "valores", antes: "Sin justificar", despues: "Justificado" };
+  if (f.accion === "quitar_justificacion") return { tipo: "valores", antes: "Justificado", despues: "Sin justificar" };
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
   return { tipo: "valores", antes: valorEnPalabras(f.campo, f.antes), despues: valorEnPalabras(f.campo, f.despues) };
 }
@@ -238,7 +248,17 @@ export function fraseAsociadoAMano(a: { quien: string; cuando: string; motivo: s
 }
 
 /** Estados en los que se puede asociar un pago a mano (el servidor es quien decide; esto solo evita ofrecer lo imposible). */
-export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion"];
+export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion", "justificado"];
+
+/** Estados que se pueden justificar (un Justificado ya lo está: ofrece quitar la justificación). */
+export const ESTADOS_JUSTIFICABLES = ["vencido", "sin_informacion"];
+
+/** «Justificado por Ana el 28 oct. Motivo: No se paga este mes: la tienda cerró.» (el motivo y, si hay, la nota; sin punto doble). */
+export function fraseJustificado(j: { quien: string; cuando: string; motivo: string; nota: string | null }, anio?: string): string {
+  const fecha = fechaDeCambio(j.cuando, anio);
+  const motivo = (j.nota ? `${j.motivo}: ${j.nota}` : j.motivo).replace(/[.\s]+$/, "");
+  return `Justificado por ${j.quien}${fecha ? ` el ${fecha}` : ""}. Motivo: ${motivo}.`;
+}
 
 /** Etiquetas de texto de un pago candidato: «Trae el número» y/o «Trae el proveedor» (ninguna si no trae ninguno). */
 export function etiquetasDeCandidato(c: { traeNumero: boolean; traeProveedor: boolean }): string[] {

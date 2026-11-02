@@ -91,6 +91,14 @@ export const api = {
   pagosCandidatos: async (id: number) => (await pedir<{ datos: CandidatoPago[] }>(`/api/vencimientos/${id}/pagos-candidatos`)).datos,
   asociarPago: (id: number, movimiento: number, motivo: string) =>
     pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/asociar-pago`, { method: "POST", body: JSON.stringify({ movimiento, motivo }) }),
+  justificarVencimiento: (id: number, motivo: string, nota: string) =>
+    pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/justificar`, { method: "POST", body: JSON.stringify({ motivo, nota }) }),
+  quitarJustificacionDeVencimiento: (id: number, motivo: string) =>
+    pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/quitar-justificacion`, { method: "POST", body: JSON.stringify({ motivo }) }),
+  justificarArchivo: (id: number, motivo: string, nota: string) =>
+    pedir<{ datos: { problema: string } }>(`/api/archivos/${id}/justificar`, { method: "POST", body: JSON.stringify({ motivo, nota }) }),
+  quitarJustificacionDeArchivo: (id: number, motivo: string) =>
+    pedir<{ datos: { ok: boolean } }>(`/api/archivos/${id}/quitar-justificacion`, { method: "POST", body: JSON.stringify({ motivo }) }),
   quitarAsociacion: (id: number, motivo: string) =>
     pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/quitar-asociacion`, { method: "POST", body: JSON.stringify({ motivo }) }),
   avisosDatos: async () => (await pedir<{ datos: AvisoDatos[] }>("/api/vencimientos/avisos-datos")).datos,

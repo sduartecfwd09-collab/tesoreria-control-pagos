@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { api, ErrorApi } from "@/lib/api";
 import { avisar } from "@/lib/avisos";
-import { ESTADOS_ASOCIABLES, etiquetasDeCandidato, montoPagado, nombreFecha } from "@/lib/formato";
+import { ESTADOS_ASOCIABLES, ESTADOS_JUSTIFICABLES, etiquetasDeCandidato, montoPagado, nombreFecha } from "@/lib/formato";
 import type { CandidatoPago, DetalleVencimiento } from "@/lib/tipos";
 import { Campo, claseBoton, claseBotonSecundario, claseControl } from "../ui";
+import { PanelJustificar, PanelQuitarJustificacion } from "./Justificar";
 
 /** Etiqueta de texto (no solo color): la misma que «Prueba» en el Historial. */
 function EtiquetaTexto({ children }: { children: string }) {
@@ -25,10 +26,13 @@ const motivoValido = (m: string) => m.trim().length >= 3 && m.trim().length <= 3
  * vuelve a comprobar el permiso). `alCambiar` avisa a la pantalla para que actualice la fila.
  */
 export function AccionesPago({ d, alCambiar }: { d: DetalleVencimiento; alCambiar: () => void }) {
-  const [modo, setModo] = useState<"ninguno" | "asociar" | "quitar">("ninguno");
+  const [modo, setModo] = useState<"ninguno" | "asociar" | "quitar" | "justificar" | "quitar_justificacion">("ninguno");
   const puedeAsociar = ESTADOS_ASOCIABLES.includes(d.estado) && d.asociadoAMano === null;
   const puedeQuitar = d.asociadoAMano !== null;
-  if (!d.puedeGestionar || (!puedeAsociar && !puedeQuitar)) return null;
+  // un Vencido o Sin información se puede justificar; un Justificado ofrece quitar la justificación (y asociar un pago, que gana)
+  const puedeJustificar = ESTADOS_JUSTIFICABLES.includes(d.estado) && d.justificado === null;
+  const puedeQuitarJustificacion = d.justificado !== null;
+  if (!d.puedeGestionar || (!puedeAsociar && !puedeQuitar && !puedeJustificar && !puedeQuitarJustificacion)) return null;
 
   const terminar = (texto: string) => {
     avisar.exito(texto);
@@ -38,10 +42,18 @@ export function AccionesPago({ d, alCambiar }: { d: DetalleVencimiento; alCambia
 
   if (modo === "asociar") return <PanelAsociar id={d.id} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Pago asociado a mano.")} />;
   if (modo === "quitar") return <PanelQuitar id={d.id} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Asociación quitada.")} />;
+  if (modo === "justificar") {
+    return <PanelJustificar motivos={d.motivosDeJustificacion} enviar={(motivo, nota) => api.justificarVencimiento(d.id, motivo, nota)} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Vencimiento justificado.")} />;
+  }
+  if (modo === "quitar_justificacion") {
+    return <PanelQuitarJustificacion enviar={(motivo) => api.quitarJustificacionDeVencimiento(d.id, motivo)} alCancelar={() => setModo("ninguno")} alTerminar={() => terminar("Justificación quitada.")} />;
+  }
   return (
     <div className="mt-5 flex flex-wrap gap-3">
       {puedeAsociar && <button type="button" onClick={() => setModo("asociar")} className={claseBotonSecundario}>Asociar pago</button>}
       {puedeQuitar && <button type="button" onClick={() => setModo("quitar")} className={claseBotonSecundario}>Quitar asociación</button>}
+      {puedeJustificar && <button type="button" onClick={() => setModo("justificar")} className={claseBotonSecundario}>Justificar</button>}
+      {puedeQuitarJustificacion && <button type="button" onClick={() => setModo("quitar_justificacion")} className={claseBotonSecundario}>Quitar justificación</button>}
     </div>
   );
 }

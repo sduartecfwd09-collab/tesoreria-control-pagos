@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { limitesDeNavegacion, opcionesDePeriodo, type IdAtajo, type Rango } from "@/lib/fechas";
-import { agruparCampos, cambioEnPalabras, fechaHoraDeCambio, rotuloDeCampo, rotuloDeFila } from "@/lib/formato";
+import { agruparCampos, cambioEnPalabras, fechaHoraDeCambio, mesCorto, rotuloDeCampo, rotuloDeFila } from "@/lib/formato";
 import { useListaInfinita } from "@/lib/useListaInfinita";
 import type { LimitesFechas, RespuestaHistorial } from "@/lib/tipos";
 import { LineaAlcance } from "../LineaAlcance";
@@ -118,13 +118,20 @@ export function HistorialCambios() {
                   return (
                     <tr key={f.id} className={claseFila}>
                       <td className={`${celda} whitespace-nowrap`}>{fechaHoraDeCambio(f.creadoEn) ?? "—"}</td>
-                      <td className={celda}><NombreSociedad nombre={f.sociedad} /></td>
+                      <td className={celda}>{f.sociedad !== null && <NombreSociedad nombre={f.sociedad} />}</td>
                       <td className={celda}>
                         {f.obligacion && (
                           <>
                             <span className="block font-semibold">{f.obligacion.proveedor}</span>
                             <span className="mt-0.5 block text-xs text-suave">{f.obligacion.categoria}</span>
                             <span className="mt-0.5 block font-mono text-xs text-suave">{f.obligacion.identificador}</span>
+                          </>
+                        )}
+                        {/* un archivo: la cuenta con los últimos 4 y el mes (o, sin cuenta, solo el nombre del archivo); nunca la ruta */}
+                        {!f.obligacion && f.archivo && (f.archivo.cuenta ?? f.archivo.nombre) && (
+                          <>
+                            <span className="block font-mono text-xs">{f.archivo.cuenta ?? f.archivo.nombre}</span>
+                            {f.archivo.mes && <span className="mt-0.5 block text-xs text-suave">{mesCorto(f.archivo.mes)}</span>}
                           </>
                         )}
                       </td>

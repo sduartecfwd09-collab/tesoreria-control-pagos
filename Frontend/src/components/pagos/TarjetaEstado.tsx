@@ -66,6 +66,7 @@ export const ACENTO_ESTADO: Record<EstadoVencimiento, string> = {
   pagado: "bg-acento",
   pagado_con_inconsistencia: "bg-acento",
   proyectado: "bg-divisor",
+  justificado: "bg-divisor",
 };
 
 /** Tarjeta de contador de un estado: ícono, etiqueta del estado, número y barra de acento. */

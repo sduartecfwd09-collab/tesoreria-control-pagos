@@ -28,12 +28,13 @@ export function alternarTarjeta(activa: string | null, clave: string): string | 
 
 const deEstados = (clave: string, ...e: EstadoVencimiento[]): DefTarjeta<Vencimiento> => ({ clave, coincide: (v) => e.includes(v.estado) });
 
-/** Pagos del mes: las cuatro tarjetas del resumen. */
+/** Pagos del mes: las tarjetas del resumen (las cuatro de siempre y «Justificados»). */
 export const TARJETAS_PAGOS: DefTarjeta<Vencimiento>[] = [
   deEstados("vencidos", "vencido"),
   deEstados("por_vencer", "por_vencer"),
   deEstados("pagados", "pagado", "pagado_con_inconsistencia"),
   deEstados("sin_informacion", "sin_informacion"),
+  deEstados("justificados", "justificado"),
 ];
 
 /** Avisos: cada grupo es una tarjeta; la lista se aplana con la clave de su grupo. */

@@ -11,12 +11,12 @@ import { SelectorMes, SelectorPeriodo } from "../SelectorFechas";
 import { CajaError } from "../ui";
 import { DetallePago } from "./DetallePago";
 import { Icono, Insignia, Tarjeta } from "./TarjetaEstado";
-import { ORDEN } from "./EstadoPago";
+import { EstadoPago, IconoEstado, ORDEN } from "./EstadoPago";
 import { TablaPagos, useFiltrosPagos } from "./TablaPagos";
 
 type Pestana = "atencion" | "pagados" | "programados" | "todos";
 /** La pestaña donde vive cada tarjeta: al tocarla se abre esa pestaña y se filtra además por el estado de la tarjeta. */
-const PESTANA_DE_TARJETA: Record<string, Pestana> = { vencidos: "atencion", por_vencer: "atencion", sin_informacion: "atencion", pagados: "pagados" };
+const PESTANA_DE_TARJETA: Record<string, Pestana> = { vencidos: "atencion", por_vencer: "atencion", sin_informacion: "atencion", pagados: "pagados", justificados: "todos" };
 const PESTANAS: { clave: Pestana; texto: string; estados: EstadoVencimiento[] | null }[] = [
   { clave: "atencion", texto: "Requiere atención", estados: ["vencido", "por_vencer", "por_revisar", "sin_informacion"] },
   { clave: "pagados", texto: "Pagados", estados: ["pagado", "pagado_con_inconsistencia"] },
@@ -141,6 +141,7 @@ export function PagosDelMes() {
         </Tarjeta>
         <Tarjeta titulo="Sin información" filtro={filtroDe("sin_informacion")} acento="bg-suave" detalle="Faltan estados de cuenta" icono={<Icono><circle cx="12" cy="12" r="10" /><path d="M9.5 9.2a2.6 2.6 0 1 1 3.7 2.4c-.8.4-1.2 1-1.2 1.9M12 17h.01" /></Icono>}
           insignia={<Insignia clase="bg-ambar-fondo text-texto border border-dashed border-texto">Revisar datos</Insignia>}>{porTarjeta.sin_informacion}</Tarjeta>
+        <Tarjeta titulo="Justificados" filtro={filtroDe("justificados")} acento="bg-divisor" icono={<IconoEstado estado="justificado" />} insignia={<EstadoPago estado="justificado" />}>{porTarjeta.justificados}</Tarjeta>
       </section>
 
       <section ref={destinoTarjeta} aria-label="Lista de pagos" className="mt-7 scroll-mt-4">

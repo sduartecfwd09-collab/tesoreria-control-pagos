@@ -103,6 +103,14 @@ export interface ArchivoImportado {
   fechas: { del: string; al: string } | null;
   monedaOrigen: string | null;
   leidoEn: string | null;
+  /** el problema que tiene el archivo ahora (null = no requiere atención) */
+  problema: string | null;
+  /** justificado a mano; sinEfecto = el archivo cambió o tiene otro problema y vuelve a requerir atención */
+  justificacion: (Justificacion & { sinEfecto: boolean }) | null;
+  /** los motivos que se pueden elegir para su problema (los entrega el Backend) */
+  motivosPosibles: MotivoJustificacion[];
+  puedeJustificar: boolean;
+  puedeQuitarJustificacion: boolean;
 }
 
 /** El resultado del saldo en tres partes, más las tres juntas (motivo) para el texto emergente. */
@@ -254,7 +262,23 @@ export interface ResultadoImportacionCatalogo {
   problemas: { fila: number; motivo: string; importada: boolean }[];
 }
 
-export type EstadoVencimiento = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar";
+export type EstadoVencimiento = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar" | "justificado";
+
+/** Un motivo de la lista fija al justificar; los define el Backend (la pantalla no tiene su propia lista). */
+export interface MotivoJustificacion {
+  clave: string;
+  texto: string;
+  /** «Otro» y los que dicen «(explicar)» exigen una nota de 3 a 300 caracteres */
+  notaObligatoria: boolean;
+}
+
+/** Quién justificó, cuándo (instante UTC), el motivo elegido y la nota (si la hay). */
+export interface Justificacion {
+  quien: string;
+  cuando: string;
+  motivo: string;
+  nota: string | null;
+}
 
 /** El pago que respalda el estado de un vencimiento. `moneda` es la de la cuenta que pagó; null = sin dato (sin símbolo ni código). */
 export interface PagoVencimiento {
@@ -299,7 +323,9 @@ export interface Vencimiento {
   asociadoAMano: AsociacionManual | null;
   /** la asociación sigue vigente pero el pago ya no aparece en los estados de cuenta */
   sinEfecto: boolean;
-  /** hay una acción posible para esta persona (asociar o quitar un pago a mano) */
+  /** justificado a mano (solo mientras el estado sea Justificado: con un pago, el pago manda) */
+  justificado: Justificacion | null;
+  /** hay una acción posible para esta persona (asociar un pago, justificar, o quitar lo que haya) */
   puedeGestionar: boolean;
 }
 
@@ -438,6 +464,9 @@ export interface DetalleVencimiento {
   textos: { resumen: string; parrafos: string[]; queHacer: string | null };
   asociadoAMano: AsociacionManual | null;
   sinEfecto: boolean;
+  justificado: Justificacion | null;
+  /** los motivos que se pueden elegir al justificar un vencimiento */
+  motivosDeJustificacion: MotivoJustificacion[];
   puedeGestionar: boolean;
   /** obligaciones de la sociedad con el mismo número de servicio (vacío si no se comparte) */
   grupo: ObligacionDelGrupo[];
@@ -543,15 +572,23 @@ export interface InfoArchivo {
   saldoFinal: number | null;
   imagenNoLegible: boolean;
   saldo: TextoSaldo | null;
+  problema: string | null;
+  justificacion: (Justificacion & { sinEfecto: boolean }) | null;
+  motivosPosibles: MotivoJustificacion[];
+  puedeJustificar: boolean;
+  puedeQuitarJustificacion: boolean;
 }
 
 /** Una fila del Historial de cambios (GET /api/historial-cambios): un dato cambiado. Sin montos, cuentas ni identificadores completos. */
 export interface FilaHistorial {
   id: number;
   creadoEn: string;
-  sociedad: string;
+  /** null = sin sociedad (p. ej. un archivo cuya carpeta no la tiene) */
+  sociedad: string | null;
   obligacion: { proveedor: string; categoria: string; identificador: string } | null;
-  /** crear | editar | activar | desactivar */
+  /** solo en las líneas de un archivo: la cuenta (últimos 4), el mes y el nombre del archivo; nunca la ruta */
+  archivo: { nombre: string | null; mes: string | null; cuenta: string | null } | null;
+  /** crear | editar | activar | desactivar | asociar_pago | quitar_asociacion | justificar | quitar_justificacion */
   accion: string;
   campo: string;
   antes: string | null;

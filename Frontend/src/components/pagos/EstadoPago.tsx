@@ -49,6 +49,12 @@ const ICONOS: Record<EstadoVencimiento, ReactNode> = {
       <path d="M8 6.5v3.2M8 11.8v.1" />
     </Svg>
   ),
+  justificado: (
+    <Svg>
+      <path d="M4 1.5h5.5L13 5v9.5H4z" />
+      <path d="M9.5 1.5V5H13M6 8.5h5M6 11h3.5" />
+    </Svg>
+  ),
 };
 
 interface Definicion {
@@ -73,12 +79,14 @@ export const ESTADO: Record<EstadoVencimiento, Definicion> = {
     ayuda: "Se pagó, pero por otra sociedad o más de una vez.",
   },
   pagado: { texto: "Pagado", clase: "bg-acento text-sobre-acento", ayuda: "El pago aparece en un estado de cuenta de la sociedad." },
+  // sin color de estado propio (solo tintes de la paleta): borde sólido gris oscuro, sobre fondo suave
+  justificado: { texto: "Justificado", clase: "bg-fondo-suave text-texto border-2 border-control", ayuda: "" },
   proyectado: { texto: "Programado", clase: "bg-fondo text-texto border border-dashed border-control", ayuda: "Todavía falta tiempo: la fecha de pago está fuera de los días de aviso." },
 };
 
 /** Orden de las filas: primero lo que más urgencia tiene. */
 export const ORDEN: Record<EstadoVencimiento, number> = {
-  vencido: 0, sin_informacion: 1, por_revisar: 2, por_vencer: 3, pagado_con_inconsistencia: 4, pagado: 5, proyectado: 6,
+  vencido: 0, sin_informacion: 1, por_revisar: 2, por_vencer: 3, pagado_con_inconsistencia: 4, pagado: 5, proyectado: 6, justificado: 7,
 };
 
 export function EstadoPago({ estado }: { estado: EstadoVencimiento }) {

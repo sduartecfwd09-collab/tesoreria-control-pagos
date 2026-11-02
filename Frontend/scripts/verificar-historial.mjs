@@ -92,10 +92,10 @@ test("filtro «Qué cambió»: dos grupos, un único mapa campo -> grupo, y un g
   assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago del vencimiento");
   assert.deepEqual(f.GRUPOS_DE_CAMPOS.map((g) => g.titulo), ["Datos de la obligación", "Decisiones manuales"]);
   // con todo lo que hay: cada campo en su grupo y en el orden del mapa (no el de llegada)
-  const todo = ["pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
+  const todo = ["justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
   assert.deepEqual(f.agruparCampos(todo), [
     { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-    { titulo: "Decisiones manuales", campos: ["pago_asociado"] },
+    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo"] },
   ]);
   // un grupo sin opciones dentro del alcance no se muestra; si solo hay uno, se muestra con su título
   assert.deepEqual(f.agruparCampos(["frecuencia", "activa"]), [{ titulo: "Datos de la obligación", campos: ["frecuencia", "activa"] }]);
@@ -121,7 +121,9 @@ test("frase del detalle: «Asociado a mano por {nombre} el {fecha}. Motivo: {mot
 });
 
 test("estados que ofrecen asociar un pago", () => {
-  assert.deepEqual([...f.ESTADOS_ASOCIABLES].sort(), ["por_revisar", "sin_informacion", "vencido"]);
+  // «justificado» viene de un vencido o sin información: la asociación gana
+  assert.deepEqual([...f.ESTADOS_ASOCIABLES].sort(), ["justificado", "por_revisar", "sin_informacion", "vencido"]);
+  assert.deepEqual([...f.ESTADOS_JUSTIFICABLES].sort(), ["sin_informacion", "vencido"]);
 });
 
 test("etiquetas de un pago candidato: «Trae el número» y/o «Trae el proveedor»", () => {
@@ -129,4 +131,54 @@ test("etiquetas de un pago candidato: «Trae el número» y/o «Trae el proveedo
   assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: true, traeProveedor: false }), ["Trae el número"]);
   assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: false, traeProveedor: true }), ["Trae el proveedor"]);
   assert.deepEqual(f.etiquetasDeCandidato({ traeNumero: false, traeProveedor: false }), []);
+});
+
+test("justificar un vencimiento: «Justificación del vencimiento de {mes}» y «Sin justificar → Justificado» (a la inversa al quitar)", () => {
+  const justificar = { accion: "justificar", campo: "justificacion_vencimiento", antes: null, despues: "2026-10" };
+  const quitar = { accion: "quitar_justificacion", campo: "justificacion_vencimiento", antes: "2026-10", despues: null };
+  assert.equal(f.rotuloDeFila(justificar), "Justificación del vencimiento de oct 2026"); // el mes sale de «después»
+  assert.deepEqual(f.cambioEnPalabras(justificar), { tipo: "valores", antes: "Sin justificar", despues: "Justificado" });
+  assert.equal(f.rotuloDeFila(quitar), "Justificación del vencimiento de oct 2026"); // el mes sale de «antes»
+  assert.deepEqual(f.cambioEnPalabras(quitar), { tipo: "valores", antes: "Justificado", despues: "Sin justificar" });
+  // período ilegible: sin mes, nunca una celda rota
+  for (const periodo of [null, "", "raro", "2026-1"]) {
+    assert.equal(f.rotuloDeFila({ ...justificar, despues: periodo }), "Justificación del vencimiento", String(periodo));
+    assert.equal(f.rotuloDeFila({ ...quitar, antes: periodo }), "Justificación del vencimiento", String(periodo));
+  }
+});
+
+test("justificar un archivo: «Justificación del archivo» (sin mes) y «Sin justificar → Justificado»; la flecha nunca queda sola", () => {
+  const justificar = { accion: "justificar", campo: "justificacion_archivo", antes: null, despues: "2026-10" };
+  const quitar = { accion: "quitar_justificacion", campo: "justificacion_archivo", antes: "2026-10", despues: null };
+  assert.equal(f.rotuloDeFila(justificar), "Justificación del archivo");
+  assert.equal(f.rotuloDeFila(quitar), "Justificación del archivo");
+  assert.deepEqual(f.cambioEnPalabras(justificar), { tipo: "valores", antes: "Sin justificar", despues: "Justificado" });
+  assert.deepEqual(f.cambioEnPalabras(quitar), { tipo: "valores", antes: "Justificado", despues: "Sin justificar" });
+  // aunque el archivo no tenga mes conocido, siguen siendo dos valores (nunca una flecha con un solo lado)
+  assert.deepEqual(f.cambioEnPalabras({ ...justificar, despues: null }), { tipo: "valores", antes: "Sin justificar", despues: "Justificado" });
+  for (const accion of ["justificar", "quitar_justificacion", "asociar_pago", "quitar_asociacion", "crear", "editar"]) {
+    for (const campo of ["justificacion_vencimiento", "justificacion_archivo", "pago_asociado", "obligacion", "frecuencia", "moneda"]) {
+      const c = f.cambioEnPalabras({ accion, campo, antes: null, despues: null });
+      assert.ok(["vacio", "sin_valores", "valores"].includes(c.tipo), accion + campo);
+      if (c.tipo === "valores") assert.ok(c.antes !== "" && c.despues !== "", accion + campo);
+    }
+  }
+});
+
+test("filtro «Qué cambió»: las justificaciones van en «Decisiones manuales» con sus rótulos", () => {
+  assert.equal(f.rotuloDeCampo("justificacion_vencimiento"), "Justificación del vencimiento");
+  assert.equal(f.rotuloDeCampo("justificacion_archivo"), "Justificación del archivo");
+  const decisiones = f.GRUPOS_DE_CAMPOS.find((g) => g.titulo === "Decisiones manuales");
+  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo"]);
+  // un grupo solo con justificaciones se muestra solo con ese grupo; sin ellas, no aparece
+  assert.deepEqual(f.agruparCampos(["justificacion_archivo"]), [{ titulo: "Decisiones manuales", campos: ["justificacion_archivo"] }]);
+  assert.deepEqual(f.agruparCampos(["frecuencia"]).map((g) => g.titulo), ["Datos de la obligación"]);
+});
+
+test("frase del detalle: «Justificado por {nombre} el {fecha}. Motivo: {motivo}.» (con la nota si existe, sin punto doble)", () => {
+  const j = { quien: "Ana Uno", cuando: "2026-10-28T15:30:00.000Z", motivo: "No se paga este mes", nota: null };
+  assert.equal(f.fraseJustificado(j, "2026"), "Justificado por Ana Uno el 28 oct. Motivo: No se paga este mes.");
+  assert.equal(f.fraseJustificado({ ...j, nota: "La tienda cerró." }, "2026"), "Justificado por Ana Uno el 28 oct. Motivo: No se paga este mes: La tienda cerró.");
+  assert.equal(f.fraseJustificado({ ...j, cuando: "2025-12-31T15:30:00.000Z" }, "2026"), "Justificado por Ana Uno el 31 dic 2025. Motivo: No se paga este mes.");
+  assert.equal(f.fraseJustificado({ ...j, cuando: "no es fecha" }, "2026"), "Justificado por Ana Uno. Motivo: No se paga este mes.");
 });
