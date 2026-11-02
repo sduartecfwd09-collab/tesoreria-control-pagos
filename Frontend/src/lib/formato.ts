@@ -141,6 +141,7 @@ const ROTULO_CAMPO: Record<string, string> = {
   justificacion_archivo: "Justificación del archivo",
   revision_obligacion: "Revisión de la obligación",
   fecha_vencimiento: "Fecha del vencimiento",
+  diferencia_excel: "Diferencia con el Excel",
 };
 export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
 
@@ -150,7 +151,7 @@ export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "
  */
 export const GRUPOS_DE_CAMPOS: { titulo: string; campos: string[] }[] = [
   { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento"] },
+  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento", "diferencia_excel"] },
 ];
 
 /**
@@ -178,6 +179,22 @@ function diaEnPalabras(valor: string): string {
   const m = /^(\d{1,2}) desde (\d{4}-\d{2})$/.exec(valor.trim());
   if (m) return `día ${Number(m[1])} desde ${mesCorto(m[2]!)}`;
   return Number.isInteger(Number(valor)) ? `día ${Number(valor)}` : "Otro valor";
+}
+
+/** Lo decidido en una diferencia con el Excel, en palabras; «Misma que {proveedor}» si se guardó con quién (y «Misma» si no). */
+export function decisionDeDiferencia(accion: string, despues: string | null): string {
+  switch (accion) {
+    case "es_la_misma": {
+      const proveedor = despues && despues.startsWith("misma:") ? despues.slice(6).trim() : "";
+      return proveedor ? `Misma que ${proveedor}` : "Misma";
+    }
+    case "son_distintas": return "Son distintas";
+    case "sigue_vigente": return "Sigue vigente";
+    case "desactivar_diferencia": return "Desactivada";
+    case "mantener_plataforma": return "Se mantiene el de la plataforma";
+    case "usar_excel": return "Se usa el del Excel";
+    default: return "Decidida";
+  }
 }
 
 /** Una fecha guardada (AAAA-MM-DD) en palabras: «15 oct» (con año si no es el año en curso); si no se puede leer, «Sin definir». */
@@ -235,6 +252,8 @@ export function cambioEnPalabras(f: { accion: string; campo: string; antes: stri
   if (f.accion === "quitar_revision") return { tipo: "valores", antes: "Revisada", despues: "En revisión" };
   // mover la fecha de un vencimiento: las dos fechas, nunca una flecha sola (si falta una se dice «Sin definir»)
   if (f.accion === "mover_fecha" || f.accion === "quitar_movimiento") return { tipo: "valores", antes: fechaGuardadaEnPalabras(f.antes), despues: fechaGuardadaEnPalabras(f.despues) };
+  // resolver una diferencia con el Excel: de «Pendiente» a lo que se decidió (la pareja de un renombre guarda «misma:{proveedor}»)
+  if (f.campo === "diferencia_excel") return { tipo: "valores", antes: "Pendiente", despues: decisionDeDiferencia(f.accion, f.despues) };
   if (f.accion === "justificar") return { tipo: "valores", antes: "Sin justificar", despues: "Justificado" };
   if (f.accion === "quitar_justificacion") return { tipo: "valores", antes: "Justificado", despues: "Sin justificar" };
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
@@ -309,3 +328,30 @@ export const textoDiaProgramado = (p: { dia: number; desde: string }): string =>
 
 /** Meses que se pueden elegir en «Desde el mes»: el actual y los siguientes hasta dos años por delante. */
 export const limitesDeDesdeMes = (actual: string): { primera: string; ultima: string } => ({ primera: `${actual}-01`, ultima: `${sumarMeses(actual, 24)}-28` });
+
+/** Los tres tipos de diferencia con el Excel y sus palabras (título de la tarjeta, de la columna «Qué difiere» y ayuda). */
+export const TIPOS_DIFERENCIA: { tipo: "posible_renombre" | "ya_no_esta" | "dia_distinto"; titulo: string; difiere: string; ayuda: string }[] = [
+  { tipo: "posible_renombre", titulo: "Posibles renombres", difiere: "Posible renombre", ayuda: "una obligación nueva se parece a una vieja" },
+  { tipo: "ya_no_esta", titulo: "Ya no están en el Excel", difiere: "Ya no está en el Excel", ayuda: "el Excel ya no las trae" },
+  { tipo: "dia_distinto", titulo: "Días distintos", difiere: "Día distinto", ayuda: "el día del Excel no coincide" },
+];
+
+/** Cómo se llama cada acción en el botón y en lo ya decidido («Desactivar» se lee «Desactivada» cuando ya se hizo). */
+export const TEXTO_ACCION: Record<string, string> = {
+  es_la_misma: "Es la misma", son_distintas: "Son distintas", sigue_vigente: "Sigue vigente", desactivar: "Desactivar",
+  mantener_plataforma: "Mantener el de la plataforma", usar_excel: "Usar el del Excel",
+};
+export const TEXTO_DECIDIDA: Record<string, string> = { ...TEXTO_ACCION, desactivar: "Desactivada" };
+
+/** Qué hace cada acción, en palabras de negocio (se muestra al abrir «Gestionar»). */
+export const AYUDA_ACCION: Record<string, string> = {
+  es_la_misma: "Es la misma obligación con otro nombre: se desactiva la vieja y queda ligada a la nueva.",
+  son_distintas: "Son obligaciones distintas: se descarta la sugerencia y no se toca ninguna.",
+  sigue_vigente: "La obligación sigue vigente aunque el Excel ya no la traiga.",
+  desactivar: "La obligación ya no se paga: se desactiva y se conserva su historial.",
+  mantener_plataforma: "Se queda el día que tiene la plataforma.",
+  usar_excel: "Se cambia el día de pago al del Excel, desde el mes que elija.",
+};
+
+/** «día 10» o «Sin día». */
+export const textoDia = (dia: number | null): string => (dia === null ? "Sin día" : `Día ${dia}`);

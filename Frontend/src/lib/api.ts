@@ -1,5 +1,5 @@
 import type {
-  CandidatoPago, AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, FiltroHistorico, RespuestaHistorico, FiltroHistorial, RespuestaHistorial, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
+  CandidatoPago, AvisoDatos, Avisos, CambiosObligacion, Categoria, DetalleVencimiento, Cobertura, FiltroObligaciones, FiltroVencimientos, Identidad, Alcance, Importaciones, InfoArchivo, LimitesFechas, FiltroHistorico, RespuestaHistorico, FiltroHistorial, RespuestaHistorial, RespuestaDiferencias, DetalleMovimientoSinObligacion, MiConfiguracion, MovimientosSinObligacion, Obligacion, Pagina,
   Parametro, Regeneracion, ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad, Vencimiento,
 } from "./tipos";
 import { encabezadoUsuario } from "./usuario-actual";
@@ -117,6 +117,10 @@ export const api = {
   historico: (f: FiltroHistorico) => pedir<RespuestaHistorico>(`/api/historico${consulta(f)}`),
   /** Historial de cambios de las obligaciones, una página por vez (alcance, filtros y paginación en el servidor). */
   historialCambios: (f: FiltroHistorial) => pedir<RespuestaHistorial>(`/api/historial-cambios${consulta(f)}`),
+  /** Diferencias entre el Excel del catálogo y la plataforma (alcance en el servidor). */
+  diferenciasExcel: (f: { sociedadId?: number; tipo?: string; estado?: string } = {}) => pedir<RespuestaDiferencias>(`/api/diferencias-excel${consulta(f)}`),
+  resolverDiferencias: (c: { tipo: string; claves: string[]; accion: string; motivo: string; desdeMes?: string; aplicaAlMesEnCurso?: boolean }) =>
+    pedir<{ datos: { resueltas: number } }>("/api/diferencias-excel/resolver", { method: "POST", body: JSON.stringify(c) }),
   /** Primera y última fecha con datos (límites del selector de fechas) y «hoy» del servidor. */
   limitesFechas: () => pedir<LimitesFechas>("/api/fechas/limites"),
   /** La fecha de hoy según el servidor (reloj inyectable). */

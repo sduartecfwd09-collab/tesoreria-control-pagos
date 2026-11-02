@@ -92,10 +92,10 @@ test("filtro «Qué cambió»: dos grupos, un único mapa campo -> grupo, y un g
   assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago del vencimiento");
   assert.deepEqual(f.GRUPOS_DE_CAMPOS.map((g) => g.titulo), ["Datos de la obligación", "Decisiones manuales"]);
   // con todo lo que hay: cada campo en su grupo y en el orden del mapa (no el de llegada)
-  const todo = ["fecha_vencimiento", "revision_obligacion", "justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
+  const todo = ["diferencia_excel", "fecha_vencimiento", "revision_obligacion", "justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
   assert.deepEqual(f.agruparCampos(todo), [
     { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento"] },
+    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento", "diferencia_excel"] },
   ]);
   // un grupo sin opciones dentro del alcance no se muestra; si solo hay uno, se muestra con su título
   assert.deepEqual(f.agruparCampos(["frecuencia", "activa"]), [{ titulo: "Datos de la obligación", campos: ["frecuencia", "activa"] }]);
@@ -169,7 +169,7 @@ test("filtro «Qué cambió»: las justificaciones van en «Decisiones manuales�
   assert.equal(f.rotuloDeCampo("justificacion_vencimiento"), "Justificación del vencimiento");
   assert.equal(f.rotuloDeCampo("justificacion_archivo"), "Justificación del archivo");
   const decisiones = f.GRUPOS_DE_CAMPOS.find((g) => g.titulo === "Decisiones manuales");
-  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento"]);
+  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento", "diferencia_excel"]);
   // un grupo solo con justificaciones se muestra solo con ese grupo; sin ellas, no aparece
   assert.deepEqual(f.agruparCampos(["justificacion_archivo"]), [{ titulo: "Decisiones manuales", campos: ["justificacion_archivo"] }]);
   assert.deepEqual(f.agruparCampos(["frecuencia"]).map((g) => g.titulo), ["Datos de la obligación"]);
@@ -279,4 +279,36 @@ test("frases de la ficha: «Movida por {nombre} el {fecha}. Motivo: …» (sin p
   assert.equal(f.textoDiaProgramado({ dia: 20, desde: "2026-11" }), "Cambia al día 20 desde nov 2026");
   assert.deepEqual(f.ESTADOS_MOVIBLES, ["proyectado", "por_vencer", "vencido", "sin_informacion"]);
   assert.deepEqual(f.limitesDeDesdeMes("2026-10"), { primera: "2026-10-01", ultima: "2028-10-28" });
+});
+
+test("diferencias con el Excel: «Diferencia con el Excel» y de «Pendiente» a lo decidido; la flecha nunca queda sola; grupo «Decisiones manuales»", () => {
+  const fila = (accion, despues) => ({ accion, campo: "diferencia_excel", antes: "pendiente", despues });
+  assert.equal(f.rotuloDeCampo("diferencia_excel"), "Diferencia con el Excel");
+  assert.equal(f.rotuloDeFila(fila("es_la_misma", "misma:Nueva Tel")), "Diferencia con el Excel");
+  const esperado = {
+    es_la_misma: ["misma:Nueva Tel", "Misma que Nueva Tel"], son_distintas: ["distintas", "Son distintas"], sigue_vigente: ["vigente", "Sigue vigente"],
+    desactivar_diferencia: ["desactivada", "Desactivada"], mantener_plataforma: ["plataforma", "Se mantiene el de la plataforma"], usar_excel: ["excel", "Se usa el del Excel"],
+  };
+  for (const [accion, [guardado, texto]] of Object.entries(esperado)) {
+    assert.deepEqual(f.cambioEnPalabras(fila(accion, guardado)), { tipo: "valores", antes: "Pendiente", despues: texto }, accion);
+    // aunque lo guardado viniera vacío, siguen siendo dos valores legibles
+    const r = f.cambioEnPalabras(fila(accion, null));
+    assert.equal(r.tipo, "valores", accion);
+    assert.ok(r.antes !== "" && r.despues !== "", accion);
+  }
+  assert.deepEqual(f.cambioEnPalabras(fila("es_la_misma", "misma:")), { tipo: "valores", antes: "Pendiente", despues: "Misma" });
+  assert.deepEqual(f.agruparCampos(["diferencia_excel"]), [{ titulo: "Decisiones manuales", campos: ["diferencia_excel"] }]);
+  const todos = f.GRUPOS_DE_CAMPOS.flatMap((g) => g.campos);
+  assert.equal(new Set(todos).size, todos.length);
+});
+
+test("pantalla de diferencias: tres tipos con sus palabras; cada acción tiene su texto y su ayuda; «Desactivar» se lee «Desactivada» al decidirse", () => {
+  assert.deepEqual(f.TIPOS_DIFERENCIA.map((t) => t.tipo), ["posible_renombre", "ya_no_esta", "dia_distinto"]);
+  for (const a of ["es_la_misma", "son_distintas", "sigue_vigente", "desactivar", "mantener_plataforma", "usar_excel"]) {
+    assert.ok(f.TEXTO_ACCION[a] && f.AYUDA_ACCION[a] && f.TEXTO_DECIDIDA[a], a);
+  }
+  assert.equal(f.TEXTO_ACCION.desactivar, "Desactivar");
+  assert.equal(f.TEXTO_DECIDIDA.desactivar, "Desactivada");
+  assert.equal(f.textoDia(10), "Día 10");
+  assert.equal(f.textoDia(null), "Sin día");
 });

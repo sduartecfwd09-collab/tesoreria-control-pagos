@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { api } from "@/lib/api";
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 
 // Menú lateral negro como el de la maqueta. Solo las pantallas que existen, en grupos separados por una línea.
@@ -25,6 +26,7 @@ const GRUPOS: Pantalla[][] = [
   ],
   [
     { href: "/obligaciones", texto: "Obligaciones", icono: <Icono><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></Icono> },
+    { href: "/diferencias-excel", texto: "Diferencias con el Excel", icono: <Icono><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></Icono> },
     { href: "/historial-cambios", texto: "Historial de cambios", icono: <Icono><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></Icono> },
   ],
   [
@@ -48,6 +50,15 @@ export function MenuLateral({ children }: { children: ReactNode }) {
   const [expandido, setExpandido] = useState(false);
   const [abierto, setAbierto] = useState(false); // lista en pantallas angostas
   const toqueAbrio = useRef(false);
+  // contador de diferencias con el Excel pendientes (lo que la persona ve según su alcance); sin sesión o sin archivo, no se muestra
+  const [pendientes, setPendientes] = useState(0);
+  useEffect(() => {
+    let vigente = true;
+    api.diferenciasExcel({ estado: "pendiente" }).then((r) => vigente && setPendientes(r.pendientes)).catch(() => vigente && setPendientes(0));
+    return () => {
+      vigente = false;
+    };
+  }, [ruta]);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const limpiar = () => {
@@ -159,6 +170,12 @@ export function MenuLateral({ children }: { children: ReactNode }) {
                       >
                         {p.icono}
                         <span className={`whitespace-nowrap ${expandido ? "" : "md:sr-only"}`}>{p.texto}</span>
+                        {p.href === "/diferencias-excel" && pendientes > 0 && (
+                          <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-bold ${activa ? "bg-sobre-acento text-acento" : "bg-acento text-sobre-acento"}`}>
+                            {pendientes}
+                            <span className="sr-only"> pendientes</span>
+                          </span>
+                        )}
                       </Link>
                     </li>
                   );

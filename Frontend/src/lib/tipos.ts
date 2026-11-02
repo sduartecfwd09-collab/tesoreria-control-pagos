@@ -635,3 +635,37 @@ export interface FiltroHistorial {
   campo?: string;
   pagina: number;
 }
+
+export type TipoDiferencia = "posible_renombre" | "ya_no_esta" | "dia_distinto";
+export type AccionDiferencia = "es_la_misma" | "son_distintas" | "sigue_vigente" | "desactivar" | "mantener_plataforma" | "usar_excel";
+
+export interface DatosDiferencia {
+  proveedor: string;
+  /** ya viene enmascarado */
+  identificador: string;
+  dia: number | null;
+}
+
+export interface FilaDiferencia {
+  clave: string;
+  tipo: TipoDiferencia;
+  estado: "pendiente" | "decidida";
+  sociedadId: number;
+  sociedad: string;
+  plataforma: DatosDiferencia;
+  excel: DatosDiferencia | null;
+  decision: { accion: AccionDiferencia; quien: string; cuando: string; motivo: string } | null;
+  /** las acciones que esta persona puede hacer ahora (vacío si ya está decidida o no puede actuar) */
+  acciones: AccionDiferencia[];
+  puedeGestionar: boolean;
+}
+
+export interface RespuestaDiferencias {
+  datos: FilaDiferencia[];
+  /** pendientes por tipo (con el filtro de sociedad, sin el de tipo ni el de estado) */
+  resumen: Record<TipoDiferencia, number>;
+  pendientes: number;
+  /** false = no hay tabla de pagos frecuentes que leer */
+  disponible: boolean;
+  alcance: Alcance;
+}

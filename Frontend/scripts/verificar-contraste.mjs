@@ -33,6 +33,7 @@ const pares = [
   ["Texto suave (gris oscuro) sobre fondo", "texto-suave", "fondo", 4.5],
   ["Texto suave sobre fondo suave", "texto-suave", "fondo-suave", 4.5],
   ["Botón: texto negro sobre verde", "texto-sobre-acento", "acento", 4.5],
+  ["Contador del menú (opción activa): verde sobre negro", "acento", "texto-sobre-acento", 4.5],
   ["Cabecera: texto blanco sobre negro", "texto-sobre-cabecera", "cabecera", 4.5],
   ["Cabecera: verde sobre negro (acento)", "acento", "cabecera", 3],
   ["Borde de control sobre fondo", "borde-control", "fondo", 3],
