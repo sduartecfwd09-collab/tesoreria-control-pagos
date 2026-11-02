@@ -15,10 +15,10 @@ export interface DatosEditables {
   cuentaEsperadaId: number | null;
 }
 
-export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion";
+export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion" | "marcar_revisada" | "quitar_revision";
 
 /** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
-export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion"];
+export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision"];
 
 export interface LineaCambio {
   accion: AccionHistorial;
@@ -82,3 +82,7 @@ export const lineaDeQuitarJustificacionVencimiento = (periodo: string): LineaCam
 /** Justificar un archivo: solo el mes del archivo (AAAA-MM; nulo si no se conoce). Nunca la ruta ni la cuenta. */
 export const lineaDeJustificarArchivo = (mes: string | null): LineaCambio => ({ accion: "justificar", campo: "justificacion_archivo", antes: null, despues: mes });
 export const lineaDeQuitarJustificacionArchivo = (mes: string | null): LineaCambio => ({ accion: "quitar_justificacion", campo: "justificacion_archivo", antes: mes, despues: null });
+
+/** Marcar como revisada una obligación «En revisión»: antes y después son el estado, nunca datos de la obligación. */
+export const lineaDeMarcarRevisada = (): LineaCambio => ({ accion: "marcar_revisada", campo: "revision_obligacion", antes: "en_revision", despues: "revisada" });
+export const lineaDeQuitarRevision = (): LineaCambio => ({ accion: "quitar_revision", campo: "revision_obligacion", antes: "revisada", despues: "en_revision" });

@@ -150,11 +150,14 @@ export function etiquetasDe(o: ObligacionCalidad, repetidos: ReturnType<typeof i
   return e;
 }
 
-export type EstadoObligacion = "activa" | "inactiva" | "en_revision";
+export type EstadoObligacion = "activa" | "inactiva" | "en_revision" | "revisada";
 
-/** Inactiva; activa con alguna observación = en revisión; activa sin observaciones = activa. */
-export const estadoDeObligacion = (activa: boolean, observaciones: Etiqueta[]): EstadoObligacion =>
-  !activa ? "inactiva" : observaciones.length > 0 ? "en_revision" : "activa";
+/**
+ * Inactiva; activa con alguna observación = en revisión; activa sin observaciones = activa. Una observación con una revisión vigente y con efecto
+ * (misma huella) pasa de «en revisión» a «revisada»; sin efecto vuelve a «en revisión».
+ */
+export const estadoDeObligacion = (activa: boolean, observaciones: Etiqueta[], revisadaConEfecto = false): EstadoObligacion =>
+  !activa ? "inactiva" : observaciones.length === 0 ? "activa" : revisadaConEfecto ? "revisada" : "en_revision";
 
 /** Una sociedad con su nombre y si tiene estados de cuenta cargados (para separar las que no tienen estados). */
 export interface SociedadParaCalidad {
@@ -162,7 +165,12 @@ export interface SociedadParaCalidad {
   conEstados: boolean;
 }
 
-export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: SociedadParaCalidad[]) {
+/**
+ * Calidad del catálogo. `revisadas` = obligaciones con una revisión vigente y con efecto. «Falta día» y «Falta mes de arranque» SIGUEN contando el dato
+ * faltante aunque la obligación esté revisada (no genera vencimientos y ese hueco no debe esconderse): se informa aparte cuántas están revisadas.
+ * «Identificador repetido» y «Formato de IBAN» sí dejan de contar a las revisadas (un grupo repetido solo desaparece si todas las suyas lo están).
+ */
+export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: SociedadParaCalidad[], revisadas: ReadonlySet<number> = new Set()) {
   const activas = obs.filter((o) => o.activa);
   const conActivas = new Set(activas.map((o) => o.sociedad));
   const sinObligaciones = sociedades.filter((s) => !conActivas.has(s.nombre));
@@ -172,14 +180,16 @@ export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: SociedadPa
     activas: activas.length,
     inactivas: obs.length - activas.length,
     sinDia: n((o) => o.diaEsperadoPago === null),
+    sinDiaRevisadas: n((o) => o.diaEsperadoPago === null && revisadas.has(o.id)),
     sinMonto: n((o) => o.montoEsperado === null),
     sinCuenta: n((o) => o.cuentaEsperadaId === null),
     sinResponsable: n((o) => o.responsable === null),
     sinMesArranque: n((o) => o.frecuencia !== "mensual" && o.mesArranque === null),
+    sinMesArranqueRevisadas: n((o) => o.frecuencia !== "mensual" && o.mesArranque === null && revisadas.has(o.id)),
     frecuenciaPorConfirmar: n((o) => o.frecuenciaPorConfirmar),
     monedaPorConfirmar: n((o) => o.monedaPorConfirmar),
-    identificadoresRepetidos: identificadoresRepetidos(obs),
-    formatoIban: activas.filter((o) => pareceIban(o.identificador)).map((o) => ({ id: o.id, sociedad: o.sociedad, proveedor: o.proveedor, identificador: o.identificador })),
+    identificadoresRepetidos: identificadoresRepetidos(obs).filter((g) => g.obligaciones.some((id) => !revisadas.has(id))),
+    formatoIban: activas.filter((o) => pareceIban(o.identificador) && !revisadas.has(o.id)).map((o) => ({ id: o.id, sociedad: o.sociedad, proveedor: o.proveedor, identificador: o.identificador })),
     // con estados de cuenta pero sin obligaciones: aviso individual (algo falta en el catálogo)
     sociedadesSinObligaciones: sinObligaciones.filter((s) => s.conEstados).map((s) => s.nombre).sort(),
     // sin estados de cuenta ni obligaciones: una sola línea resumen (sociedades sin movimiento cargado)

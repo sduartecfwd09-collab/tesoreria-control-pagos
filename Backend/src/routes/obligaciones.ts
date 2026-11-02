@@ -12,6 +12,11 @@ import {
   estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
 import { normalizarMotivo } from "../domain/cambio-dia.js";
+import { ErrorDeServicio } from "../domain/permisos.js";
+import { huellaActual, revisionConEfecto, revisionesConEfecto } from "../domain/revision.js";
+import { usuarioActual, type UsuarioActual } from "../identidad/usuario-actual.js";
+import { revisionesVigentes } from "../repositories/decisiones.js";
+import { marcarRevisada, quitarRevision } from "../revisiones/obligacion.js";
 import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
 import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
@@ -46,8 +51,18 @@ const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
   ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad), responsable: responsableEfectivo(o).nombre,
 });
 
-function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null, conResponsable: boolean) {
-  const observaciones = etiquetasDe(aCalidad(o), repetidos);
+/** Lo que hace falta para informar la revisión de cada obligación: las revisiones vigentes y quién consulta. */
+interface ContextoRevision {
+  revisiones: Awaited<ReturnType<typeof revisionesVigentes>>;
+  persona: UsuarioActual | null;
+}
+
+function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null, conResponsable: boolean, ctx: ContextoRevision) {
+  const calidad = aCalidad(o);
+  const observaciones = etiquetasDe(calidad, repetidos);
+  // una revisión vigente solo vale si la huella (datos y causas) sigue siendo la de cuando se revisó; si no, vuelve a «En revisión»
+  const decision = ctx.revisiones.get(o.id) ?? null;
+  const conEfecto = revisionConEfecto(decision, huellaActual(calidad, repetidos));
   return {
     id: o.id,
     sociedadId: o.sociedadId, sociedad: etiquetaSociedad(o.sociedad),
@@ -64,7 +79,11 @@ function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadore
     proximoPago, // dato calculado: el próximo vencimiento con fecha igual o posterior a hoy, según la frecuencia
     actualizado: o.actualizado.toISOString(),
     etiquetas: observaciones,
-    estado: estadoDeObligacion(o.activa, observaciones),
+    estado: estadoDeObligacion(o.activa, observaciones, conEfecto),
+    // quién, cuándo y la nota; sinEfecto = cambiaron los datos o la causa (vuelve a «En revisión»; la decisión no se borra)
+    revision: decision ? { quien: decision.nombreUsuario, cuando: decision.creadoEn.toISOString(), nota: decision.motivo, sinEfecto: !conEfecto } : null,
+    // hay una acción posible para esta persona: marcar como revisada (En revisión) o quitar la revisión (Revisada)
+    puedeGestionar: Boolean(ctx.persona && o.activa && observaciones.length > 0 && puedeEscribirEnSociedad(ctx.persona, o.sociedad)),
   };
 }
 
@@ -100,6 +119,7 @@ function calidadParaPersona<T extends { sinResponsable: number }>(c: T, esJefatu
 const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.code(422).send({ error, ...(campo ? { campo } : {}) });
 
 export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
+  const contextoDeRevision = async (req: Parameters<typeof usuarioActual>[0]): Promise<ContextoRevision> => ({ revisiones: await revisionesVigentes(), persona: await usuarioActual(req, opts.modoPruebas) });
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
     return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, tesorero: x.tesorero?.nombre ?? null, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
@@ -115,11 +135,11 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
     const alcance = await alcanceDe(req, opts.modoPruebas);
     const ids = (await obligacionesDelAlcance(alcance)) ?? undefined;
-    const [{ total, datos }, repetidos] = await Promise.all([listarObligaciones({ ...q.data, ids }), repetidosActuales()]);
+    const [{ total, datos }, repetidos, ctx] = await Promise.all([listarObligaciones({ ...q.data, ids }), repetidosActuales(), contextoDeRevision(req)]);
     const proximos = await proximosPagos(datos, opts.reloj);
     return {
       alcance: alcanceParaRespuesta(alcance),
-      datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null, alcance.tipo === "todo")),
+      datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null, alcance.tipo === "todo", ctx)),
       total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
     };
   });
@@ -130,11 +150,14 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const [todas, sociedades, conEstados] = await Promise.all([todasLasObligaciones(), listarSociedades(), sociedadesConEstados()]);
     const obs = ids ? todas.filter((o) => ids.includes(o.id)) : todas;
     const activas = obs.filter((o) => o.activa);
+    // las revisiones con efecto: «Identificador repetido» y «Formato de IBAN» dejan de contarlas; «Falta día» y «Falta mes de arranque» siguen contando el dato faltante
+    const calidades = obs.map(aCalidad);
+    const revisadas = revisionesConEfecto(calidades, identificadoresRepetidos(calidades), await revisionesVigentes());
     const contar = (xs: string[]) => xs.reduce<Record<string, number>>((m, x) => ({ ...m, [x]: (m[x] ?? 0) + 1 }), {});
     return {
       alcance: alcanceParaRespuesta(alcance),
       datos: {
-        ...calidadParaPersona(calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) }))), alcance.tipo === "todo"),
+        ...calidadParaPersona(calidadCatalogo(calidades, sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) })), revisadas), alcance.tipo === "todo"),
         porSociedad: { ...Object.fromEntries(sociedades.map((s) => [etiquetaSociedad(s), 0])), ...contar(activas.map((o) => etiquetaSociedad(o.sociedad))) },
         porCategoria: contar(activas.map((o) => o.categoria.nombre)),
       },
@@ -147,7 +170,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const o = await obtenerObligacion(id.data);
     const propias = await obligacionesDelAlcance(await alcanceDe(req, opts.modoPruebas));
     if (!o || (propias && !propias.includes(o.id))) return reply.code(404).send({ error: "Obligación no encontrada" });
-    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo") };
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo", await contextoDeRevision(req)) };
   });
 
   app.post("/api/obligaciones", async (req, reply) => {
@@ -205,7 +228,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       origen: "manual",
     }, autor);
     const regeneracion = (await actualizarVencimientos(opts.reloj, o.id)).calendario;
-    return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion, advertencias: advertencia ? [advertencia] : [] });
+    return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo", await contextoDeRevision(req)), regeneracion, advertencias: advertencia ? [advertencia] : [] });
   });
 
   // Cambio masivo de frecuencia sobre las filas elegidas: la frecuencia queda confirmada y el calendario se ajusta una sola vez.
@@ -237,6 +260,57 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     ).length;
     const { calendario } = await actualizarVencimientos(opts.reloj);
     return { datos: { actualizadas, calendario } };
+  });
+
+  // Marcar como revisada una obligación «En revisión» (nota obligatoria) y quitar la revisión (motivo). 401 sin persona, 404, 403 fuera de su sociedad,
+  // 422 en validación y 409 si no corresponde (no está en revisión, ya está revisada o no tiene revisión que quitar).
+  const paraRevisar = async (req: Parameters<typeof exigirPersona>[0], reply: Parameters<typeof exigirPersona>[1]) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return null;
+    const id = idParam.safeParse((req.params as { id: string }).id);
+    if (!id.success) {
+      reply.code(400).send({ error: "Identificador inválido" });
+      return null;
+    }
+    const o = await obtenerObligacion(id.data);
+    if (!o) {
+      reply.code(404).send({ error: "Obligación no encontrada" });
+      return null;
+    }
+    if (!puedeEscribirEnSociedad(persona, o.sociedad)) {
+      reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+      return null;
+    }
+    return { persona, obligacion: { id: o.id, sociedadId: o.sociedadId, calidad: aCalidad(o), repetidos: await repetidosActuales() } };
+  };
+  const responderErrorDeServicio = (reply: FastifyReply, e: unknown) => {
+    if (!(e instanceof ErrorDeServicio)) throw e;
+    const estado = { permiso: 403, validacion: 422, no_encontrado: 404, conflicto: 409 }[e.codigo];
+    return reply.code(estado).send({ error: e.message, ...(e.campo ? { campo: e.campo } : {}) });
+  };
+
+  app.post("/api/obligaciones/:id/marcar-revisada", async (req, reply) => {
+    const g = await paraRevisar(req, reply);
+    if (!g) return reply;
+    try {
+      await marcarRevisada({ obligacion: g.obligacion, nota: ((req.body ?? {}) as { nota?: unknown }).nota, autor: autorDe(g.persona, opts.modoPruebas) });
+      return { datos: { estado: "revisada" } };
+    } catch (e) {
+      return responderErrorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/obligaciones/:id/quitar-revision", async (req, reply) => {
+    const g = await paraRevisar(req, reply);
+    if (!g) return reply;
+    const motivo = normalizarMotivo(((req.body ?? {}) as { motivo?: unknown }).motivo);
+    if (motivo === null) return reply.code(422).send({ error: "Indique el motivo (entre 3 y 300 caracteres)", campo: "motivo" });
+    try {
+      await quitarRevision({ obligacion: g.obligacion, motivo, autor: autorDe(g.persona, opts.modoPruebas) });
+      return { datos: { estado: "en_revision" } };
+    } catch (e) {
+      return responderErrorDeServicio(reply, e);
+    }
   });
 
   app.patch("/api/obligaciones/:id", async (req, reply) => {
@@ -285,7 +359,7 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
     } }], autorDe(persona, opts.modoPruebas), motivo))[0]!;
     const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? (await actualizarVencimientos(opts.reloj, o.id)).calendario : null;
-    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo"), regeneracion };
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo", await contextoDeRevision(req)), regeneracion };
   });
 
   app.post("/api/catalogo/importar", async (_req, reply) => {

@@ -5,6 +5,7 @@ import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { claveObligacionPeriodo } from "../domain/asociacion.js";
 import { claveUnicaJustificacionArchivo, claveUnicaJustificacionVencimiento, TIPO_JUSTIFICACION_ARCHIVO, TIPO_JUSTIFICACION_VENCIMIENTO } from "../domain/justificacion.js";
+import { claveUnicaRevision, TIPO_REVISION_OBLIGACION } from "../domain/revision.js";
 import type { AutorDelCambio } from "./historial.js";
 
 export const TIPO_ASOCIACION_PAGO = "asociacion_pago";
@@ -128,6 +129,40 @@ export async function crearJustificacionArchivo(tx: Prisma.TransactionClient, j:
       tipo: TIPO_JUSTIFICACION_ARCHIVO, sociedadId: j.sociedadId, archivoId: j.archivoId, rutaArchivo: j.ruta, huella: j.huella, motivo: j.motivo, datos: j.datos,
       usuarioId: j.autor.id, nombreUsuario: j.autor.nombre, modoPruebas: j.autor.modoPruebas,
       unicaMovimiento: claveUnicaJustificacionArchivo(j.archivoId),
+    },
+  });
+}
+
+// --- Revisiones de obligaciones «En revisión» ---
+
+/** La revisión vigente de una obligación, si la hay (aunque ya no tenga efecto). */
+export async function revisionVigenteDeObligacion(obligacionId: number, tx: Prisma.TransactionClient | typeof prisma = prisma) {
+  return tx.decisionManual.findFirst({ where: { tipo: TIPO_REVISION_OBLIGACION, vigente: true, obligacionId } });
+}
+
+/** Todas las revisiones vigentes, por obligación (una por obligación revisada). */
+export async function revisionesVigentes() {
+  const filas = await prisma.decisionManual.findMany({ where: { tipo: TIPO_REVISION_OBLIGACION, vigente: true, obligacionId: { not: null } } });
+  return new Map(filas.map((d) => [d.obligacionId!, d]));
+}
+
+export interface NuevaRevision {
+  sociedadId: number;
+  obligacionId: number;
+  /** la nota (3 a 300): explica, no corrige el dato */
+  nota: string;
+  /** SHA-256 de los datos que causan la revisión */
+  huella: string;
+  /** JSON corto con las causas detectadas */
+  datos: string;
+  autor: Autor;
+}
+
+export async function crearRevision(tx: Prisma.TransactionClient, r: NuevaRevision) {
+  return tx.decisionManual.create({
+    data: {
+      tipo: TIPO_REVISION_OBLIGACION, sociedadId: r.sociedadId, obligacionId: r.obligacionId, motivo: r.nota, huella: r.huella, datos: r.datos,
+      usuarioId: r.autor.id, nombreUsuario: r.autor.nombre, modoPruebas: r.autor.modoPruebas, unicaObligacionPeriodo: claveUnicaRevision(r.obligacionId),
     },
   });
 }
