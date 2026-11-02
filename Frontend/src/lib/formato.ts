@@ -139,6 +139,7 @@ const ROTULO_CAMPO: Record<string, string> = {
   pago_asociado: "Pago del vencimiento",
   justificacion_vencimiento: "Justificación del vencimiento",
   justificacion_archivo: "Justificación del archivo",
+  revision_obligacion: "Revisión de la obligación",
 };
 export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
 
@@ -148,7 +149,7 @@ export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "
  */
 export const GRUPOS_DE_CAMPOS: { titulo: string; campos: string[] }[] = [
   { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo"] },
+  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion"] },
 ];
 
 /**
@@ -217,6 +218,8 @@ export function cambioEnPalabras(f: { accion: string; campo: string; antes: stri
   if (f.accion === "crear") return { tipo: "vacio" };
   if (f.accion === "asociar_pago") return { tipo: "valores", antes: "Sin asociar", despues: "Asociado a mano" };
   if (f.accion === "quitar_asociacion") return { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" };
+  if (f.accion === "marcar_revisada") return { tipo: "valores", antes: "En revisión", despues: "Revisada" };
+  if (f.accion === "quitar_revision") return { tipo: "valores", antes: "Revisada", despues: "En revisión" };
   if (f.accion === "justificar") return { tipo: "valores", antes: "Sin justificar", despues: "Justificado" };
   if (f.accion === "quitar_justificacion") return { tipo: "valores", antes: "Justificado", despues: "Sin justificar" };
   if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
@@ -264,3 +267,15 @@ export function fraseJustificado(j: { quien: string; cuando: string; motivo: str
 export function etiquetasDeCandidato(c: { traeNumero: boolean; traeProveedor: boolean }): string[] {
   return [...(c.traeNumero ? ["Trae el número"] : []), ...(c.traeProveedor ? ["Trae el proveedor"] : [])];
 }
+
+/** Un identificador de servicio nunca completo: solo los últimos 4 caracteres, como «****1083» (con 4 o menos, solo «****»). */
+export const identificadorEnmascarado = (id: string): string => (id.length <= 4 ? "****" : `****${id.slice(-4)}`);
+
+/** «Revisada por Ana Uno el 28 oct. Nota: Falta el día en el catálogo.» (sin punto doble si la nota ya termina en punto). */
+export function fraseRevisada(r: { quien: string; cuando: string; nota: string }, anio?: string): string {
+  const fecha = fechaDeCambio(r.cuando, anio);
+  return `Revisada por ${r.quien}${fecha ? ` el ${fecha}` : ""}. Nota: ${r.nota.replace(/[.\s]+$/, "")}.`;
+}
+
+/** Detalle de la tarjeta «Falta día»: «no generan vencimientos» y, si las hay, cuántas de esas están revisadas («2 revisadas · no generan vencimientos»). */
+export const textoFaltaDia = (revisadas: number): string => (revisadas > 0 ? `${revisadas} ${revisadas === 1 ? "revisada" : "revisadas"} · no generan vencimientos` : "no generan vencimientos");

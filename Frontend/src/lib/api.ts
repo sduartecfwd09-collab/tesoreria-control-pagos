@@ -99,6 +99,10 @@ export const api = {
     pedir<{ datos: { problema: string } }>(`/api/archivos/${id}/justificar`, { method: "POST", body: JSON.stringify({ motivo, nota }) }),
   quitarJustificacionDeArchivo: (id: number, motivo: string) =>
     pedir<{ datos: { ok: boolean } }>(`/api/archivos/${id}/quitar-justificacion`, { method: "POST", body: JSON.stringify({ motivo }) }),
+  marcarRevisada: (id: number, nota: string) =>
+    pedir<{ datos: { estado: string } }>(`/api/obligaciones/${id}/marcar-revisada`, { method: "POST", body: JSON.stringify({ nota }) }),
+  quitarRevision: (id: number, motivo: string) =>
+    pedir<{ datos: { estado: string } }>(`/api/obligaciones/${id}/quitar-revision`, { method: "POST", body: JSON.stringify({ motivo }) }),
   quitarAsociacion: (id: number, motivo: string) =>
     pedir<{ datos: { estado: string } }>(`/api/vencimientos/${id}/quitar-asociacion`, { method: "POST", body: JSON.stringify({ motivo }) }),
   avisosDatos: async () => (await pedir<{ datos: AvisoDatos[] }>("/api/vencimientos/avisos-datos")).datos,

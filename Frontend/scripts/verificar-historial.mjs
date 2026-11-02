@@ -92,10 +92,10 @@ test("filtro «Qué cambió»: dos grupos, un único mapa campo -> grupo, y un g
   assert.equal(f.rotuloDeCampo("pago_asociado"), "Pago del vencimiento");
   assert.deepEqual(f.GRUPOS_DE_CAMPOS.map((g) => g.titulo), ["Datos de la obligación", "Decisiones manuales"]);
   // con todo lo que hay: cada campo en su grupo y en el orden del mapa (no el de llegada)
-  const todo = ["justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
+  const todo = ["revision_obligacion", "justificacion_archivo", "justificacion_vencimiento", "pago_asociado", "obligacion", "cuentaEsperadaId", "frecuencia", "activa", "mesArranque", "diaEsperadoPago", "frecuenciaPorConfirmar", "controlDesde", "montoEsperado", "moneda"];
   assert.deepEqual(f.agruparCampos(todo), [
     { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
-    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo"] },
+    { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion"] },
   ]);
   // un grupo sin opciones dentro del alcance no se muestra; si solo hay uno, se muestra con su título
   assert.deepEqual(f.agruparCampos(["frecuencia", "activa"]), [{ titulo: "Datos de la obligación", campos: ["frecuencia", "activa"] }]);
@@ -169,7 +169,7 @@ test("filtro «Qué cambió»: las justificaciones van en «Decisiones manuales�
   assert.equal(f.rotuloDeCampo("justificacion_vencimiento"), "Justificación del vencimiento");
   assert.equal(f.rotuloDeCampo("justificacion_archivo"), "Justificación del archivo");
   const decisiones = f.GRUPOS_DE_CAMPOS.find((g) => g.titulo === "Decisiones manuales");
-  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo"]);
+  assert.deepEqual(decisiones.campos, ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion"]);
   // un grupo solo con justificaciones se muestra solo con ese grupo; sin ellas, no aparece
   assert.deepEqual(f.agruparCampos(["justificacion_archivo"]), [{ titulo: "Decisiones manuales", campos: ["justificacion_archivo"] }]);
   assert.deepEqual(f.agruparCampos(["frecuencia"]).map((g) => g.titulo), ["Datos de la obligación"]);
@@ -181,4 +181,48 @@ test("frase del detalle: «Justificado por {nombre} el {fecha}. Motivo: {motivo}
   assert.equal(f.fraseJustificado({ ...j, nota: "La tienda cerró." }, "2026"), "Justificado por Ana Uno el 28 oct. Motivo: No se paga este mes: La tienda cerró.");
   assert.equal(f.fraseJustificado({ ...j, cuando: "2025-12-31T15:30:00.000Z" }, "2026"), "Justificado por Ana Uno el 31 dic 2025. Motivo: No se paga este mes.");
   assert.equal(f.fraseJustificado({ ...j, cuando: "no es fecha" }, "2026"), "Justificado por Ana Uno. Motivo: No se paga este mes.");
+});
+
+test("revisión de la obligación: «Revisión de la obligación» y «En revisión → Revisada» (a la inversa al quitar); la flecha nunca queda sola", () => {
+  const marcar = { accion: "marcar_revisada", campo: "revision_obligacion", antes: "en_revision", despues: "revisada" };
+  const quitar = { accion: "quitar_revision", campo: "revision_obligacion", antes: "revisada", despues: "en_revision" };
+  assert.equal(f.rotuloDeCampo("revision_obligacion"), "Revisión de la obligación");
+  assert.equal(f.rotuloDeFila(marcar), "Revisión de la obligación");
+  assert.equal(f.rotuloDeFila(quitar), "Revisión de la obligación");
+  assert.deepEqual(f.cambioEnPalabras(marcar), { tipo: "valores", antes: "En revisión", despues: "Revisada" });
+  assert.deepEqual(f.cambioEnPalabras(quitar), { tipo: "valores", antes: "Revisada", despues: "En revisión" });
+  // aunque lo guardado viniera vacío, siguen siendo dos valores: nunca una flecha con un solo lado
+  assert.deepEqual(f.cambioEnPalabras({ ...marcar, antes: null, despues: null }), { tipo: "valores", antes: "En revisión", despues: "Revisada" });
+  for (const accion of ["marcar_revisada", "quitar_revision", "justificar", "asociar_pago", "crear", "editar"]) {
+    const c = f.cambioEnPalabras({ accion, campo: "revision_obligacion", antes: null, despues: null });
+    assert.ok(["vacio", "sin_valores", "valores"].includes(c.tipo), accion);
+    if (c.tipo === "valores") assert.ok(c.antes !== "" && c.despues !== "", accion);
+  }
+});
+
+test("filtro «Qué cambió»: la revisión va en «Decisiones manuales»; sola, ese es el único grupo", () => {
+  assert.deepEqual(f.agruparCampos(["revision_obligacion"]), [{ titulo: "Decisiones manuales", campos: ["revision_obligacion"] }]);
+  assert.deepEqual(f.agruparCampos(["revision_obligacion", "frecuencia"]).map((g) => g.titulo), ["Datos de la obligación", "Decisiones manuales"]);
+  assert.deepEqual(f.agruparCampos(["frecuencia"]).map((g) => g.titulo), ["Datos de la obligación"]);
+});
+
+test("frase de la ficha: «Revisada por {nombre} el {fecha}. Nota: …» (sin punto doble)", () => {
+  const r = { quien: "Ana Uno", cuando: "2026-10-28T15:30:00.000Z", nota: "El proveedor solo da su cuenta bancaria" };
+  assert.equal(f.fraseRevisada(r, "2026"), "Revisada por Ana Uno el 28 oct. Nota: El proveedor solo da su cuenta bancaria.");
+  assert.equal(f.fraseRevisada({ ...r, nota: "Ya se llamó al proveedor. " }, "2026"), "Revisada por Ana Uno el 28 oct. Nota: Ya se llamó al proveedor.");
+  assert.equal(f.fraseRevisada({ ...r, cuando: "2025-12-31T15:30:00.000Z" }, "2026"), "Revisada por Ana Uno el 31 dic 2025. Nota: El proveedor solo da su cuenta bancaria.");
+  assert.equal(f.fraseRevisada({ ...r, cuando: "no es fecha" }, "2026"), "Revisada por Ana Uno. Nota: El proveedor solo da su cuenta bancaria.");
+});
+
+test("el identificador de la ficha nunca sale completo", () => {
+  assert.equal(f.identificadorEnmascarado("0001083"), "****1083");
+  assert.equal(f.identificadorEnmascarado("CR05015202001026284066"), "****4066");
+  assert.equal(f.identificadorEnmascarado("1083"), "****");
+  assert.equal(f.identificadorEnmascarado(""), "****");
+});
+
+test("tarjeta «Falta día»: sigue contando el dato faltante y dice cuántas están revisadas", () => {
+  assert.equal(f.textoFaltaDia(0), "no generan vencimientos");
+  assert.equal(f.textoFaltaDia(1), "1 revisada · no generan vencimientos");
+  assert.equal(f.textoFaltaDia(3), "3 revisadas · no generan vencimientos");
 });

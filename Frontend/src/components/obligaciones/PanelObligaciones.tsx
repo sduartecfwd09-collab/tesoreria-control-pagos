@@ -12,6 +12,7 @@ import { LineaAlcance } from "../LineaAlcance";
 import { CajaError, claseBoton, claseBotonSecundario, claseControl, FinDeLista } from "../ui";
 import { SelectorSociedad } from "../SelectorSociedad";
 import { FormularioObligacion } from "./FormularioObligacion";
+import { FichaObligacion } from "./FichaObligacion";
 import { ResumenCalidad } from "./ResumenCalidad";
 import { TablaObligaciones } from "./TablaObligaciones";
 
@@ -45,6 +46,7 @@ export function PanelObligaciones() {
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [editando, setEditando] = useState<Obligacion | "nueva" | null>(null);
+  const [gestionando, setGestionando] = useState<Obligacion | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
   const [importacion, setImportacion] = useState<ResultadoImportacionCatalogo | null>(null);
@@ -265,6 +267,7 @@ export function PanelObligaciones() {
             <TablaObligaciones
               datos={lista.datos}
               alEditar={setEditando}
+              alGestionar={setGestionando}
             />
             <FinDeLista cantidad={lista.datos.length} total={lista.total} unidad="obligaciones" hayMas={lista.hayMas} cargando={lista.cargandoMas} alLlegar={lista.cargarMas} />
           </>
@@ -275,6 +278,7 @@ export function PanelObligaciones() {
         </p>
       </section>
 
+      {gestionando && <FichaObligacion o={gestionando} alCerrar={() => setGestionando(null)} alCambiar={recargar} />}
       {editando && (
         <FormularioObligacion
           key={editando === "nueva" ? "nueva" : editando.id}

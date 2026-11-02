@@ -159,7 +159,15 @@ export type Frecuencia = "mensual" | "bimestral" | "trimestral" | "semestral" | 
 export type Moneda = "CRC" | "USD";
 
 export type CodigoEtiqueta = "falta_dia" | "falta_mes_arranque" | "id_repetido" | "formato_iban";
-export type EstadoObligacion = "activa" | "inactiva" | "en_revision";
+export type EstadoObligacion = "activa" | "inactiva" | "en_revision" | "revisada";
+
+/** La revisión vigente de una obligación: quién, cuándo (instante UTC) y la nota; sinEfecto = cambiaron los datos o la causa (vuelve a «En revisión»). */
+export interface RevisionObligacion {
+  quien: string;
+  cuando: string;
+  nota: string;
+  sinEfecto: boolean;
+}
 
 export interface EtiquetaObligacion {
   codigo: CodigoEtiqueta;
@@ -193,6 +201,9 @@ export interface Obligacion {
   /** observaciones: solo problemas reales */
   etiquetas: EtiquetaObligacion[];
   estado: EstadoObligacion;
+  revision: RevisionObligacion | null;
+  /** hay una acción posible para esta persona: marcar como revisada (En revisión) o quitar la revisión (Revisada) */
+  puedeGestionar: boolean;
 }
 
 /** Campos que se envían al crear o editar (en la edición solo los que cambiaron). */
@@ -236,11 +247,14 @@ export interface ResumenCatalogo {
   activas: number;
   inactivas: number;
   sinDia: number;
+  /** de las que no tienen día, cuántas están revisadas (siguen contando como sin día) */
+  sinDiaRevisadas: number;
   sinMonto: number;
   sinCuenta: number;
   /** obligaciones activas cuya sociedad no tiene tesorero; solo lo recibe Jefatura */
   sinResponsable?: number;
   sinMesArranque: number;
+  sinMesArranqueRevisadas: number;
   frecuenciaPorConfirmar: number;
   monedaPorConfirmar: number;
   identificadoresRepetidos: { sociedad: string; identificador: string; proveedores: string[]; obligaciones: number[] }[];

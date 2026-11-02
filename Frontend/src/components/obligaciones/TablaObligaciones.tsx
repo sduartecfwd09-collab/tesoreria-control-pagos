@@ -2,22 +2,19 @@
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { MESES, nombreFecha } from "@/lib/formato";
-import type { EstadoObligacion, EtiquetaObligacion, Frecuencia, Obligacion } from "@/lib/tipos";
+import type { EtiquetaObligacion, Frecuencia, Obligacion } from "@/lib/tipos";
 import { Etiqueta, NombreSociedad, type Tono } from "../ui";
+import { EtiquetaEstadoObligacion } from "./FichaObligacion";
 
 const col = createColumnHelper<Obligacion>();
 
-const ESTADO: Record<EstadoObligacion, { texto: string; tono: Tono }> = {
-  activa: { texto: "Activa", tono: "verde" },
-  inactiva: { texto: "Inactiva", tono: "suave" },
-  en_revision: { texto: "En revisión", tono: "ambar" },
-};
 
 const tonoDe = (e: EtiquetaObligacion): Tono => (e.codigo === "falta_dia" || e.codigo === "falta_mes_arranque" ? "rojo" : "ambar");
 
 /** Solo problemas reales (identificador repetido o con formato de IBAN, sin día o sin mes de arranque); el detalle va en el título. */
 function Observaciones({ o }: { o: Obligacion }) {
-  if (o.etiquetas.length === 0) return <span className="text-suave">—</span>;
+  // una «Revisada» (con efecto) sale de las alertas: sus observaciones no se muestran (se ven en su ficha)
+  if (o.etiquetas.length === 0 || o.estado === "revisada") return <span className="text-suave">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {o.etiquetas.map((e) => (
@@ -31,7 +28,7 @@ function Observaciones({ o }: { o: Obligacion }) {
 
 const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
 
-export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; alEditar: (o: Obligacion) => void }) {
+export function TablaObligaciones({ datos, alEditar, alGestionar }: { datos: Obligacion[]; alEditar: (o: Obligacion) => void; alGestionar: (o: Obligacion) => void }) {
   // el servidor solo envía el responsable (el tesorero de la sociedad) a Jefatura: sin ese dato no hay columna
   const conResponsable = datos.some((o) => o.responsableEfectivo !== undefined);
   const columnas = useMemo(
@@ -79,25 +76,38 @@ export function TablaObligaciones({ datos, alEditar }: { datos: Obligacion[]; al
       col.display({
         id: "estado",
         header: "Estado",
-        cell: ({ row: { original: o } }) => <Etiqueta tono={ESTADO[o.estado].tono}>{ESTADO[o.estado].texto}</Etiqueta>,
+        cell: ({ row: { original: o } }) => <EtiquetaEstadoObligacion estado={o.estado} />,
       }),
       col.display({ id: "observaciones", header: "Observaciones", cell: ({ row }) => <Observaciones o={row.original} /> }),
       col.display({
         id: "acciones",
         header: () => <span className="sr-only">Acciones</span>,
         cell: ({ row: { original: o } }) => (
-          <button
-            type="button"
-            onClick={() => alEditar(o)}
-            aria-label={`Editar ${o.proveedor} ${o.identificador} (${o.sociedad})`}
-            className="rounded border-2 border-control px-2 py-1 text-sm font-semibold hover:bg-fondo-suave"
-          >
-            Editar
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {/* «Gestionar» solo si hay una acción posible para esta persona (marcar como revisada o quitar la revisión) */}
+            {o.puedeGestionar && (
+              <button
+                type="button"
+                onClick={() => alGestionar(o)}
+                aria-label={`Gestionar ${o.proveedor} ${o.identificador} (${o.sociedad})`}
+                className="rounded border-2 border-control px-2 py-1 text-sm font-semibold hover:bg-fondo-suave"
+              >
+                Gestionar
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => alEditar(o)}
+              aria-label={`Editar ${o.proveedor} ${o.identificador} (${o.sociedad})`}
+              className="rounded border-2 border-control px-2 py-1 text-sm font-semibold hover:bg-fondo-suave"
+            >
+              Editar
+            </button>
+          </div>
         ),
       }),
     ],
-    [alEditar, conResponsable],
+    [alEditar, alGestionar, conResponsable],
   );
 
   const tabla = useReactTable({ data: datos, columns: columnas, getCoreRowModel: getCoreRowModel(), getRowId: (o) => String(o.id) });

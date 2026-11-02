@@ -1,4 +1,5 @@
 "use client";
+import { textoFaltaDia } from "@/lib/formato";
 import type { EstadoVencimiento, FiltroObligaciones, ResumenCatalogo } from "@/lib/tipos";
 import { EtiquetaEstado, IconoEstado } from "../pagos/EstadoPago";
 import { ACENTO_ESTADO, Tarjeta } from "../pagos/TarjetaEstado";
@@ -21,7 +22,8 @@ export function ResumenCalidad({
     // solo Jefatura: el servidor no envía este conteo a un tesorero
     ...(r.sinResponsable !== undefined ? [{ falta: "responsable" as const, titulo: "Sin responsable", n: r.sinResponsable, ayuda: "su sociedad no tiene tesorero", ...pide(r.sinResponsable) }] : []),
     { falta: "frecuencia", titulo: "Frecuencia sin confirmar", n: r.frecuenciaPorConfirmar, ayuda: "confírmela al editar", ...pide(r.frecuenciaPorConfirmar) },
-    ...(r.sinDia > 0 ? [{ falta: "dia" as const, titulo: "Falta día", n: r.sinDia, ayuda: "no generan vencimientos", ...pide(r.sinDia) }] : []),
+    // «Falta día» sigue contando el dato faltante aunque la obligación esté revisada (no genera vencimientos y ese hueco no se esconde); dice cuántas lo están
+    ...(r.sinDia > 0 ? [{ falta: "dia" as const, titulo: "Falta día", n: r.sinDia, ayuda: textoFaltaDia(r.sinDiaRevisadas), ...pide(r.sinDia) }] : []),
   ];
 
   return (
