@@ -1,6 +1,6 @@
 # CLAUDE.md · Control de pagos de Tesorería (piloto)
 
-Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `README.md`. Lo que aún no está aprobado va solo en la última sección, «Por aprobar»; todo lo demás está vigente.
+Reglas fijas del proyecto. Detalle técnico, arranque y contrato de API: `docs/guia-tecnica.md` (el `README.md` es la presentación general). Lo que aún no está aprobado va solo en la última sección, «Por aprobar»; todo lo demás está vigente.
 
 ## Confidencialidad (no negociable)
 - La carpeta PASANTES (estados de cuenta y tabla de pagos frecuentes) es **solo lectura**: nunca se escribe, mueve ni copia al repositorio.
