@@ -15,14 +15,29 @@ export interface DatosEditables {
   cuentaEsperadaId: number | null;
 }
 
-export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion" | "marcar_revisada" | "quitar_revision" | "mover_fecha" | "quitar_movimiento" | "cambiar_dia" | "es_la_misma" | "son_distintas" | "sigue_vigente" | "desactivar_diferencia" | "mantener_plataforma" | "usar_excel";
+/**
+ * TODAS las acciones y TODOS los campos que el historial puede registrar. Es la única lista: el tipo de cada línea sale de aquí, así que un campo o una
+ * acción nuevos no compilan hasta declararse, y la prueba `historial-completo` comprueba que cada uno tenga su rótulo, su grupo del filtro «Qué cambió»
+ * y su lectura en el Frontend (src/lib/formato.ts: ROTULO_CAMPO, GRUPOS_DE_CAMPOS y cambioEnPalabras).
+ */
+export const ACCIONES_HISTORIAL = [
+  "crear", "editar", "activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision",
+  "mover_fecha", "quitar_movimiento", "cambiar_dia", "es_la_misma", "son_distintas", "sigue_vigente", "desactivar_diferencia", "mantener_plataforma", "usar_excel",
+] as const;
+export type AccionHistorial = (typeof ACCIONES_HISTORIAL)[number];
+
+export const CAMPOS_HISTORIAL = [
+  "obligacion", "frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId",
+  "pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento", "diferencia_excel",
+] as const;
+export type CampoHistorial = (typeof CAMPOS_HISTORIAL)[number];
 
 /** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
 export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision", "mover_fecha", "quitar_movimiento", "cambiar_dia", "es_la_misma", "son_distintas", "sigue_vigente", "desactivar_diferencia", "mantener_plataforma", "usar_excel"];
 
 export interface LineaCambio {
   accion: AccionHistorial;
-  campo: string;
+  campo: CampoHistorial;
   antes: string | null;
   despues: string | null;
 }
@@ -32,7 +47,7 @@ const confirmada = (porConfirmar: boolean) => (porConfirmar ? "sin confirmar" : 
 
 export function lineasDeEdicion(a: DatosEditables, d: DatosEditables): LineaCambio[] {
   const l: LineaCambio[] = [];
-  const valor = (campo: string, antes: string | null, despues: string | null) => l.push({ accion: "editar", campo, antes, despues });
+  const valor = (campo: CampoHistorial, antes: string | null, despues: string | null) => l.push({ accion: "editar", campo, antes, despues });
   if (a.frecuencia !== d.frecuencia) valor("frecuencia", a.frecuencia, d.frecuencia);
   if (a.frecuenciaPorConfirmar !== d.frecuenciaPorConfirmar) valor("frecuenciaPorConfirmar", confirmada(a.frecuenciaPorConfirmar), confirmada(d.frecuenciaPorConfirmar));
   if (a.mesArranque !== d.mesArranque) valor("mesArranque", texto(a.mesArranque), texto(d.mesArranque));
