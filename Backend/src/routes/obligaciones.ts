@@ -1,54 +1,107 @@
 import { stat } from "node:fs/promises";
+import { advertenciaDiaYaPaso, mesDeAlta, periodoDeControl, primerDiaDelPeriodo } from "../domain/control-desde.js";
+import { enmascararCuenta } from "../domain/enmascarar.js";
+import { aNumero } from "../domain/montos.js";
+import { etiquetaSociedad } from "../domain/sociedades.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { hayImportacionCatalogoEnCurso, importarCatalogo } from "../catalogo/importar.js";
 import {
   CAMPOS_EDITABLES, calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe,
-  identificadoresRepetidos, primerError, type ObligacionCalidad,
+  estadoDeObligacion, identificadoresRepetidos, primerError, responsableEfectivo, type ObligacionCalidad,
 } from "../domain/obligaciones.js";
+import { normalizarMotivo } from "../domain/cambio-dia.js";
+import { ErrorDeServicio } from "../domain/permisos.js";
+import { huellaActual, revisionConEfecto, revisionesConEfecto } from "../domain/revision.js";
+import { usuarioActual, type UsuarioActual } from "../identidad/usuario-actual.js";
+import { revisionesVigentes } from "../repositories/decisiones.js";
+import { marcarRevisada, quitarRevision } from "../revisiones/obligacion.js";
+import { cambiarDia } from "../obligaciones/cambiar-dia.js";
+import { alcanceDe, alcanceParaRespuesta, obligacionesDelAlcance } from "../identidad/alcance.js";
+import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD } from "../identidad/exigir-persona.js";
 import { FRECUENCIAS } from "../domain/parametros.js";
 import { ErrorLectura } from "../ingest/lector.js";
 import {
-  actualizarObligacion, buscarPorClave, crearObligacion, listarCategorias, listarObligaciones, listarSociedades,
-  obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorCodigo, todasLasObligaciones,
+  actualizarObligacionesConHistorial, buscarPorClave, buscarPorIdentificador, crearObligacionConHistorial, listarCategorias, listarObligaciones, listarSociedades,
+  obtenerCategoria, obtenerCuenta, obtenerObligacion, obtenerSociedadPorId, sociedadesConEstados, todasLasObligaciones,
   type ObligacionCompleta,
 } from "../repositories/obligaciones.js";
 import { valorGlobal } from "../repositories/parametros.js";
-import type { Reloj } from "../domain/reloj.js";
-import { regenerarObligacion } from "../vencimientos/generar.js";
+import { proximoPago } from "../domain/vencimientos.js";
+import { hoyDe, periodoDe, type Reloj } from "../domain/reloj.js";
+import { cambiosDiaProgramados } from "../repositories/cambios-dia.js";
+import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
 
 // Campos que cambian los vencimientos: al editarlos se regeneran los futuros sin conciliación.
-const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "montoEsperado", "activa"];
+const CAMPOS_QUE_REGENERAN = ["frecuencia", "mesArranque", "diaEsperadoPago", "montoEsperado", "activa", "controlDesde"];
 
 const consulta = z.object({
   sociedad: z.string().trim().min(1).transform((s) => s.toUpperCase()).optional(),
+  sociedadId: z.coerce.number({ error: "La sociedad debe ser un número" }).int().positive("La sociedad debe ser un número").optional(),
   categoria: z.coerce.number({ error: "La categoría debe ser un número" }).int().positive("La categoría debe ser un número").optional(),
   activa: z.enum(["true", "false"], { error: "«activa» debe ser true o false" }).transform((v) => v === "true").optional(),
   q: z.string().trim().min(1).max(80, "La búsqueda admite como máximo 80 caracteres").optional(),
-  falta: z.enum(["monto", "cuenta", "responsable", "dia"], { error: "«falta» debe ser monto, cuenta, responsable o dia" }).optional(),
+  falta: z.enum(["monto", "cuenta", "responsable", "dia", "frecuencia"], { error: "«falta» debe ser monto, cuenta, responsable, dia o frecuencia" }).optional(),
   pagina: z.coerce.number().int().min(1, "La página debe ser 1 o más").default(1),
   porPagina: z.coerce.number().int().min(1).max(500, "Se pueden pedir como máximo 500 por página").default(50),
 });
 
 const idParam = z.coerce.number().int().positive();
 
-const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({ ...o, sociedad: o.sociedad.codigo });
+const aCalidad = (o: ObligacionCompleta): ObligacionCalidad => ({
+  ...o, montoEsperado: aNumero(o.montoEsperado), sociedad: etiquetaSociedad(o.sociedad), responsable: responsableEfectivo(o).nombre,
+});
 
-function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>) {
+/** Lo que hace falta para informar la revisión de cada obligación: las revisiones vigentes y quién consulta. */
+interface ContextoRevision {
+  revisiones: Awaited<ReturnType<typeof revisionesVigentes>>;
+  persona: UsuarioActual | null;
+  /** cambios permanentes del día con mes de inicio, por obligación, y el mes en curso (para decir cuál está programado) */
+  cambiosDia: Awaited<ReturnType<typeof cambiosDiaProgramados>>;
+  mesEnCurso: string;
+}
+
+function aDto(o: ObligacionCompleta, repetidos: ReturnType<typeof identificadoresRepetidos>, proximoPago: string | null, conResponsable: boolean, ctx: ContextoRevision) {
+  const calidad = aCalidad(o);
+  const observaciones = etiquetasDe(calidad, repetidos);
+  // una revisión vigente solo vale si la huella (datos y causas) sigue siendo la de cuando se revisó; si no, vuelve a «En revisión»
+  const decision = ctx.revisiones.get(o.id) ?? null;
+  const conEfecto = revisionConEfecto(decision, huellaActual(calidad, repetidos));
   return {
     id: o.id,
-    sociedadId: o.sociedadId, sociedad: o.sociedad.codigo,
+    sociedadId: o.sociedadId, sociedad: etiquetaSociedad(o.sociedad),
     categoriaId: o.categoriaId, categoria: o.categoria.nombre,
     proveedor: o.proveedor, identificador: o.identificador,
     diaEsperadoPago: o.diaEsperadoPago, diaEditado: o.diaEditado,
+    // el próximo cambio de día ya programado (empieza en un mes posterior al actual) o null
+    diaProgramado: (ctx.cambiosDia.get(o.id) ?? []).filter((x) => x.desde > ctx.mesEnCurso).at(-1) ?? null,
     frecuencia: o.frecuencia, frecuenciaPorConfirmar: o.frecuenciaPorConfirmar, mesArranque: o.mesArranque,
-    montoEsperado: o.montoEsperado, moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
-    cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: o.cuentaEsperada.numero, banco: o.cuentaEsperada.banco } : null,
-    responsable: o.responsable, activa: o.activa, origen: o.origen,
+    montoEsperado: aNumero(o.montoEsperado), moneda: o.moneda, monedaPorConfirmar: o.monedaPorConfirmar,
+    cuentaEsperada: o.cuentaEsperada ? { id: o.cuentaEsperada.id, numero: enmascararCuenta(o.cuentaEsperada.numero), banco: o.cuentaEsperada.banco } : null,
+    // el responsable es el tesorero de la sociedad y solo se informa a Jefatura (a un tesorero le repetiría que es él)
+    ...(conResponsable ? { responsableEfectivo: responsableEfectivo(o).nombre } : {}),
+    activa: o.activa, origen: o.origen,
+    controlDesde: periodoDeControl(o.controlDesde),
+    proximoPago, // dato calculado: el próximo vencimiento con fecha igual o posterior a hoy, según la frecuencia
     actualizado: o.actualizado.toISOString(),
-    etiquetas: etiquetasDe(aCalidad(o), repetidos),
+    etiquetas: observaciones,
+    estado: estadoDeObligacion(o.activa, observaciones, conEfecto),
+    // quién, cuándo y la nota; sinEfecto = cambiaron los datos o la causa (vuelve a «En revisión»; la decisión no se borra)
+    revision: decision ? { quien: decision.nombreUsuario, cuando: decision.creadoEn.toISOString(), nota: decision.motivo, sinEfecto: !conEfecto } : null,
+    // hay una acción posible para esta persona: marcar como revisada (En revisión) o quitar la revisión (Revisada)
+    puedeGestionar: Boolean(ctx.persona && o.activa && observaciones.length > 0 && puedeEscribirEnSociedad(ctx.persona, o.sociedad)),
   };
+}
+
+/** Próximo pago calculado de cada obligación (fecha ISO o null). */
+async function proximosPagos(obs: ObligacionCompleta[], reloj: Reloj): Promise<Map<number, string | null>> {
+  const hoy = hoyDe(reloj);
+  const cambios = await cambiosDiaProgramados(obs.map((o) => o.id));
+  return new Map(obs.map((o) => {
+    const f = proximoPago({ ...o, controlDesde: periodoDeControl(o.controlDesde), cambiosDia: cambios.get(o.id) ?? [] }, hoy);
+    return [o.id, f ? f.toISOString().slice(0, 10) : null];
+  }));
 }
 
 async function repetidosActuales() {
@@ -64,12 +117,20 @@ async function errorCuenta(cuentaId: number | null | undefined, sociedadId: numb
   return null;
 }
 
+/** «Sin responsable» (sociedad sin tesorero) solo lo ve Jefatura. */
+function calidadParaPersona<T extends { sinResponsable: number }>(c: T, esJefatura: boolean): Omit<T, "sinResponsable"> & { sinResponsable?: number } {
+  if (esJefatura) return c;
+  const { sinResponsable: _quitado, ...resto } = c;
+  return resto;
+}
+
 const invalido = (reply: FastifyReply, error: string, campo?: string) => reply.code(422).send({ error, ...(campo ? { campo } : {}) });
 
-export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj }) {
+export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Reloj; modoPruebas: boolean }) {
+  const contextoDeRevision = async (req: Parameters<typeof usuarioActual>[0]): Promise<ContextoRevision> => ({ revisiones: await revisionesVigentes(), persona: await usuarioActual(req, opts.modoPruebas), cambiosDia: await cambiosDiaProgramados(), mesEnCurso: periodoDe(hoyDe(opts.reloj)) });
   app.get("/api/sociedades", async () => {
     const s = await listarSociedades();
-    return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombre: x.nombre, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
+    return { datos: s.map((x) => ({ id: x.id, codigo: x.codigo, nombreLargo: x.nombreLargo, activa: x.activa, tesorero: x.tesorero?.nombre ?? null, obligaciones: x._count.obligaciones, cuentas: x._count.cuentas })) };
   });
 
   app.get("/api/categorias", async () => {
@@ -80,21 +141,32 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
   app.get("/api/obligaciones", async (req, reply) => {
     const q = consulta.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.issues[0]?.message ?? "Filtros inválidos" });
-    const [{ total, datos }, repetidos] = await Promise.all([listarObligaciones(q.data), repetidosActuales()]);
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const ids = (await obligacionesDelAlcance(alcance)) ?? undefined;
+    const [{ total, datos }, repetidos, ctx] = await Promise.all([listarObligaciones({ ...q.data, ids }), repetidosActuales(), contextoDeRevision(req)]);
+    const proximos = await proximosPagos(datos, opts.reloj);
     return {
-      datos: datos.map((o) => aDto(o, repetidos)),
+      alcance: alcanceParaRespuesta(alcance),
+      datos: datos.map((o) => aDto(o, repetidos, proximos.get(o.id) ?? null, alcance.tipo === "todo", ctx)),
       total, pagina: q.data.pagina, porPagina: q.data.porPagina, paginas: Math.max(1, Math.ceil(total / q.data.porPagina)),
     };
   });
 
-  app.get("/api/obligaciones/resumen", async () => {
-    const [obs, sociedades] = await Promise.all([todasLasObligaciones(), listarSociedades()]);
+  app.get("/api/obligaciones/resumen", async (req) => {
+    const alcance = await alcanceDe(req, opts.modoPruebas);
+    const ids = await obligacionesDelAlcance(alcance);
+    const [todas, sociedades, conEstados] = await Promise.all([todasLasObligaciones(), listarSociedades(), sociedadesConEstados()]);
+    const obs = ids ? todas.filter((o) => ids.includes(o.id)) : todas;
     const activas = obs.filter((o) => o.activa);
+    // las revisiones con efecto: «Identificador repetido» y «Formato de IBAN» dejan de contarlas; «Falta día» y «Falta mes de arranque» siguen contando el dato faltante
+    const calidades = obs.map(aCalidad);
+    const revisadas = revisionesConEfecto(calidades, identificadoresRepetidos(calidades), await revisionesVigentes());
     const contar = (xs: string[]) => xs.reduce<Record<string, number>>((m, x) => ({ ...m, [x]: (m[x] ?? 0) + 1 }), {});
     return {
+      alcance: alcanceParaRespuesta(alcance),
       datos: {
-        ...calidadCatalogo(obs.map(aCalidad), sociedades.map((s) => s.codigo)),
-        porSociedad: { ...Object.fromEntries(sociedades.map((s) => [s.codigo, 0])), ...contar(activas.map((o) => o.sociedad.codigo)) },
+        ...calidadParaPersona(calidadCatalogo(calidades, sociedades.map((s) => ({ nombre: etiquetaSociedad(s), conEstados: conEstados.has(s.id) })), revisadas), alcance.tipo === "todo"),
+        porSociedad: { ...Object.fromEntries(sociedades.map((s) => [etiquetaSociedad(s), 0])), ...contar(activas.map((o) => etiquetaSociedad(o.sociedad))) },
         porCategoria: contar(activas.map((o) => o.categoria.nombre)),
       },
     };
@@ -104,19 +176,41 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const id = idParam.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
     const o = await obtenerObligacion(id.data);
-    if (!o) return reply.code(404).send({ error: "Obligación no encontrada" });
-    return { datos: aDto(o, await repetidosActuales()) };
+    const propias = await obligacionesDelAlcance(await alcanceDe(req, opts.modoPruebas));
+    if (!o || (propias && !propias.includes(o.id))) return reply.code(404).send({ error: "Obligación no encontrada" });
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo", await contextoDeRevision(req)) };
   });
 
   app.post("/api/obligaciones", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
+    // el responsable es el tesorero de la sociedad: no se indica por obligación
+    if (req.body && typeof req.body === "object" && "responsable" in req.body) {
+      return invalido(reply, "El responsable de una obligación es el tesorero de su sociedad: para cambiarlo, reasigne la sociedad", "responsable");
+    }
     const r = esquemaAlta.safeParse(req.body ?? {});
     if (!r.success) return reply.code(422).send(primerError(r.error));
     const d = r.data;
-    const sociedad = await obtenerSociedadPorCodigo(d.sociedad);
-    if (!sociedad) return invalido(reply, `La sociedad «${d.sociedad}» no existe`, "sociedad");
+    const sociedad = await obtenerSociedadPorId(d.sociedadId);
+    if (!sociedad) return invalido(reply, "La sociedad no existe", "sociedadId");
+    if (!puedeEscribirEnSociedad(persona, sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
     if (!(await obtenerCategoria(d.categoriaId))) return invalido(reply, "La categoría no existe", "categoriaId");
-    if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador)) {
-      return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador en ${sociedad.codigo}`, campo: "identificador" });
+    if (await buscarPorClave(sociedad.id, d.proveedor, d.identificador, d.categoriaId)) {
+      return reply.code(409).send({ error: `Ya existe una obligación de ${d.proveedor} con ese identificador y esa categoría en ${etiquetaSociedad(sociedad)}`, campo: "identificador" });
+    }
+    // El identificador no es único por sí solo: se avisa con los datos de la otra obligación y se admite confirmar «Es intencional».
+    if (!d.esIntencional) {
+      const otras = await buscarPorIdentificador(d.identificador);
+      if (otras.length > 0) {
+        return reply.code(409).send({
+          error: "Este identificador ya existe en otra obligación. Si es intencional, confírmelo para crearla igual.",
+          campo: "identificador",
+          advertencia: {
+            tipo: "identificador_duplicado",
+            otras: otras.map((o) => ({ sociedad: etiquetaSociedad(o.sociedad), categoria: o.categoria.nombre, proveedor: o.proveedor, activa: o.activa })),
+          },
+        });
+      }
     }
     const defecto = (await valorGlobal("frecuencia_defecto")) ?? "mensual";
     const frecuencia = d.frecuencia ?? (FRECUENCIAS.includes(defecto) ? defecto : "mensual");
@@ -125,47 +219,173 @@ export async function rutasObligaciones(app: FastifyInstance, opts: { reloj: Rel
     const cuenta = await errorCuenta(d.cuentaEsperadaId, sociedad.id);
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 
-    const { sociedad: _codigo, ...resto } = d;
-    const o = await crearObligacion({
+    // «Control desde»: por defecto el mes de alta. Si el día de pago de ese mes ya pasó y no se eligió, se devuelve la
+    // advertencia para que el formulario pregunte «¿desde este mes o desde el siguiente?» (el valor sigue siendo el mes de alta).
+    const hoy = hoyDe(opts.reloj);
+    const controlDesde = d.controlDesde === undefined ? mesDeAlta(hoy) : d.controlDesde;
+    const advertencia = advertenciaDiaYaPaso(d.diaEsperadoPago, hoy, d.controlDesde !== undefined);
+
+    const autor = autorDe(persona, opts.modoPruebas);
+    const { esIntencional: _intencional, controlDesde: _control, ...resto } = d;
+    const o = await crearObligacionConHistorial({
       ...resto,
-      sociedadId: sociedad.id,
+      controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde),
       frecuencia,
       frecuenciaPorConfirmar: d.frecuenciaPorConfirmar ?? d.frecuencia === undefined,
       monedaPorConfirmar: d.monedaPorConfirmar ?? d.moneda === undefined,
       origen: "manual",
-    });
-    const regeneracion = await regenerarObligacion(o.id, opts.reloj);
-    return reply.code(201).send({ datos: aDto(o, await repetidosActuales()), regeneracion });
+    }, autor);
+    const regeneracion = (await actualizarVencimientos(opts.reloj, o.id)).calendario;
+    return reply.code(201).send({ datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo", await contextoDeRevision(req)), regeneracion, advertencias: advertencia ? [advertencia] : [] });
+  });
+
+  // Cambio masivo de frecuencia sobre las filas elegidas: la frecuencia queda confirmada y el calendario se ajusta una sola vez.
+  app.post("/api/obligaciones/frecuencia", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
+    const r = z.object({
+      ids: z.array(z.number().int().positive(), { error: "Elija las obligaciones" }).min(1, "Elija al menos una obligación").max(500, "Elija como máximo 500 obligaciones"),
+      frecuencia: z.string({ error: "Indique la frecuencia" }).refine((f) => FRECUENCIAS.includes(f), `La frecuencia debe ser una de: ${FRECUENCIAS.join(", ")}`),
+      mesArranque: z.number().int().min(1, "El mes debe estar entre 1 y 12").max(12, "El mes debe estar entre 1 y 12").nullable().optional(),
+    }).safeParse(req.body);
+    if (!r.success) return reply.code(422).send(primerError(r.error));
+    const { ids, frecuencia } = r.data;
+    const mes = frecuencia === "mensual" ? null : (r.data.mesArranque ?? null);
+    if (frecuencia !== "mensual" && mes === null) return invalido(reply, "Indique el mes de arranque: en qué mes toca el primer pago de esta frecuencia", "mesArranque");
+    // primero se revisa el permiso de TODAS: si alguna es de otra sociedad, no se cambia ninguna
+    const existentes = [];
+    for (const id of new Set(ids)) {
+      const o = await obtenerObligacion(id);
+      if (o) existentes.push(o);
+    }
+    if (existentes.some((o) => !puedeEscribirEnSociedad(persona, o.sociedad))) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+    // todas en una sola transacción junto con su historial: si algo falla, no se guarda ninguna
+    const actualizadas = (
+      await actualizarObligacionesConHistorial(
+        existentes.map((o) => ({ id: o.id, data: { frecuencia, mesArranque: mes, frecuenciaPorConfirmar: false } })),
+        autorDe(persona, opts.modoPruebas),
+      )
+    ).length;
+    const { calendario } = await actualizarVencimientos(opts.reloj);
+    return { datos: { actualizadas, calendario } };
+  });
+
+  // Marcar como revisada una obligación «En revisión» (nota obligatoria) y quitar la revisión (motivo). 401 sin persona, 404, 403 fuera de su sociedad,
+  // 422 en validación y 409 si no corresponde (no está en revisión, ya está revisada o no tiene revisión que quitar).
+  const paraRevisar = async (req: Parameters<typeof exigirPersona>[0], reply: Parameters<typeof exigirPersona>[1]) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return null;
+    const id = idParam.safeParse((req.params as { id: string }).id);
+    if (!id.success) {
+      reply.code(400).send({ error: "Identificador inválido" });
+      return null;
+    }
+    const o = await obtenerObligacion(id.data);
+    if (!o) {
+      reply.code(404).send({ error: "Obligación no encontrada" });
+      return null;
+    }
+    if (!puedeEscribirEnSociedad(persona, o.sociedad)) {
+      reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+      return null;
+    }
+    return { persona, obligacion: { id: o.id, sociedadId: o.sociedadId, calidad: aCalidad(o), repetidos: await repetidosActuales() } };
+  };
+  const responderErrorDeServicio = (reply: FastifyReply, e: unknown) => {
+    if (!(e instanceof ErrorDeServicio)) throw e;
+    const estado = { permiso: 403, validacion: 422, no_encontrado: 404, conflicto: 409 }[e.codigo];
+    return reply.code(estado).send({ error: e.message, ...(e.campo ? { campo: e.campo } : {}) });
+  };
+
+  // Cambio permanente del día de pago desde un mes (nuevoDia, desdeMes, aplicaAlMesEnCurso si hay que decidirlo, motivo). 401 sin persona, 404, 403 fuera de su
+  // sociedad, 422 en validación (incluye pedir «aplicaAlMesEnCurso» cuando el pago de este mes sigue pendiente).
+  app.post("/api/obligaciones/:id/cambiar-dia", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
+    const id = idParam.safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
+    const o = await obtenerObligacion(id.data);
+    if (!o) return reply.code(404).send({ error: "Obligación no encontrada" });
+    if (!puedeEscribirEnSociedad(persona, o.sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+    const cuerpo = (req.body ?? {}) as { nuevoDia?: unknown; desdeMes?: unknown; aplicaAlMesEnCurso?: unknown; motivo?: unknown };
+    try {
+      return { datos: await cambiarDia({ obligacion: o, nuevoDia: cuerpo.nuevoDia, desdeMes: cuerpo.desdeMes, aplicaAlMesEnCurso: cuerpo.aplicaAlMesEnCurso, motivo: cuerpo.motivo, autor: autorDe(persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return responderErrorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/obligaciones/:id/marcar-revisada", async (req, reply) => {
+    const g = await paraRevisar(req, reply);
+    if (!g) return reply;
+    try {
+      await marcarRevisada({ obligacion: g.obligacion, nota: ((req.body ?? {}) as { nota?: unknown }).nota, autor: autorDe(g.persona, opts.modoPruebas) });
+      return { datos: { estado: "revisada" } };
+    } catch (e) {
+      return responderErrorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/obligaciones/:id/quitar-revision", async (req, reply) => {
+    const g = await paraRevisar(req, reply);
+    if (!g) return reply;
+    const motivo = normalizarMotivo(((req.body ?? {}) as { motivo?: unknown }).motivo);
+    if (motivo === null) return reply.code(422).send({ error: "Indique el motivo (entre 3 y 300 caracteres)", campo: "motivo" });
+    try {
+      await quitarRevision({ obligacion: g.obligacion, motivo, autor: autorDe(g.persona, opts.modoPruebas) });
+      return { datos: { estado: "en_revision" } };
+    } catch (e) {
+      return responderErrorDeServicio(reply, e);
+    }
   });
 
   app.patch("/api/obligaciones/:id", async (req, reply) => {
+    const persona = await exigirPersona(req, reply, opts.modoPruebas);
+    if (!persona) return reply;
     const id = idParam.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: "Identificador inválido" });
-    const cuerpo = (req.body ?? {}) as Record<string, unknown>;
+    const actual = await obtenerObligacion(id.data);
+    if (!actual) return reply.code(404).send({ error: "Obligación no encontrada" });
+    if (!puedeEscribirEnSociedad(persona, actual.sociedad)) return reply.code(403).send({ error: SIN_PERMISO_SOCIEDAD });
+    // «motivo» no es un campo de la obligación: acompaña al cambio de «activa» y va al historial
+    const { motivo: motivoCrudo, ...cuerpo } = (req.body ?? {}) as Record<string, unknown>;
     const ajeno = Object.keys(cuerpo).find((k) => !CAMPOS_EDITABLES.includes(k));
     if (ajeno) {
       return invalido(reply, `El campo «${ajeno}» no se puede editar. Si la sociedad, el proveedor o el identificador están mal, desactive esta obligación y cree una nueva.`, ajeno);
     }
     const r = esquemaEdicion.safeParse(cuerpo);
     if (!r.success) return reply.code(422).send(primerError(r.error));
-    const actual = await obtenerObligacion(id.data);
-    if (!actual) return reply.code(404).send({ error: "Obligación no encontrada" });
+    // Desactivar o reactivar exige motivo (3 a 300 caracteres); el resto de las ediciones no lo pide.
+    const cambiaActiva = r.data.activa !== undefined && r.data.activa !== actual.activa;
+    const motivo = cambiaActiva ? normalizarMotivo(motivoCrudo) : null;
+    if (cambiaActiva && motivo === null) return invalido(reply, "Indique el motivo (entre 3 y 300 caracteres)", "motivo");
 
+    // Cambiar un día ya definido exige motivo y deja historial (servicio cambiar-dia, que verifica el permiso de quien actúa):
+    // hasta que exista el inicio de sesión no se hace por esta ruta. Indicar el día cuando falta sí se permite.
+    if (r.data.diaEsperadoPago !== undefined && actual.diaEsperadoPago !== null && r.data.diaEsperadoPago !== actual.diaEsperadoPago) {
+      return invalido(reply, "El día de pago ya definido solo se cambia indicando el motivo y quién lo cambia; todavía no está disponible", "diaEsperadoPago");
+    }
     const d = { ...r.data };
     if (d.frecuencia === "mensual" && d.mesArranque === undefined) d.mesArranque = null; // al pasar a mensual se limpia
     const mes = errorMesArranque(d.frecuencia ?? actual.frecuencia, d.mesArranque === undefined ? actual.mesArranque : d.mesArranque);
     if (mes) return invalido(reply, mes, "mesArranque");
+    // al cambiar la frecuencia o el mes, una frecuencia no mensual exige indicar en qué mes toca el primer pago
+    if ((d.frecuencia !== undefined || d.mesArranque !== undefined) && (d.frecuencia ?? actual.frecuencia) !== "mensual" && (d.mesArranque === undefined ? actual.mesArranque : d.mesArranque) == null) {
+      return invalido(reply, "Indique el mes de arranque: en qué mes toca el primer pago de esta frecuencia", "mesArranque");
+    }
     const cuenta = await errorCuenta(d.cuentaEsperadaId, actual.sociedadId);
     if (cuenta) return invalido(reply, cuenta, "cuentaEsperadaId");
 
-    const o = await actualizarObligacion(id.data, {
-      ...d,
+    const { controlDesde, ...resto } = d;
+    const o = (await actualizarObligacionesConHistorial([{ id: id.data, data: {
+      ...resto,
+      ...(controlDesde !== undefined ? { controlDesde: controlDesde === null ? null : primerDiaDelPeriodo(controlDesde) } : {}),
       ...(d.diaEsperadoPago !== undefined ? { diaEditado: true } : {}),
       ...(d.frecuencia !== undefined && d.frecuenciaPorConfirmar === undefined ? { frecuenciaPorConfirmar: false } : {}),
       ...(d.moneda !== undefined && d.monedaPorConfirmar === undefined ? { monedaPorConfirmar: false } : {}),
-    });
-    const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? await regenerarObligacion(o.id, opts.reloj) : null;
-    return { datos: aDto(o, await repetidosActuales()), regeneracion };
+    } }], autorDe(persona, opts.modoPruebas), motivo))[0]!;
+    const regeneracion = Object.keys(d).some((k) => CAMPOS_QUE_REGENERAN.includes(k)) ? (await actualizarVencimientos(opts.reloj, o.id)).calendario : null;
+    return { datos: aDto(o, await repetidosActuales(), (await proximosPagos([o], opts.reloj)).get(o.id) ?? null, (await alcanceDe(req, opts.modoPruebas)).tipo === "todo", await contextoDeRevision(req)), regeneracion };
   });
 
   app.post("/api/catalogo/importar", async (_req, reply) => {

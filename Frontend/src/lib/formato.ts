@@ -21,6 +21,12 @@ export function monto(centavos: number | null, moneda: Moneda): string {
   return new Intl.NumberFormat("es-CR", { style: "currency", currency: moneda, minimumFractionDigits: 2 }).format(centavos / 100);
 }
 
+/** Monto pagado con la moneda de la cuenta que pagó: CRC o USD con su símbolo; sin dato, solo el número (sin símbolo ni código). */
+export function montoPagado(centavos: number, moneda: string | null): string {
+  if (moneda === "CRC" || moneda === "USD") return monto(centavos, moneda);
+  return new Intl.NumberFormat("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(centavos / 100);
+}
+
 /** Texto del formulario ("1500,50" o "1500.50") a centavos; "" -> null; inválido -> undefined. */
 export function aCentavos(texto: string): number | null | undefined {
   const t = texto.trim().replace(/\s/g, "");
@@ -40,8 +46,17 @@ export function aTextoMonto(centavos: number | null): string {
 /** "2026-08" -> "agosto 2026". */
 export const nombrePeriodo = (p: string) => `${MESES[Number(p.slice(5, 7)) - 1] ?? p} ${p.slice(0, 4)}`;
 
-/** "2026-08-15" -> "15 ago 2026". */
-export const nombreFecha = (f: string) => `${Number(f.slice(8, 10))} ${MESES_CORTOS[Number(f.slice(5, 7)) - 1]} ${f.slice(0, 4)}`;
+// Año en curso según el servidor (lo fija la línea «Hoy»); mientras no se conoce, el del reloj del navegador.
+let anioEnCurso = String(new Date().getFullYear());
+export const fijarAnioEnCurso = (hoy: string) => {
+  anioEnCurso = hoy.slice(0, 4);
+};
+
+/** "2026-08-15" -> "15 ago" si es del año en curso; de otro año, con año: "15 ago 2025". */
+export const nombreFecha = (f: string, anio: string = anioEnCurso) => {
+  const dia = `${Number(f.slice(8, 10))} ${MESES_CORTOS[Number(f.slice(5, 7)) - 1]}`;
+  return f.slice(0, 4) === anio ? dia : `${dia} ${f.slice(0, 4)}`;
+};
 
 /** Periodo AAAA-MM desplazado n meses. */
 export function sumarMeses(p: string, n: number): string {
@@ -61,3 +76,282 @@ export function mesesQueVence(frecuencia: Frecuencia, mesArranque: number | null
   if (mesArranque === null) return [];
   return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => (((m - mesArranque) % paso) + paso) % paso === 0);
 }
+
+// --- Sociedades: orden y nombre ----------------------------------------------------------------
+
+/** Clave de orden de un nombre: sin mayúsculas, tildes ni signos al inicio. */
+const claveOrden = (nombre: string) =>
+  nombre
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/^[^\p{L}\p{N}]+/u, "");
+
+/** Orden alfabético por nombre largo; los nombres que empiezan con número (por ejemplo «3-101-…») van al final. */
+export function compararSociedades(a: string, b: string): number {
+  const ka = claveOrden(a);
+  const kb = claveOrden(b);
+  const numA = /^\d/.test(ka);
+  const numB = /^\d/.test(kb);
+  if (numA !== numB) return numA ? 1 : -1;
+  return ka.localeCompare(kb, "es", { sensitivity: "base", numeric: true });
+}
+
+export const ordenarSociedades = <T extends { nombreLargo: string }>(xs: T[]): T[] => [...xs].sort((a, b) => compararSociedades(a.nombreLargo, b.nombreLargo));
+
+const PARTES_CR = new Intl.DateTimeFormat("en-US", { timeZone: "America/Costa_Rica", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** Fecha y hora corta en la zona de Costa Rica, p. ej. «28 oct 2026, 10:30». Devuelve null si el texto no es una fecha válida. */
+export function fechaHoraCR(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(PARTES_CR.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]} ${p.year}, ${p.hour}:${p.minute}`;
+}
+
+/** «Estados calculados el 28 oct 2026, 10:30», o «Estados sin calcular todavía» si nunca se calcularon. */
+export function textoEstadosCalculados(iso: string | null): string {
+  const f = iso ? fechaHoraCR(iso) : null;
+  return f ? `Estados calculados el ${f}` : "Estados sin calcular todavía";
+}
+
+/** «sábado, 31 de octubre de 2026» a partir de AAAA-MM-DD (solo día, sin zona horaria). */
+export const textoHoy = (hoy: string) =>
+  new Intl.DateTimeFormat("es-CR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${hoy}T00:00:00Z`));
+
+// --- Historial de cambios: nombres de negocio y valores en palabras (puras, sin red) ---------------------------------------
+
+/** Frecuencia en una palabra, la misma de la confirmación de Editar obligación. */
+export const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
+
+/** «Qué cambió»: el rótulo de cada dato. Los de Editar obligación se reutilizan; los demás son sencillos. */
+const ROTULO_CAMPO: Record<string, string> = {
+  frecuencia: "Frecuencia",
+  frecuenciaPorConfirmar: "Frecuencia confirmada",
+  mesArranque: "Mes de arranque",
+  diaEsperadoPago: "Día de pago",
+  activa: "Obligación activa",
+  controlDesde: "Control desde",
+  montoEsperado: "Monto esperado",
+  moneda: "Moneda",
+  cuentaEsperadaId: "Cuenta de pago",
+  obligacion: "Obligación nueva",
+  pago_asociado: "Pago del vencimiento",
+  justificacion_vencimiento: "Justificación del vencimiento",
+  justificacion_archivo: "Justificación del archivo",
+  revision_obligacion: "Revisión de la obligación",
+  fecha_vencimiento: "Fecha del vencimiento",
+  diferencia_excel: "Diferencia con el Excel",
+};
+export const rotuloDeCampo = (campo: string): string => ROTULO_CAMPO[campo] ?? "Otro dato";
+
+/**
+ * ÚNICO mapa campo -> grupo del filtro «Qué cambió» (y el orden de las opciones dentro de cada grupo). Para agregar una decisión nueva (una
+ * justificación, una nota de revisión...), se agrega su campo al grupo «Decisiones manuales» y su rótulo en ROTULO_CAMPO.
+ */
+export const GRUPOS_DE_CAMPOS: { titulo: string; campos: string[] }[] = [
+  { titulo: "Datos de la obligación", campos: ["frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId", "obligacion"] },
+  { titulo: "Decisiones manuales", campos: ["pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento", "diferencia_excel"] },
+];
+
+/**
+ * Los tipos de dato que hay dentro del alcance de la persona, en sus grupos. Un grupo sin opciones no se muestra. Un campo que ningún grupo
+ * conoce (no debería pasar) se agrega al final del primero, para que nunca quede fuera del filtro.
+ */
+export function agruparCampos(disponibles: string[]): { titulo: string; campos: string[] }[] {
+  const conocidos = new Set(GRUPOS_DE_CAMPOS.flatMap((g) => g.campos));
+  return GRUPOS_DE_CAMPOS.map((g, i) => ({
+    titulo: g.titulo,
+    campos: [...g.campos.filter((x) => disponibles.includes(x)), ...(i === 0 ? disponibles.filter((x) => !conocidos.has(x)) : [])],
+  })).filter((g) => g.campos.length > 0);
+}
+
+/** De estos datos no se guarda el valor (confidencial): solo se sabe que cambiaron. */
+const CAMPOS_SIN_VALOR = ["montoEsperado", "moneda", "cuentaEsperadaId"];
+
+const mayuscula = (t: string) => (t ? t[0]!.toUpperCase() + t.slice(1) : t);
+
+/** "2026-10" -> "oct 2026". */
+export const mesCorto = (p: string) => `${MESES_CORTOS[Number(p.slice(5, 7)) - 1] ?? p} ${p.slice(0, 4)}`;
+
+/** «20» -> «día 20»; el cambio permanente se guarda como «20 desde 2026-11» y se lee «día 20 desde nov 2026». */
+function diaEnPalabras(valor: string): string {
+  const m = /^(\d{1,2}) desde (\d{4}-\d{2})$/.exec(valor.trim());
+  if (m) return `día ${Number(m[1])} desde ${mesCorto(m[2]!)}`;
+  return Number.isInteger(Number(valor)) ? `día ${Number(valor)}` : "Otro valor";
+}
+
+/** Lo decidido en una diferencia con el Excel, en palabras; «Misma que {proveedor}» si se guardó con quién (y «Misma» si no). */
+export function decisionDeDiferencia(accion: string, despues: string | null): string {
+  switch (accion) {
+    case "es_la_misma": {
+      const proveedor = despues && despues.startsWith("misma:") ? despues.slice(6).trim() : "";
+      return proveedor ? `Misma que ${proveedor}` : "Misma";
+    }
+    case "son_distintas": return "Son distintas";
+    case "sigue_vigente": return "Sigue vigente";
+    case "desactivar_diferencia": return "Desactivada";
+    case "mantener_plataforma": return "Se mantiene el de la plataforma";
+    case "usar_excel": return "Se usa el del Excel";
+    default: return "Decidida";
+  }
+}
+
+/** Una fecha guardada (AAAA-MM-DD) en palabras: «15 oct» (con año si no es el año en curso); si no se puede leer, «Sin definir». */
+function fechaGuardadaEnPalabras(valor: string | null): string {
+  return valor !== null && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? nombreFecha(valor) : "Sin definir";
+}
+
+/**
+ * Un valor guardado, en palabras. «Frecuencia confirmada» se guarda al revés (sin confirmar = porConfirmar verdadero) y aquí se
+ * muestra como la casilla de Editar: porConfirmar verdadero = «No», falso = «Sí».
+ */
+export function valorEnPalabras(campo: string, valor: string | null): string {
+  if (valor === null) return campo === "diaEsperadoPago" ? "Sin día" : "Sin definir";
+  switch (campo) {
+    case "frecuencia": return NOMBRE_FRECUENCIA[valor as Frecuencia] ?? "Otro valor";
+    case "frecuenciaPorConfirmar": return valor === "sin confirmar" || valor === "true" ? "No" : "Sí";
+    case "activa": return valor === "activa" || valor === "true" ? "Sí" : "No";
+    case "mesArranque": return mayuscula(MESES[Number(valor) - 1] ?? "Otro valor");
+    case "diaEsperadoPago": return diaEnPalabras(valor);
+    case "controlDesde": return /^\d{4}-\d{2}$/.test(valor) ? mesCorto(valor) : "Otro valor";
+    default: return "Otro valor";
+  }
+}
+
+/** `vacio`: no hay nada que mostrar (la celda queda en blanco); `valores`: hay un antes y un después (y solo entonces va la flecha). */
+export type CambioEnPalabras = { tipo: "vacio" } | { tipo: "sin_valores" } | { tipo: "valores"; antes: string; despues: string };
+
+/**
+ * «Qué cambió» de una fila: el rótulo del dato. Al asociar o quitar un pago a mano dice de qué vencimiento, «Pago del vencimiento de oct 2026»
+ * (el periodo AAAA-MM guardado: en «después» al asociar y en «antes» al quitar); si el periodo no se puede leer, «Pago del vencimiento».
+ */
+export function rotuloDeFila(f: { accion: string; campo: string; antes?: string | null; despues?: string | null }): string {
+  const periodoLegible = (p: string | null | undefined) => (p && /^\d{4}-\d{2}$/.test(p) ? mesCorto(p) : null);
+  if (f.accion === "asociar_pago" || f.accion === "quitar_asociacion") {
+    const mes = periodoLegible(f.accion === "asociar_pago" ? f.despues : f.antes);
+    return mes ? `Pago del vencimiento de ${mes}` : "Pago del vencimiento";
+  }
+  // justificar un vencimiento dice de qué vencimiento; justificar un archivo es siempre «Justificación del archivo»
+  if ((f.accion === "justificar" || f.accion === "quitar_justificacion") && f.campo === "justificacion_vencimiento") {
+    const mes = periodoLegible(f.accion === "justificar" ? f.despues : f.antes);
+    return mes ? `Justificación del vencimiento de ${mes}` : "Justificación del vencimiento";
+  }
+  return rotuloDeCampo(f.campo);
+}
+
+/**
+ * Lo que va en «Antes → Después»: el alta no tiene valores (vacío); asociar y quitar un pago a mano pasan de «Sin asociar» a «Asociado a mano»
+ * y al revés; monto/moneda/cuenta dicen «Cambió»; el resto, antes y después. La flecha solo se dibuja cuando hay dos valores.
+ */
+export function cambioEnPalabras(f: { accion: string; campo: string; antes: string | null; despues: string | null }): CambioEnPalabras {
+  if (f.accion === "crear") return { tipo: "vacio" };
+  if (f.accion === "asociar_pago") return { tipo: "valores", antes: "Sin asociar", despues: "Asociado a mano" };
+  if (f.accion === "quitar_asociacion") return { tipo: "valores", antes: "Asociado a mano", despues: "Sin asociar" };
+  if (f.accion === "marcar_revisada") return { tipo: "valores", antes: "En revisión", despues: "Revisada" };
+  if (f.accion === "quitar_revision") return { tipo: "valores", antes: "Revisada", despues: "En revisión" };
+  // mover la fecha de un vencimiento: las dos fechas, nunca una flecha sola (si falta una se dice «Sin definir»)
+  if (f.accion === "mover_fecha" || f.accion === "quitar_movimiento") return { tipo: "valores", antes: fechaGuardadaEnPalabras(f.antes), despues: fechaGuardadaEnPalabras(f.despues) };
+  // resolver una diferencia con el Excel: de «Pendiente» a lo que se decidió (la pareja de un renombre guarda «misma:{proveedor}»)
+  if (f.campo === "diferencia_excel") return { tipo: "valores", antes: "Pendiente", despues: decisionDeDiferencia(f.accion, f.despues) };
+  if (f.accion === "justificar") return { tipo: "valores", antes: "Sin justificar", despues: "Justificado" };
+  if (f.accion === "quitar_justificacion") return { tipo: "valores", antes: "Justificado", despues: "Sin justificar" };
+  if (CAMPOS_SIN_VALOR.includes(f.campo)) return { tipo: "sin_valores" };
+  return { tipo: "valores", antes: valorEnPalabras(f.campo, f.antes), despues: valorEnPalabras(f.campo, f.despues) };
+}
+
+/** Fecha y hora en la zona de Costa Rica; con año solo si no es el año en curso: «28 oct, 10:30» o «28 oct 2025, 10:30». null si no es una fecha. */
+export function fechaHoraDeCambio(iso: string, anio: string = anioEnCurso): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(PARTES_CR.formatToParts(d).map((x) => [x.type, x.value]));
+  const dia = `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]}`;
+  return `${p.year === anio ? dia : `${dia} ${p.year}`}, ${p.hour}:${p.minute}`;
+}
+
+/** Solo el día de un instante, en la zona de Costa Rica; con año solo si no es el año en curso: «28 oct» o «28 oct 2025». null si no es una fecha. */
+export function fechaDeCambio(iso: string, anio: string = anioEnCurso): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(PARTES_CR.formatToParts(d).map((x) => [x.type, x.value]));
+  const dia = `${Number(p.day)} ${MESES_CORTOS[Number(p.month) - 1]}`;
+  return p.year === anio ? dia : `${dia} ${p.year}`;
+}
+
+/** «Asociado a mano por Ana Uno el 28 oct. Motivo: se pagó con otra referencia.» (sin punto doble si el motivo ya termina en punto). */
+export function fraseAsociadoAMano(a: { quien: string; cuando: string; motivo: string }, anio?: string): string {
+  const fecha = fechaDeCambio(a.cuando, anio);
+  return `Asociado a mano por ${a.quien}${fecha ? ` el ${fecha}` : ""}. Motivo: ${a.motivo.replace(/[.\s]+$/, "")}.`;
+}
+
+/** Estados en los que se puede asociar un pago a mano (el servidor es quien decide; esto solo evita ofrecer lo imposible). */
+export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion", "justificado"];
+
+/** Estados que se pueden justificar (un Justificado ya lo está: ofrece quitar la justificación). */
+export const ESTADOS_JUSTIFICABLES = ["vencido", "sin_informacion"];
+
+/** «Justificado por Ana el 28 oct. Motivo: No se paga este mes: la tienda cerró.» (el motivo y, si hay, la nota; sin punto doble). */
+export function fraseJustificado(j: { quien: string; cuando: string; motivo: string; nota: string | null }, anio?: string): string {
+  const fecha = fechaDeCambio(j.cuando, anio);
+  const motivo = (j.nota ? `${j.motivo}: ${j.nota}` : j.motivo).replace(/[.\s]+$/, "");
+  return `Justificado por ${j.quien}${fecha ? ` el ${fecha}` : ""}. Motivo: ${motivo}.`;
+}
+
+/** Etiquetas de texto de un pago candidato: «Trae el número» y/o «Trae el proveedor» (ninguna si no trae ninguno). */
+export function etiquetasDeCandidato(c: { traeNumero: boolean; traeProveedor: boolean }): string[] {
+  return [...(c.traeNumero ? ["Trae el número"] : []), ...(c.traeProveedor ? ["Trae el proveedor"] : [])];
+}
+
+/** Un identificador de servicio nunca completo: solo los últimos 4 caracteres, como «****1083» (con 4 o menos, solo «****»). */
+export const identificadorEnmascarado = (id: string): string => (id.length <= 4 ? "****" : `****${id.slice(-4)}`);
+
+/** «Revisada por Ana Uno el 28 oct. Nota: Falta el día en el catálogo.» (sin punto doble si la nota ya termina en punto). */
+export function fraseRevisada(r: { quien: string; cuando: string; nota: string }, anio?: string): string {
+  const fecha = fechaDeCambio(r.cuando, anio);
+  return `Revisada por ${r.quien}${fecha ? ` el ${fecha}` : ""}. Nota: ${r.nota.replace(/[.\s]+$/, "")}.`;
+}
+
+/** Detalle de la tarjeta «Falta día»: «no generan vencimientos» y, si las hay, cuántas de esas están revisadas («2 revisadas · no generan vencimientos»). */
+export const textoFaltaDia = (revisadas: number): string => (revisadas > 0 ? `${revisadas} ${revisadas === 1 ? "revisada" : "revisadas"} · no generan vencimientos` : "no generan vencimientos");
+
+/** Estados en los que se puede mover la fecha de un vencimiento (el servidor es quien decide): Programado, Por vencer, Vencido y Sin información. */
+export const ESTADOS_MOVIBLES = ["proyectado", "por_vencer", "vencido", "sin_informacion"];
+
+/** «Movida por Ana Uno el 28 oct. Motivo: Prórroga del proveedor.» (sin punto doble). */
+export function fraseMovida(m: { quien: string; cuando: string; motivo: string }, anio?: string): string {
+  const fecha = fechaDeCambio(m.cuando, anio);
+  return `Movida por ${m.quien}${fecha ? ` el ${fecha}` : ""}. Motivo: ${m.motivo.replace(/[.\s]+$/, "")}.`;
+}
+
+/** «Cambia al día 20 desde nov 2026» (el cambio de día ya programado para un mes posterior). */
+export const textoDiaProgramado = (p: { dia: number; desde: string }): string => `Cambia al día ${p.dia} desde ${mesCorto(p.desde)}`;
+
+/** Meses que se pueden elegir en «Desde el mes»: el actual y los siguientes hasta dos años por delante. */
+export const limitesDeDesdeMes = (actual: string): { primera: string; ultima: string } => ({ primera: `${actual}-01`, ultima: `${sumarMeses(actual, 24)}-28` });
+
+/** Los tres tipos de diferencia con el Excel y sus palabras (título de la tarjeta, de la columna «Qué difiere» y ayuda). */
+export const TIPOS_DIFERENCIA: { tipo: "posible_renombre" | "ya_no_esta" | "dia_distinto"; titulo: string; difiere: string; ayuda: string }[] = [
+  { tipo: "posible_renombre", titulo: "Posibles renombres", difiere: "Posible renombre", ayuda: "una obligación nueva se parece a una vieja" },
+  { tipo: "ya_no_esta", titulo: "Ya no están en el Excel", difiere: "Ya no está en el Excel", ayuda: "el Excel ya no las trae" },
+  { tipo: "dia_distinto", titulo: "Días distintos", difiere: "Día distinto", ayuda: "el día del Excel no coincide" },
+];
+
+/** Cómo se llama cada acción en el botón y en lo ya decidido («Desactivar» se lee «Desactivada» cuando ya se hizo). */
+export const TEXTO_ACCION: Record<string, string> = {
+  es_la_misma: "Es la misma", son_distintas: "Son distintas", sigue_vigente: "Sigue vigente", desactivar: "Desactivar",
+  mantener_plataforma: "Mantener el de la plataforma", usar_excel: "Usar el del Excel",
+};
+export const TEXTO_DECIDIDA: Record<string, string> = { ...TEXTO_ACCION, desactivar: "Desactivada" };
+
+/** Qué hace cada acción, en palabras de negocio (se muestra al abrir «Gestionar»). */
+export const AYUDA_ACCION: Record<string, string> = {
+  es_la_misma: "Es la misma obligación con otro nombre: se desactiva la vieja y queda ligada a la nueva.",
+  son_distintas: "Son obligaciones distintas: se descarta la sugerencia y no se toca ninguna.",
+  sigue_vigente: "La obligación sigue vigente aunque el Excel ya no la traiga.",
+  desactivar: "La obligación ya no se paga: se desactiva y se conserva su historial.",
+  mantener_plataforma: "Se queda el día que tiene la plataforma.",
+  usar_excel: "Se cambia el día de pago al del Excel, desde el mes que elija.",
+};
+
+/** «día 10» o «Sin día». */
+export const textoDia = (dia: number | null): string => (dia === null ? "Sin día" : `Día ${dia}`);

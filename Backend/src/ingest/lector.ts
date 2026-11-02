@@ -1,15 +1,17 @@
 import ExcelJS from "exceljs";
 import type { Worksheet } from "exceljs";
-import { quitarDibujos } from "./quitar-dibujos.js";
+import { quitarDibujos, tieneImagenes } from "./quitar-dibujos.js";
 import { detectarFormato } from "./detectar-formato.js";
 import { especDe } from "./formatos.js";
 import { verificarContinuidad } from "./calidad.js";
+import { leerEncabezadoSaldos } from "./encabezado-saldos.js";
+import { medirImagenes, medirRelativo, type ImagenAncla } from "./medir-imagenes.js";
 import type { NombreArchivo } from "./nombre-archivo.js";
 import type { Discrepancia, MovimientoLeido, ResultadoLectura } from "./tipos.js";
 import { normalizar, parsearFecha, parsearMonto, periodoDeFecha, textoOpcional, valorPlano } from "./utiles.js";
 
 /** Súbala cuando cambien las reglas de lectura: fuerza a releer los archivos aunque su hash no haya cambiado. */
-export const LECTOR_VERSION = 5;
+export const LECTOR_VERSION = 11; // 11: la importación guarda la clase de imagen del archivo y marca «imagen no legible» (sin movimientos y con imagen grande); 10: guarda el tamaño y la posición de las imágenes y el bloque de saldos del encabezado; 9: avisa de las filas con importe sin fecha legible aunque no se lea ningún movimiento; 8: guarda el saldo inicial y el final detectados; 7: tolerancia de saldo, razón de «no verificable», Del y Al reales y período declarado en el encabezado
 
 export class ErrorLectura extends Error {}
 
@@ -18,6 +20,10 @@ type Moneda = "CRC" | "USD";
 export interface LibroLeido {
   wb: ExcelJS.Workbook;
   dibujosOmitidos: boolean;
+  /** el archivo trae imágenes (no se leen ni se hace OCR: solo se registra que existen) */
+  conImagenes: boolean;
+  /** dónde están pegadas las imágenes de cada hoja (solo geometría, por nombre de hoja) */
+  anclas: Map<string, ImagenAncla[]>;
 }
 
 /**
@@ -39,10 +45,14 @@ export async function leerLibro(contenido: Buffer): Promise<LibroLeido> {
     }
   }
   if (wb.worksheets.length === 0) throw new ErrorLectura("El libro no tiene hojas");
-  return { wb, dibujosOmitidos };
+  const conImagenes = await tieneImagenes(contenido);
+  return { wb, dibujosOmitidos, conImagenes, anclas: conImagenes ? await medirImagenes(contenido) : new Map() };
 }
 
-export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | null): ResultadoLectura {
+/** Tolerancia de redondeo del saldo cuando no se indica otra (centavos); es el valor inicial del parámetro «Tolerancia de redondeo del saldo». */
+export const TOLERANCIA_SALDO_DEFECTO = 1;
+
+export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | null, opciones: { toleranciaSaldo?: number } = {}): ResultadoLectura {
   const wb = libro.wb;
   const det = detectarFormato(wb.worksheets, nombre?.codigoBanco ?? null);
   if (!det.ok) throw new ErrorLectura(det.error);
@@ -103,8 +113,10 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
 
   const ultima = movimientos.length ? movimientos[movimientos.length - 1]!.fila : filaEncabezado;
   const filasPieIgnoradas = sinFecha.filter((f) => f.fila > ultima).length;
-  const huecos = sinFecha.filter((f) => f.fila < ultima && f.conImporte).length;
-  if (huecos > 0) advertencias.push(`${huecos} fila(s) con importe pero sin fecha legible entre movimientos: no se importaron`);
+  // con movimientos leídos: las filas con importe y sin fecha entre ellos; sin ninguno: todas las filas con importe y sin fecha
+  // (antes se descartaban en silencio como si fueran el pie del archivo)
+  const huecos = sinFecha.filter((f) => (movimientos.length === 0 || f.fila < ultima) && f.conImporte).length;
+  if (huecos > 0) advertencias.push(`${huecos} fila(s) con importe pero sin fecha legible: no se importaron`);
   if (negativos > 0) advertencias.push(`${negativos} importe(s) negativos en columnas de débito/crédito: se tomó el valor absoluto`);
   if (ambos > 0) advertencias.push(`${ambos} fila(s) con débito y crédito a la vez`);
   if (importeNoLegible > 0) advertencias.push(`${importeNoLegible} fila(s) con monto no legible: se importaron con importe 0`);
@@ -123,7 +135,10 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     }
   }
 
-  const continuidad = verificarContinuidad(movimientos, { apertura: meta.apertura, saldoDiario: spec.saldoDiario });
+  const continuidad = verificarContinuidad(movimientos, { apertura: meta.apertura, saldoDiario: spec.saldoDiario, tolerancia: opciones.toleranciaSaldo ?? TOLERANCIA_SALDO_DEFECTO });
+  // Primera y última fecha con movimientos del archivo (reales, no las del nombre ni las del encabezado).
+  const fechasMov = movimientos.map((m) => m.fecha.getTime());
+  const fechas = fechasMov.length ? { del: new Date(Math.min(...fechasMov)).toISOString().slice(0, 10), al: new Date(Math.max(...fechasMov)).toISOString().slice(0, 10) } : null;
 
   return {
     formato,
@@ -133,10 +148,24 @@ export function leerEstadoDeCuenta(libro: LibroLeido, nombre: NombreArchivo | nu
     bancoArchivo: meta.banco,
     movimientos,
     continuidad,
+    saldoInicial: meta.apertura,
+    saldoFinal: saldoFinalDe(movimientos, continuidad.orden),
+    fechas,
+    periodoDeclarado: meta.periodoDeclarado,
     discrepancias,
     advertencias,
     filasPieIgnoradas,
+    conImagenes: libro.conImagenes,
+    // las imágenes de la hoja leída medidas contra la hoja (tamaño y posición relativos), y el bloque de saldos del encabezado
+    imagenes: (libro.anclas.get(hoja.name) ?? []).map((a) => medirRelativo(a, hoja.columnCount, hoja.rowCount)),
+    encabezadoSaldos: leerEncabezadoSaldos(hoja, filaEncabezado),
   };
+}
+
+/** Saldo de la última fila según el orden en que el archivo lista los movimientos (el más reciente); null si no hay o está vacío. */
+function saldoFinalDe(movs: MovimientoLeido[], orden: "ascendente" | "descendente"): number | null {
+  if (movs.length === 0) return null;
+  return (orden === "descendente" ? movs[0]! : movs[movs.length - 1]!).saldo;
 }
 
 interface Metadatos {
@@ -145,6 +174,8 @@ interface Metadatos {
   banco: string | null;
   apertura: number | null;
   periodoMes: string | null;
+  /** período que el encabezado declara («Del: dd/mm/aaaa Al: dd/mm/aaaa»); null si no lo declara */
+  periodoDeclarado: { del: string | null; al: string | null } | null;
 }
 
 function textosMeta(hoja: Worksheet, hasta: number): string[] {
@@ -174,12 +205,17 @@ function leerMetadatos(wb: ExcelJS.Workbook, hoja: Worksheet, filaEncabezado: nu
   const banco = /\bbct\b/.test(junto) ? "BCT" : /davivienda/.test(junto) ? "Davivienda" : /\bbncr\b|banco nacional/.test(junto) ? "BNCR" : null;
 
   let periodoMes: string | null = null;
+  let del: string | null = null;
+  let al: string | null = null;
   for (const t of textos) {
     const m = /del:\s*(\d{2})\/(\d{2})\/(\d{4})/i.exec(t);
-    if (m) { periodoMes = `${m[3]}-${m[2]}`; break; }
+    if (m && del === null) { del = `${m[3]}-${m[2]}-${m[1]}`; periodoMes = `${m[3]}-${m[2]}`; }
+    const f = /\bal:\s*(\d{2})\/(\d{2})\/(\d{4})/i.exec(t);
+    if (f && al === null) al = `${f[3]}-${f[2]}-${f[1]}`;
   }
+  const periodoDeclarado = del !== null || al !== null ? { del, al } : null;
 
-  return { moneda: primera, monedaConflicto: monedas.size > 1, banco, apertura: leerApertura(hoja, filaEncabezado), periodoMes };
+  return { moneda: primera, monedaConflicto: monedas.size > 1, banco, apertura: leerApertura(hoja, filaEncabezado), periodoMes, periodoDeclarado };
 }
 
 /** Saldo inicial/anterior: la primera celda numérica a la derecha de una etiqueta "Saldo inicial" (o "Saldo anterior"). */

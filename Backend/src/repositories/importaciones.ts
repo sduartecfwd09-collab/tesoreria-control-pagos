@@ -1,8 +1,20 @@
 import { prisma } from "../db.js";
 import type { MovimientoLeido } from "../ingest/tipos.js";
 
-export async function asegurarSociedad(codigo: string) {
-  return prisma.sociedad.upsert({ where: { codigo }, create: { codigo }, update: {} });
+/**
+ * Sociedad ya existente cuya abreviatura coincide con el nombre de la carpeta. Nunca crea nada: el importador
+ * solo asigna a sociedades que ya existen (la asociación carpeta-sociedad es explícita, no se adivina).
+ */
+export async function buscarSociedadPorCodigo(codigo: string) {
+  return prisma.sociedad.findUnique({ where: { codigo } });
+}
+
+/**
+ * Crea la sociedad con su abreviatura y nombre largo si no existe (la abreviatura es la clave). No pisa un
+ * nombre largo existente. Solo para el seed y las pruebas: el importador no puede crear sociedades.
+ */
+export async function sembrarSociedad(codigo: string, nombreLargo: string) {
+  return prisma.sociedad.upsert({ where: { codigo }, create: { codigo, nombreLargo }, update: {} });
 }
 
 export interface DatosCuenta {
@@ -39,19 +51,26 @@ export async function guardarCuenta(d: DatosCuenta) {
   return prisma.cuenta.update({ where: { id: actual.id }, data });
 }
 
-export async function buscarCuenta(sociedadId: number, numero: string) {
-  return prisma.cuenta.findUnique({ where: { sociedadId_numero: { sociedadId, numero } } });
-}
-
-export async function actualizarCuentaManual(id: number, datos: { banco?: string; moneda?: "CRC" | "USD" }) {
-  const data: Record<string, unknown> = {};
-  if (datos.banco !== undefined) { data.banco = datos.banco; data.bancoPorConfirmar = false; }
-  if (datos.moneda !== undefined) { data.moneda = datos.moneda; data.monedaPorConfirmar = false; }
-  return prisma.cuenta.update({ where: { id }, data });
-}
-
 export async function buscarArchivoPorRuta(ruta: string) {
   return prisma.archivoImportado.findUnique({ where: { ruta } });
+}
+
+/**
+ * Marca como retirados los archivos registrados cuya ruta ya no está en la carpeta (no se borra nada: se conservan el
+ * archivo, sus movimientos y su historial). Devuelve cuántos están retirados después de esta importación.
+ */
+export async function marcarRetirados(rutasPresentes: string[]): Promise<number> {
+  const presentes = new Set(rutasPresentes);
+  const registrados = await prisma.archivoImportado.findMany({ select: { id: true, ruta: true, retiradoEn: true } });
+  const ausentes = registrados.filter((a) => !presentes.has(a.ruta));
+  const nuevos = ausentes.filter((a) => a.retiradoEn === null).map((a) => a.id);
+  if (nuevos.length > 0) await prisma.archivoImportado.updateMany({ where: { id: { in: nuevos } }, data: { retiradoEn: new Date() } });
+  return ausentes.length;
+}
+
+/** El archivo volvió a aparecer en la carpeta: deja de estar retirado. */
+export async function reactivarArchivo(ruta: string) {
+  await prisma.archivoImportado.update({ where: { ruta }, data: { retiradoEn: null } });
 }
 
 export interface ArchivoParaGuardar {
@@ -64,16 +83,26 @@ export interface ArchivoParaGuardar {
 }
 
 export async function guardarArchivoConError(a: ArchivoParaGuardar, error: string, detalle: unknown) {
-  const datos = { ...a, estado: "error", error, detalle: JSON.stringify(detalle), leidoEn: new Date(), numMovimientos: 0, numDuplicados: 0 };
+  const datos = { ...a, retiradoEn: null, estado: "error", motivo: null, error, detalle: JSON.stringify(detalle), leidoEn: new Date(), numMovimientos: 0, numDuplicados: 0 };
   return prisma.archivoImportado.upsert({ where: { ruta: a.ruta }, create: datos, update: datos });
 }
 
-export class ArchivoConConciliaciones extends Error {}
+/**
+ * Registra un archivo que no se importó porque requiere una decisión humana. El motivo es un texto fijo del
+ * sistema (nunca datos del archivo). Si el archivo ya tenía movimientos de una lectura anterior, no se tocan.
+ */
+export async function guardarArchivoEnRevision(a: ArchivoParaGuardar, motivo: string) {
+  const base = { ...a, retiradoEn: null, estado: "en_revision", motivo, error: null, detalle: null, leidoEn: new Date() };
+  return prisma.archivoImportado.upsert({
+    where: { ruta: a.ruta },
+    create: { ...base, numMovimientos: 0, numDuplicados: 0 },
+    update: base,
+  });
+}
 
 /**
  * Reemplaza los movimientos del archivo (primera importación o reimportación por cambio de hash).
  * Los que ya existan en OTRO archivo de la misma cuenta (misma clave) se omiten y se cuentan.
- * Si el archivo ya tiene conciliaciones sobre sus movimientos no se reimporta (revisión humana).
  */
 export async function guardarArchivoLeido(
   a: ArchivoParaGuardar & { cuentaId: number },
@@ -83,8 +112,6 @@ export async function guardarArchivoLeido(
   return prisma.$transaction(async (tx) => {
     const previo = await tx.archivoImportado.findUnique({ where: { ruta: a.ruta } });
     if (previo) {
-      const conc = await tx.conciliacion.count({ where: { movimiento: { archivoId: previo.id } } });
-      if (conc > 0) throw new ArchivoConConciliaciones("El archivo cambió pero tiene conciliaciones: requiere revisión humana antes de reimportar");
       await tx.movimiento.deleteMany({ where: { archivoId: previo.id } });
     }
     const existentes = new Set<string>();
@@ -95,7 +122,7 @@ export async function guardarArchivoLeido(
     }
     const nuevos = movs.filter((m) => !existentes.has(m.claveDedup));
     const datos = {
-      ...a, estado: "leido", error: null, leidoEn: new Date(),
+      ...a, retiradoEn: null, estado: "leido", motivo: null, error: null, leidoEn: new Date(),
       numMovimientos: movs.length, numDuplicados: movs.length - nuevos.length,
       detalle: JSON.stringify(extra.detalle),
     };

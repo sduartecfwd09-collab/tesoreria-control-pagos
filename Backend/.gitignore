@@ -5,3 +5,12 @@ dist
 *.db-journal
 src/generated
 borradores
+
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+claves/

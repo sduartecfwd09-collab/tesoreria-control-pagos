@@ -1,7 +1,13 @@
-// Modelo de datos del control de pagos.
-// Convenciones: montos en centavos (Int/BigInt), estados como texto validado en la app
-// (sin enums nativos, para portar a PostgreSQL / SQL Server), identificadores como texto
-// (conservan ceros a la izquierda), fechas de vencimiento sin hora (se guardan a medianoche UTC).
+// Modelo de datos del control de pagos (MySQL).
+// Convenciones:
+// - Montos en centavos, siempre BigInt (hay montos mayores a lo que cabe en un entero de 32 bits).
+// - Estados como texto validado en la app (sin enums nativos); identificadores como texto (conservan ceros).
+// - Textos con longitud explícita (VarChar); solo los textos largos y libres son Text.
+// - Fechas de vencimiento: columna DATE (sin hora). El resto de las fechas: DATETIME(3) en UTC.
+//   Como se evita el desfase de zona horaria (Costa Rica es UTC-6): ver "Fechas y zona horaria" en el README.
+// - Collation: la de la base (utf8mb4_0900_ai_ci), declarada también en la migración: no distingue mayúsculas
+//   ni tildes. Por eso los índices únicos de texto tratan "Cable" y "CABLE" como el mismo valor.
+//   Único índice que debe ser exacto: claveDedup (hash hexadecimal en minúsculas; no hay ambigüedad posible).
 
 generator client {
   provider            = "prisma-client"
@@ -11,33 +17,55 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
 }
 
 model Sociedad {
-  id          Int          @id @default(autoincrement())
-  codigo      String       @unique // ZFL, GGDI, BONAVISTA, WW, MEMEMC, DM
-  nombre      String?
-  creadoEn    DateTime     @default(now())
-  actualizado DateTime     @updatedAt
-  cuentas     Cuenta[]
-  obligaciones Obligacion[]
-  archivos    ArchivoImportado[]
+  id                Int                         @id @default(autoincrement())
+  codigo            String?                     @unique @db.VarChar(30) // abreviatura interna (ZFL, GGDI...); puede ser null; nunca "" (dos vacíos chocarían)
+  nombreLargo       String                      @unique @db.VarChar(200) // el que muestra el aplicativo
+  activa            Boolean                     @default(true)
+  creadoEn          DateTime                    @default(now()) @db.DateTime(3)
+  actualizado       DateTime                    @updatedAt @db.DateTime(3)
+  tesoreroId        Int? // tesorero vigente (usuario del sistema); null = sin tesorero asignado
+  tesorero          Usuario?                    @relation("TesoreroDeSociedad", fields: [tesoreroId], references: [id])
+  cuentas           Cuenta[]
+  obligaciones      Obligacion[]
+  vencimientos      Vencimiento[]
+  archivos          ArchivoImportado[]
+  historialTesorero SociedadTesoreroHistorial[]
+  historialCambios  HistorialCambio[]
+  decisiones        DecisionManual[]
+}
+
+// Quién fue tesorero de cada sociedad y por qué cambió. hasta = null: es el vigente.
+model SociedadTesoreroHistorial {
+  id         Int       @id @default(autoincrement())
+  sociedadId Int
+  sociedad   Sociedad  @relation(fields: [sociedadId], references: [id])
+  usuarioId  Int
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id])
+  desde      DateTime  @db.DateTime(3)
+  hasta      DateTime? @db.DateTime(3)
+  motivo     String?   @db.VarChar(200)
+
+  @@index([sociedadId])
+  @@index([usuarioId])
 }
 
 model Cuenta {
-  id                 Int       @id @default(autoincrement())
+  id                 Int                @id @default(autoincrement())
   sociedadId         Int
-  sociedad           Sociedad  @relation(fields: [sociedadId], references: [id])
-  numero             String // IBAN o número de cuenta (texto)
-  banco              String? // editable por Tesorería; "por confirmar" si no se confirmó
-  bancoPorConfirmar  Boolean   @default(true)
-  codigoBanco        String? // código del IBAN (0107, 0102, ...)
-  formato            String? // E1..E7
-  moneda             String?
-  monedaPorConfirmar Boolean   @default(true)
-  creadoEn           DateTime  @default(now())
-  actualizado        DateTime  @updatedAt
+  sociedad           Sociedad           @relation(fields: [sociedadId], references: [id])
+  numero             String             @db.VarChar(50) // IBAN o número de cuenta (texto)
+  banco              String?            @db.VarChar(100) // editable por Tesorería
+  bancoPorConfirmar  Boolean            @default(true)
+  codigoBanco        String?            @db.VarChar(10) // código del IBAN (0107, 0102, ...)
+  formato            String?            @db.VarChar(10) // E1..E7
+  moneda             String?            @db.VarChar(10)
+  monedaPorConfirmar Boolean            @default(true)
+  creadoEn           DateTime           @default(now()) @db.DateTime(3)
+  actualizado        DateTime           @updatedAt @db.DateTime(3)
   archivos           ArchivoImportado[]
   movimientos        Movimiento[]
   obligaciones       Obligacion[] // obligaciones que se esperan pagar desde esta cuenta
@@ -46,165 +74,302 @@ model Cuenta {
 }
 
 model Categoria {
-  id           Int          @id @default(autoincrement())
-  nombre       String       @unique // Electricidad, Telecom, CCSS
-  creadoEn     DateTime     @default(now())
-  actualizado  DateTime     @updatedAt
-  obligaciones Obligacion[]
+  id                Int           @id @default(autoincrement())
+  nombre            String        @db.VarChar(100) // como se muestra
+  nombreNormalizado String        @unique @db.VarChar(100) // sin mayúsculas, tildes ni espacios sobrantes: "Cable" y "CABLE" son la misma
+  activa            Boolean       @default(true) // las categorías no se borran: se desactivan
+  vencimientos      Vencimiento[]
+  creadoEn          DateTime      @default(now()) @db.DateTime(3)
+  actualizado       DateTime      @updatedAt @db.DateTime(3)
+  obligaciones      Obligacion[]
 }
 
 model Obligacion {
-  id               Int           @id @default(autoincrement())
-  sociedadId       Int
-  sociedad         Sociedad      @relation(fields: [sociedadId], references: [id])
-  categoriaId      Int
-  categoria        Categoria     @relation(fields: [categoriaId], references: [id])
-  proveedor        String
-  identificador    String // texto: conserva ceros a la izquierda
-  diaEsperadoPago  Int? // día del mes (columna "Última fecha de pago", p. ej. "15 DIA"); null = falta o inválido
-  diaEditado       Boolean       @default(false) // true = Tesorería lo cambió a mano; la reimportación no lo pisa
-  frecuencia       String        @default("mensual") // mensual | bimestral | trimestral | semestral | anual (SUPUESTO)
-  frecuenciaPorConfirmar Boolean @default(true)
-  mesArranque      Int? // 1..12, solo para frecuencias no mensuales
-  montoEsperado    Int? // centavos; opcional
-  moneda           String        @default("CRC") // SUPUESTO: la tabla de pagos no trae moneda
-  monedaPorConfirmar Boolean     @default(true)
-  cuentaEsperadaId Int?
-  cuentaEsperada   Cuenta?       @relation(fields: [cuentaEsperadaId], references: [id])
-  responsable      String?
-  activa           Boolean       @default(true) // no se borra: se desactiva
-  origen           String        @default("catalogo") // catalogo | manual (la importación no toca las manuales)
-  creadoEn         DateTime      @default(now())
-  actualizado      DateTime      @updatedAt
-  vencimientos     Vencimiento[]
+  id                     Int           @id @default(autoincrement())
+  sociedadId             Int
+  sociedad               Sociedad      @relation(fields: [sociedadId], references: [id])
+  categoriaId            Int
+  categoria              Categoria     @relation(fields: [categoriaId], references: [id])
+  proveedor              String        @db.VarChar(150)
+  identificador          String        @db.VarChar(100) // texto: conserva ceros a la izquierda
+  diaEsperadoPago        Int? // día del mes (columna "Última fecha de pago", p. ej. "15 DIA"); null = falta o inválido
+  diaEditado             Boolean       @default(false) // true = Tesorería lo cambió a mano; la reimportación no lo pisa
+  frecuencia             String        @default("mensual") @db.VarChar(20) // mensual | bimestral | trimestral | semestral | anual (SUPUESTO)
+  frecuenciaPorConfirmar Boolean       @default(true)
+  mesArranque            Int? // 1..12, solo para frecuencias no mensuales
+  montoEsperado          BigInt? // centavos; opcional
+  moneda                 String        @default("CRC") @db.VarChar(10) // SUPUESTO: la tabla de pagos no trae moneda
+  monedaPorConfirmar     Boolean       @default(true)
+  cuentaEsperadaId       Int?
+  cuentaEsperada         Cuenta?       @relation(fields: [cuentaEsperadaId], references: [id])
+  controlDesde           DateTime?     @db.Date // primer día del mes desde el cual se generan vencimientos; null = aún sin definir (sin límite)
+  activa                 Boolean       @default(true) // no se borra: se desactiva
+  origen                 String        @default("catalogo") @db.VarChar(20) // catalogo | manual (la importación no toca las manuales)
+  creadoEn               DateTime      @default(now()) @db.DateTime(3)
+  actualizado            DateTime      @updatedAt @db.DateTime(3)
+  vencimientos           Vencimiento[]
+  cambiosDia             CambioDia[]
+  historialCambios       HistorialCambio[]
+  decisiones             DecisionManual[]
 
-  @@unique([sociedadId, proveedor, identificador])
+  // La categoría es parte de la identidad: un mismo proveedor puede cobrar con el mismo identificador paquetes de
+  // categorías distintas (por ejemplo cable e internet combinados).
+  @@unique([sociedadId, proveedor, identificador, categoriaId])
 }
 
 model Vencimiento {
-  id            Int            @id @default(autoincrement())
-  obligacionId  Int
-  obligacion    Obligacion     @relation(fields: [obligacionId], references: [id])
-  fecha         DateTime // sin hora (medianoche UTC)
-  periodo       String // AAAA-MM
-  montoEsperado Int? // centavos; null = "monto sin definir"
-  // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion
-  estado        String         @default("proyectado")
-  creadoEn      DateTime       @default(now())
-  actualizado   DateTime       @updatedAt
-  conciliaciones Conciliacion[]
-  alertas       Alerta[]
+  id               Int            @id @default(autoincrement())
+  obligacionId     Int
+  obligacion       Obligacion     @relation(fields: [obligacionId], references: [id])
+  fecha            DateTime       @db.Date // fecha vigente: solo fecha, sin hora (se escribe y se lee como medianoche UTC)
+  fechaOriginal    DateTime?      @db.Date // null = la fecha vigente es la del día de pago; con valor = se movió «de una sola vez» y esta es la fecha original
+  periodo          String         @db.VarChar(7) // AAAA-MM
+  montoEsperado    BigInt? // centavos; null = "monto sin definir"
+  // Copia de los datos de la obligación al generar el vencimiento: el Histórico no cambia si la obligación se edita o
+  // se desactiva. Solo los vencimientos futuros, no pagados y sin conciliación se actualizan cuando la obligación cambia.
+  dia              Int? // día de pago
+  sociedadId       Int
+  sociedad         Sociedad       @relation(fields: [sociedadId], references: [id])
+  categoriaId      Int
+  categoria        Categoria      @relation(fields: [categoriaId], references: [id])
+  proveedor        String         @db.VarChar(150)
+  cuentaEsperadaId Int?
+  moneda           String         @db.VarChar(10)
+  // proyectado | por_vencer | vencido | pagado | pagado_con_inconsistencia | sin_informacion | por_revisar (lo calcula el cruce)
+  estado           String         @default("proyectado") @db.VarChar(40)
+  movimientoId     Int? // movimiento del banco que respalda el estado (el pago); null = ninguno
+  movimiento       Movimiento?    @relation(fields: [movimientoId], references: [id], onDelete: SetNull)
+  motivo           String?        @db.VarChar(200) // texto fijo del sistema que explica el estado (nunca datos del archivo)
+  diferenciaDias   Int? // fecha del pago menos fecha vigente, en días (positivo = pagó después); solo con pago
+  sinInfoHasta     DateTime?      @db.Date // si estado = sin_informacion: hasta qué fecha hay datos de la sociedad; null = sin datos
+  creadoEn         DateTime       @default(now()) @db.DateTime(3)
+  actualizado      DateTime       @updatedAt @db.DateTime(3)
+  alertas          Alerta[]
+  cambiosDia       CambioDia[]
 
   @@unique([obligacionId, periodo])
+  @@index([sociedadId])
+  @@index([categoriaId])
+  @@index([movimientoId])
+}
+
+// Filas del catálogo que la importación no pudo asignar o que piden una decisión de una persona.
+// Se reemplaza completa en cada importación del catálogo. El identificador queda solo en la base: nunca en registros ni errores.
+model CatalogoRevision {
+  id            Int      @id @default(autoincrement())
+  fila          Int // número de fila en el Excel
+  tipo          String   @db.VarChar(40) // sociedad_sin_coincidencia | categoria_desconocida | identificador_duplicado | estado_desconocido
+  motivo        String   @db.VarChar(200) // texto fijo del sistema
+  sociedadTexto String   @db.VarChar(200)
+  categoria     String   @db.VarChar(100)
+  proveedor     String   @db.VarChar(150)
+  identificador String   @db.VarChar(100)
+  dia           Int?
+  obligacionId  Int? // obligación creada o existente a la que se refiere, si la hay
+  creadoEn      DateTime @default(now()) @db.DateTime(3)
+
+  @@index([tipo])
+}
+
+// Historial de cambios del día de pago. Solo se inserta: no hay edición ni borrado (el repositorio no los ofrece).
+// permanente: cambia el día de la obligación (afecta a vencimientos futuros no pagados; vencimientoId = null).
+// una_vez: mueve la fecha de un vencimiento concreto (diaAnterior/diaNuevo = null; fechaAnterior/fechaNueva con valor).
+model CambioDia {
+  id            Int          @id @default(autoincrement())
+  obligacionId  Int
+  obligacion    Obligacion   @relation(fields: [obligacionId], references: [id])
+  vencimientoId Int?
+  vencimiento   Vencimiento? @relation(fields: [vencimientoId], references: [id], onDelete: Restrict)
+  tipo          String       @db.VarChar(20) // permanente | una_vez
+  diaAnterior   Int?
+  diaNuevo      Int?
+  fechaAnterior DateTime?    @db.Date
+  fechaNueva    DateTime?    @db.Date
+  motivo        String       @db.VarChar(300)
+  usuarioId     Int
+  usuario       Usuario      @relation(fields: [usuarioId], references: [id])
+  creadoEn      DateTime     @default(now()) @db.DateTime(3)
+  aplicaDesde   String?      @db.VarChar(7) // AAAA-MM: desde qué mes aplica un cambio permanente; null = sin indicar
+  modoPruebas   Boolean      @default(false) // true = lo hizo alguien con el selector «Actuando como» (solo pruebas)
+
+  @@index([obligacionId])
+  @@index([vencimientoId])
+  @@index([usuarioId])
+}
+
+// Historial de decisiones humanas sobre una obligación (qué cambió, quién y cuándo). Solo se inserta: el repositorio no
+// ofrece edición ni borrado. No registra los estados automáticos. Sin montos, cuentas ni monedas: de esos campos solo se
+// anota que «cambió» (antes y despues nulos).
+model HistorialCambio {
+  id            Int         @id @default(autoincrement())
+  entidad       String      @db.VarChar(30) // por ahora «obligacion»
+  entidadId     Int
+  obligacionId  Int?
+  obligacion    Obligacion? @relation(fields: [obligacionId], references: [id], onDelete: Restrict)
+  sociedadId    Int? // para el alcance: quién puede ver este registro; nulo = una decisión sobre algo sin sociedad (solo Jefatura la ve)
+  sociedad      Sociedad?   @relation(fields: [sociedadId], references: [id], onDelete: Restrict)
+  accion        String      @db.VarChar(30) // crear | editar | activar | desactivar
+  campo         String      @db.VarChar(50)
+  antes         String?     @db.VarChar(100)
+  despues       String?     @db.VarChar(100)
+  motivo        String?     @db.VarChar(300)
+  usuarioId     Int
+  usuario       Usuario     @relation(fields: [usuarioId], references: [id])
+  nombreUsuario String      @db.VarChar(150) // copia del nombre al momento del cambio
+  creadoEn      DateTime    @default(now()) @db.DateTime(3)
+  modoPruebas   Boolean // true = lo hizo alguien con el selector «Actuando como» (solo pruebas)
+
+  @@index([sociedadId, creadoEn])
+  @@index([obligacionId, creadoEn])
+  @@index([usuarioId, creadoEn])
 }
 
 model ArchivoImportado {
-  id          Int          @id @default(autoincrement())
-  ruta        String       @unique
-  hash        String
-  formato     String? // E1..E7
-  sociedadId  Int?
-  sociedad    Sociedad?    @relation(fields: [sociedadId], references: [id])
-  cuentaId    Int?
-  cuenta      Cuenta?      @relation(fields: [cuentaId], references: [id])
-  mes         String? // AAAA-MM (del nombre del archivo)
-  leidoEn     DateTime?
-  estado      String       @default("pendiente") // pendiente | leido | error
-  numMovimientos Int       @default(0) // movimientos leídos del archivo
-  numDuplicados  Int       @default(0) // omitidos por solaparse con otro archivo
-  error       String? // mensaje si estado = error (sin datos del contenido)
-  detalle     String? // JSON: advertencias, continuidad de saldo, discrepancias de nombre
-  creadoEn    DateTime     @default(now())
-  actualizado DateTime     @updatedAt
-  movimientos Movimiento[]
+  id             Int          @id @default(autoincrement())
+  ruta           String       @unique @db.VarChar(500)
+  hash           String       @db.VarChar(64)
+  formato        String?      @db.VarChar(10) // E1..E7
+  sociedadId     Int?
+  sociedad       Sociedad?    @relation(fields: [sociedadId], references: [id])
+  cuentaId       Int?
+  cuenta         Cuenta?      @relation(fields: [cuentaId], references: [id])
+  mes            String?      @db.VarChar(7) // AAAA-MM (del nombre del archivo)
+  leidoEn        DateTime?    @db.DateTime(3)
+  estado         String       @default("pendiente") @db.VarChar(20) // pendiente | leido | error | en_revision
+  motivo         String?      @db.VarChar(200) // si estado = en_revision: texto fijo del sistema (nunca datos del archivo)
+  decisiones     DecisionManual[]
+  numMovimientos Int          @default(0) // movimientos leídos del archivo
+  numDuplicados  Int          @default(0) // omitidos por solaparse con otro archivo
+  error          String?      @db.VarChar(1000) // mensaje si estado = error (sin datos del contenido)
+  detalle        String?      @db.Text // JSON: advertencias, continuidad de saldo, discrepancias de nombre
+  retiradoEn     DateTime?    @db.DateTime(3) // el archivo ya no está en la carpeta: no cuenta en totales, cobertura ni cruce; se reactiva si vuelve
+  creadoEn       DateTime     @default(now()) @db.DateTime(3)
+  actualizado    DateTime     @updatedAt @db.DateTime(3)
+  movimientos    Movimiento[]
 }
 
 model Movimiento {
-  id            Int              @id @default(autoincrement())
-  cuentaId      Int
-  cuenta        Cuenta           @relation(fields: [cuentaId], references: [id])
-  archivoId     Int
-  archivo       ArchivoImportado @relation(fields: [archivoId], references: [id])
-  hoja          String
-  fila          Int
-  periodo       String // AAAA-MM del archivo (nombre)
-  fecha         DateTime
-  referencia    String?
-  codigo        String? // código de transacción (E2)
-  descripcion   String?
-  debito        Int // centavos
-  credito       Int // centavos
-  saldo         Int? // centavos
-  moneda        String?
-  idExtraido    String? // identificador de obligación extraído de la descripción
-  claveDedup    String           @unique // ver src/ingest/clave-dedup.ts
-  creadoEn      DateTime         @default(now())
-  actualizado   DateTime         @updatedAt
-  conciliaciones Conciliacion[]
-  alertas       Alerta[]
+  id             Int              @id @default(autoincrement())
+  cuentaId       Int
+  cuenta         Cuenta           @relation(fields: [cuentaId], references: [id])
+  archivoId      Int
+  archivo        ArchivoImportado @relation(fields: [archivoId], references: [id])
+  hoja           String           @db.VarChar(100)
+  fila           Int
+  periodo        String           @db.VarChar(7) // AAAA-MM del archivo (nombre)
+  fecha          DateTime         @db.DateTime(3)
+  referencia     String?          @db.VarChar(150)
+  codigo         String?          @db.VarChar(50) // código de transacción (E2)
+  descripcion    String?          @db.Text
+  debito         BigInt // centavos
+  credito        BigInt // centavos
+  saldo          BigInt? // centavos
+  moneda         String?          @db.VarChar(10)
+  idExtraido     String?          @db.VarChar(100) // identificador de obligación extraído de la descripción
+  claveDedup     String           @unique @db.Char(40) // sha1 en hexadecimal (longitud fija); ver src/ingest/clave-dedup.ts
+  creadoEn       DateTime         @default(now()) @db.DateTime(3)
+  actualizado    DateTime         @updatedAt @db.DateTime(3)
+  alertas        Alerta[]
+  vencimientos   Vencimiento[]
+  decisiones     DecisionManual[]
 
   @@index([cuentaId, fecha])
   @@index([periodo])
 }
 
-model Conciliacion {
-  id             Int         @id @default(autoincrement())
-  vencimientoId  Int
-  vencimiento    Vencimiento @relation(fields: [vencimientoId], references: [id])
-  movimientoId   Int         @unique // un movimiento solo puede pagar un vencimiento
-  movimiento     Movimiento  @relation(fields: [movimientoId], references: [id])
-  tipoCruce      String // automatico | manual
-  diferenciaMonto Int? // centavos
-  diferenciaDias Int?
-  estado         String // claro | en_revision | rechazado
-  revisadoPor    String?
-  creadoEn       DateTime    @default(now())
-  actualizado    DateTime    @updatedAt
-}
-
 model Alerta {
-  id             Int          @id @default(autoincrement())
-  tipo           String
-  vencimientoId  Int?
-  vencimiento    Vencimiento? @relation(fields: [vencimientoId], references: [id])
-  movimientoId   Int?
-  movimiento     Movimiento?  @relation(fields: [movimientoId], references: [id])
-  destinatarios  String? // lista separada por comas
-  canal          String       @default("borrador") // borrador | smtp
-  estado         String       @default("pendiente")
-  texto          String?
-  creadoEn       DateTime     @default(now())
-  actualizado    DateTime     @updatedAt
+  id            Int          @id @default(autoincrement())
+  tipo          String       @db.VarChar(50)
+  vencimientoId Int?
+  vencimiento   Vencimiento? @relation(fields: [vencimientoId], references: [id])
+  movimientoId  Int?
+  movimiento    Movimiento?  @relation(fields: [movimientoId], references: [id])
+  destinatarios String?      @db.Text // lista separada por comas
+  canal         String       @default("borrador") @db.VarChar(20) // borrador | smtp
+  estado        String       @default("pendiente") @db.VarChar(20)
+  texto         String?      @db.Text
+  creadoEn      DateTime     @default(now()) @db.DateTime(3)
+  actualizado   DateTime     @updatedAt @db.DateTime(3)
 }
 
 model Parametro {
   id          Int      @id @default(autoincrement())
-  clave       String
-  valor       String
-  tipo        String // entero | texto | booleano
-  ambito      String   @default("global") // global | categoria
+  clave       String   @db.VarChar(100)
+  valor       String   @db.VarChar(500)
+  tipo        String   @db.VarChar(20) // entero | texto | booleano
+  ambito      String   @default("global") @db.VarChar(20) // global | categoria
   categoriaId Int      @default(0) // id de Categoria si ambito = categoria; 0 si es global
-  descripcion String?
-  creadoEn    DateTime @default(now())
-  actualizado DateTime @updatedAt
+  descripcion String?  @db.Text
+  creadoEn    DateTime @default(now()) @db.DateTime(3)
+  actualizado DateTime @updatedAt @db.DateTime(3)
 
   @@unique([clave, ambito, categoriaId])
 }
 
-// Previstos: en el piloto todos ven todo; la autenticación se define con TI.
+// Por ahora solo se modela: el control de acceso por sesión llega con el inicio de sesión de Microsoft.
 model Rol {
   id       Int       @id @default(autoincrement())
-  nombre   String    @unique // Administrador | Tesoreria | Lectura
+  nombre   String    @unique @db.VarChar(50) // Jefatura (ve todo y administra) | Usuario (ve solo sus sociedades)
   usuarios Usuario[]
 }
 
 model Usuario {
-  id          Int      @id @default(autoincrement())
-  correo      String   @unique
-  nombre      String?
-  rolId       Int
-  rol         Rol      @relation(fields: [rolId], references: [id])
-  activo      Boolean  @default(true)
-  creadoEn    DateTime @default(now())
-  actualizado DateTime @updatedAt
+  id                   Int                         @id @default(autoincrement())
+  correo               String                      @unique @db.VarChar(254) // correo de empresa, en minúsculas y sin espacios: identidad del inicio de sesión y destino de avisos
+  nombre               String                      @db.VarChar(150)
+  nombreNormalizado    String                      @unique @db.VarChar(150) // sin mayúsculas, tildes ni espacios sobrantes: reconoce al tesorero por nombre
+  rolId                Int
+  rol                  Rol                         @relation(fields: [rolId], references: [id])
+  activo               Boolean                     @default(true)
+  diasAviso            Int? // días de aviso propios (null = usa el parámetro general «Días de aviso antes del vencimiento»)
+  diasEspera           Int? // días de espera propios antes de marcar Vencido, de 0 a 15 (null = usa el parámetro general «Días de espera antes de marcar Vencido»)
+  creadoEn             DateTime                    @default(now()) @db.DateTime(3)
+  actualizado          DateTime                    @updatedAt @db.DateTime(3)
+  sociedadesATesoreria Sociedad[]                  @relation("TesoreroDeSociedad")
+  cambiosDia           CambioDia[]
+  historialTesorero    SociedadTesoreroHistorial[]
+  historialCambios     HistorialCambio[]
+  decisiones           DecisionManual[]               @relation("DecisionDe")
+  decisionesRevertidas DecisionManual[]               @relation("DecisionRevertidaPor")
+}
+
+// Decisiones humanas que el motor y las pantallas consultan antes de calcular (asociar un pago, justificar un vencimiento o un archivo,
+// nota de revisión de una obligación). Nada se borra: revertir marca la decisión como no vigente (quién, cuándo y por qué). El repositorio
+// no ofrece borrar. Sin montos ni cuentas en los textos.
+// Invariantes en la base: las dos columnas «unica…» solo llevan valor mientras una ASOCIACIÓN DE PAGO está vigente y quedan nulas al revertir
+// (MySQL admite varios nulos en un índice único): como máximo una asociación vigente por (obligación, periodo) y una por pago.
+model DecisionManual {
+  id                     Int               @id @default(autoincrement())
+  tipo                   String            @db.VarChar(40) // asociacion_pago | justificacion_vencimiento | justificacion_archivo | nota_revision
+  sociedadId             Int? // nulo = una decisión sobre algo sin sociedad (p. ej. un archivo cuya carpeta no tiene sociedad): solo Jefatura
+  sociedad               Sociedad?         @relation(fields: [sociedadId], references: [id], onDelete: Restrict)
+  obligacionId           Int?
+  obligacion             Obligacion?       @relation(fields: [obligacionId], references: [id], onDelete: Restrict)
+  periodo                String?           @db.VarChar(7) // AAAA-MM
+  movimientoId           Int? // el pago, mientras el movimiento exista (si se vuelve a leer el archivo cambia: manda claveMovimiento)
+  movimiento             Movimiento?       @relation(fields: [movimientoId], references: [id], onDelete: SetNull)
+  claveMovimiento        String?           @db.Char(40) // huella estable del movimiento (Movimiento.claveDedup): sobrevive a volver a leer el archivo
+  archivoId              Int?
+  archivo                ArchivoImportado? @relation(fields: [archivoId], references: [id], onDelete: SetNull)
+  rutaArchivo            String?           @db.VarChar(500)
+  motivo                 String            @db.VarChar(300)
+  datos                  String?           @db.VarChar(500) // texto o JSON corto (p. ej. el motivo elegido de una lista)
+  huella                 String?           @db.VarChar(64) // de lo revisado, para que una nota de revisión reaparezca si el dato cambia
+  usuarioId              Int
+  usuario                Usuario           @relation("DecisionDe", fields: [usuarioId], references: [id], onDelete: Restrict)
+  nombreUsuario          String            @db.VarChar(150)
+  creadoEn               DateTime          @default(now()) @db.DateTime(3)
+  modoPruebas            Boolean
+  vigente                Boolean           @default(true)
+  revertidaPorId         Int?
+  revertidaPor           Usuario?          @relation("DecisionRevertidaPor", fields: [revertidaPorId], references: [id], onDelete: Restrict)
+  nombreRevierte         String?           @db.VarChar(150)
+  revertidaEn            DateTime?         @db.DateTime(3)
+  motivoReversion        String?           @db.VarChar(300)
+  unicaObligacionPeriodo String?           @unique @db.VarChar(60) // «obligacionId|periodo» mientras una asociación de pago está vigente; nulo si no
+  unicaMovimiento        String?           @unique @db.Char(40) // claveMovimiento mientras una asociación de pago está vigente; nulo si no
+
+  @@index([sociedadId, creadoEn])
+  @@index([obligacionId, periodo])
+  @@index([claveMovimiento])
 }

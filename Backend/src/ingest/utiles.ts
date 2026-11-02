@@ -1,8 +1,6 @@
 // Utilidades de lectura de celdas: texto normalizado, fechas y montos en centavos.
 // Nada aquí imprime ni registra el contenido de las celdas.
 
-export type ValorCelda = string | number | boolean | Date | null | undefined | Record<string, unknown>;
-
 /** Valor "plano" de una celda de exceljs (fórmulas -> resultado, texto enriquecido -> texto). */
 export function valorPlano(v: unknown): string | number | boolean | Date | null {
   if (v === null || v === undefined) return null;

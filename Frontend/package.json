@@ -8,6 +8,11 @@
     "start": "next start -p 3000",
     "lint": "eslint",
     "contraste": "node scripts/verificar-contraste.mjs",
+    "estados": "node scripts/verificar-estados.mjs",
+    "toasts": "node scripts/verificar-toasts.mjs",
+    "tarjetas": "node scripts/verificar-tarjetas.mjs",
+    "fechas": "node --test scripts/verificar-fechas.mjs",
+    "historial": "node --test scripts/verificar-historial.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

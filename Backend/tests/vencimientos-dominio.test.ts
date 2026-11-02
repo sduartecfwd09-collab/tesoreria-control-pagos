@@ -4,7 +4,8 @@ import { fechaVencimiento, periodosEntre, planificar, tocaEnPeriodo, type Obliga
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const ob = (o: Partial<ObligacionPlan> = {}): ObligacionPlan => ({
-  id: 1, activa: true, frecuencia: "mensual", mesArranque: null, diaEsperadoPago: 15, montoEsperado: null, ...o,
+  id: 1, sociedadId: 1, categoriaId: 1, proveedor: "P", cuentaEsperadaId: null, moneda: "CRC",
+  activa: true, frecuencia: "mensual", mesArranque: null, diaEsperadoPago: 15, montoEsperado: null, ...o,
 });
 const meses = (frecuencia: string, mesArranque: number | null) =>
   periodosEntre("2026-01", "2026-12").filter((p) => tocaEnPeriodo(frecuencia, mesArranque, p)).map((p) => Number(p.slice(5)));

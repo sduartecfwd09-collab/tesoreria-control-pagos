@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { importarCatalogo } from "../src/catalogo/importar.js";
+import { MOTIVO_CATEGORIA_DESCONOCIDA, MOTIVO_ESTADO_DESCONOCIDO, MOTIVO_SOCIEDAD_SIN_COINCIDENCIA } from "../src/repositories/obligaciones.js";
 import { prisma } from "../src/db.js";
-import { catalogo, FILAS_BASE } from "./helpers/catalogo.js";
+import { CABECERA_CATALOGO, catalogo, FILAS_BASE, sembrarSociedadesDelCatalogo } from "./helpers/catalogo.js";
 import { vaciarImportaciones } from "./helpers/db.js";
 
 let dir: string;
@@ -14,11 +15,124 @@ const buscar = (identificador: string, proveedor?: string) =>
   prisma.obligacion.findFirstOrThrow({ where: { identificador, ...(proveedor ? { proveedor } : {}) } });
 
 beforeAll(() => { dir = mkdtempSync(path.join(tmpdir(), "catalogo-")); });
-beforeEach(async () => { await vaciarImportaciones(); await escribir(); });
+beforeEach(async () => { await vaciarImportaciones(); await sembrarSociedadesDelCatalogo(); await escribir(); });
 afterAll(async () => { rmSync(dir, { recursive: true, force: true }); await vaciarImportaciones(); });
 
+describe("importarCatalogo: ESTADO", () => {
+  it("sin la columna todas quedan activas; con ella «ACTIVA» es activa, «INACTIVA» se carga inactiva y cualquier otro valor (o vacío) va a revisión", async () => {
+    await importarCatalogo(archivo());
+    expect(await prisma.obligacion.count({ where: { activa: true } })).toBe(6);
+
+    await vaciarImportaciones();
+    await sembrarSociedadesDelCatalogo();
+    writeFileSync(archivo(), await catalogo(
+      [["AAA", "Telecom", "Fono", "1", "05 DIA", "ACTIVA"], ["AAA", "Telecom", "Fono", "2", "05 DIA", "Inactiva"], ["AAA", "Telecom", "Fono", "3", "05 DIA", ""], ["AAA", "Telecom", "Fono", "4", "05 DIA", "SUSPENDIDA"]],
+      { cabecera: [...CABECERA_CATALOGO, "ESTADO"] },
+    ));
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 2, enRevision: 2 });
+    expect(await prisma.obligacion.count({ where: { activa: true } })).toBe(1);
+    expect((await prisma.obligacion.findFirstOrThrow({ where: { identificador: "2" } })).activa).toBe(false); // se carga inactiva
+    expect(await prisma.obligacion.count()).toBe(2);
+    const rev = await prisma.catalogoRevision.findMany({ orderBy: { fila: "asc" } });
+    expect(rev.map((x) => [x.tipo, x.motivo])).toEqual([["estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO], ["estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO]]);
+  });
+
+  it("no hay forma de borrar una obligación desde la API (solo desactivarla)", async () => {
+    const { crearApp } = await import("../src/app.js");
+    const app = await crearApp();
+    try {
+      expect((await app.inject({ method: "DELETE", url: "/api/obligaciones/1" })).statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("importarCatalogo: categorías", () => {
+  it("nunca crea categorías: una que no existe manda la fila a revisión con motivo; las conocidas se cargan aunque cambien mayúsculas o tildes", async () => {
+    const antes = await prisma.categoria.count();
+    await escribir([
+      ["AAA", "ELECTRICIDAD", "Luz", "1", "01 DIA"],
+      ["AAA", "Tele comunicaciones", "Fono", "2", "01 DIA"],
+      ["AAA", "internet", "Red", "3", "01 DIA"],
+    ]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 2, enRevision: 1 });
+    expect(await prisma.categoria.count()).toBe(antes);
+    const rev = await prisma.catalogoRevision.findMany({ where: { tipo: "categoria_desconocida" } });
+    expect(rev).toHaveLength(1);
+    expect(rev[0]).toMatchObject({ fila: 5, motivo: MOTIVO_CATEGORIA_DESCONOCIDA, obligacionId: null });
+    expect(await prisma.obligacion.count({ where: { identificador: "2" } })).toBe(0);
+  });
+});
+
+describe("importarCatalogo: identificador duplicado", () => {
+  it("carga las filas igual y las deja marcadas en la lista de revisión (sin ceros a la izquierda y entre sociedades)", async () => {
+    await escribir([
+      ["AAA", "Telecom", "Fono Uno", "0077", "01 DIA"],
+      ["BBB", "Telecom", "Fono Dos", "77", "02 DIA"], // mismo servicio sin ceros, otra sociedad
+      ["AAA", "Telecom", "Fono Tres", "88", "03 DIA"], // único
+    ]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 3, enRevision: 0, identificadoresDuplicados: 2 });
+    expect(await prisma.obligacion.count()).toBe(3);
+    const rev = await prisma.catalogoRevision.findMany({ orderBy: { fila: "asc" } });
+    expect(rev.map((x) => [x.tipo, x.fila])).toEqual([["identificador_duplicado", 4], ["identificador_duplicado", 5]]);
+    expect(rev.every((x) => x.obligacionId !== null)).toBe(true);
+    expect((await prisma.obligacion.findFirstOrThrow({ where: { proveedor: "Fono Uno" } })).identificador).toBe("0077"); // texto: conserva los ceros
+  });
+
+  it("no registra el identificador en el resumen ni en los motivos", async () => {
+    const r = await importarCatalogo(archivo());
+    expect(JSON.stringify(r)).not.toContain("77777777");
+    expect(r.identificadoresDuplicados).toBe(2); // el par del catálogo base
+  });
+
+  it("mismo proveedor e identificador con otra categoría (paquete combinado): se cargan las dos y quedan marcadas; con la misma categoría es la misma fila", async () => {
+    await escribir([
+      ["AAA", "Cable", "Combo", "500", "01 DIA"],
+      ["AAA", "Internet", "Combo", "500", "01 DIA"], // otra categoría: otra obligación
+      ["AAA", "Internet", "Combo", "0500", "01 DIA"], // misma categoría, ceros distintos: repetida
+    ]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 2, identificadoresDuplicados: 2 });
+    expect(r.problemas).toEqual([{ fila: 6, motivo: expect.stringContaining("Repite la fila 5"), importada: false }]);
+    expect(await prisma.obligacion.count({ where: { proveedor: "Combo" } })).toBe(2);
+    expect(await importarCatalogo(archivo())).toMatchObject({ creadas: 0 });
+  });
+
+  it("la misma fila con ceros distintos no se carga dos veces (misma sociedad y proveedor)", async () => {
+    await escribir([["AAA", "Telecom", "Fono", "0077", "01 DIA"], ["AAA", "Telecom", "Fono", "77", "01 DIA"]]);
+    const r = await importarCatalogo(archivo());
+    expect(r.creadas).toBe(1);
+    expect(r.problemas).toEqual([{ fila: 5, motivo: expect.stringContaining("Repite la fila 4"), importada: false }]);
+  });
+});
+
 describe("importarCatalogo", () => {
-  it("crea sociedades, categorías y obligaciones, y resume por sociedad, categoría y proveedor", async () => {
+  it("nunca crea sociedades: la fila sin coincidencia va a revisión con motivo y las demás se cargan", async () => {
+    await escribir([...FILAS_BASE, ["ZZZ", "Telecom", "Fono Tres", "555", "05 DIA"]]);
+    const r = await importarCatalogo(archivo());
+    expect(r).toMatchObject({ creadas: 6, enRevision: 1 });
+    expect(await prisma.sociedad.count({ where: { codigo: "ZZZ" } })).toBe(0);
+    expect(await prisma.sociedad.count()).toBe(2);
+    const rev = await prisma.catalogoRevision.findMany({ where: { tipo: "sociedad_sin_coincidencia" } });
+    expect(rev).toHaveLength(1);
+    expect(rev[0]).toMatchObject({ tipo: "sociedad_sin_coincidencia", fila: 10, motivo: MOTIVO_SOCIEDAD_SIN_COINCIDENCIA, obligacionId: null });
+    expect(await prisma.obligacion.count({ where: { identificador: "555" } })).toBe(0);
+  });
+
+  it("reconoce la sociedad por nombre oficial o alias y la lista de revisión se reemplaza en cada importación", async () => {
+    await prisma.sociedad.create({ data: { nombreLargo: "Sociedad Sin Abreviatura, S.A." } });
+    await escribir([["sociedad sin abreviatura, s.a.", "Telecom", "Fono", "1", "05 DIA"], ["QQQ", "Telecom", "Fono", "2", "05 DIA"]]);
+    expect(await importarCatalogo(archivo())).toMatchObject({ creadas: 1, enRevision: 1 });
+    await escribir([["AAA", "Telecom", "Fono", "3", "05 DIA"]]);
+    expect(await importarCatalogo(archivo())).toMatchObject({ creadas: 1, enRevision: 0 });
+    expect(await prisma.catalogoRevision.count()).toBe(0);
+  });
+
+  it("crea categorías y obligaciones, y resume por sociedad, categoría y proveedor", async () => {
     const r = await importarCatalogo(archivo());
     expect(r).toMatchObject({ filasLeidas: 6, creadas: 6, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, problemas: [] });
     expect(r.porSociedad).toEqual({ AAA: 4, BBB: 2 });
@@ -35,7 +149,7 @@ describe("importarCatalogo", () => {
     const cuenta = await prisma.cuenta.create({ data: { sociedadId: o.sociedadId, numero: "CR00000000000000000099" } });
     const editado = {
       frecuencia: "trimestral", frecuenciaPorConfirmar: false, mesArranque: 2, montoEsperado: 1_234_500, moneda: "USD",
-      monedaPorConfirmar: false, cuentaEsperadaId: cuenta.id, responsable: "Persona de prueba", activa: false,
+      monedaPorConfirmar: false, cuentaEsperadaId: cuenta.id, activa: false,
       diaEsperadoPago: 28, diaEditado: true,
     };
     await prisma.obligacion.update({ where: { id: o.id }, data: editado });
@@ -43,7 +157,7 @@ describe("importarCatalogo", () => {
     const r = await importarCatalogo(archivo());
     expect(r).toMatchObject({ creadas: 0, actualizadas: 0, sinCambios: 6 });
     expect(await prisma.obligacion.count()).toBe(6);
-    expect(await buscar("00012345")).toMatchObject(editado);
+    expect(await buscar("00012345")).toMatchObject({ ...editado, montoEsperado: BigInt(editado.montoEsperado) });
   });
 
   it("actualiza el día si cambió en el archivo y no fue editado; si viene inválido conserva el anterior", async () => {
@@ -75,7 +189,7 @@ describe("importarCatalogo", () => {
   });
 
   it("no toca las obligaciones creadas a mano aunque coincidan con una fila", async () => {
-    const s = await prisma.sociedad.create({ data: { codigo: "AAA" } });
+    const s = await prisma.sociedad.findUniqueOrThrow({ where: { codigo: "AAA" } });
     const c = await prisma.categoria.findFirstOrThrow({ where: { nombre: "Electricidad" } });
     await prisma.obligacion.create({ data: { sociedadId: s.id, categoriaId: c.id, proveedor: "LUZ UNO", identificador: "00012345", diaEsperadoPago: 3, origen: "manual" } });
     const r = await importarCatalogo(archivo());

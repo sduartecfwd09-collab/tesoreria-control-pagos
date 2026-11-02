@@ -6,6 +6,8 @@ const vacioAUndefined = (v: unknown) => (typeof v === "string" && v.trim() === "
 const opcional = <T extends z.ZodType>(s: T) => z.preprocess(vacioAUndefined, s.optional());
 
 const esquema = z.object({
+  // Vacío = solo este equipo (127.0.0.1). Un valor distinto expone la API a la red: solo con autenticación en marcha.
+  HOST: z.preprocess(vacioAUndefined, z.string().default("127.0.0.1")),
   PORT: z.preprocess(vacioAUndefined, z.coerce.number().int().min(1).max(65535).default(3001)),
   DATABASE_URL: z.string().min(1, "DATABASE_URL es obligatoria"),
   CORS_ORIGINS: z
@@ -13,12 +15,20 @@ const esquema = z.object({
     .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean)),
   STATEMENTS_ROOT: opcional(z.string()),
   CATALOGO_FILE: opcional(z.string()),
+  USUARIOS_FILE: opcional(z.string()),
+  SOCIEDADES_FILE: opcional(z.string()),
   MAIL_DRAFTS_DIR: z.preprocess(vacioAUndefined, z.string().default("./borradores")),
   SMTP_HOST: opcional(z.string()),
   SMTP_PORT: opcional(z.coerce.number().int().min(1).max(65535)),
   SMTP_USER: opcional(z.string()),
   SMTP_PASSWORD: opcional(z.string()),
   SMTP_FROM: opcional(z.string()),
+  // Solo para probar con un selector de tesorero mientras no hay inicio de sesión. Nunca en producción.
+  MODO_PRUEBAS: z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() === "true" : v), z.boolean().default(false)),
+  NODE_ENV: opcional(z.string()),
+}).refine((e) => !(e.MODO_PRUEBAS && e.NODE_ENV === "production"), {
+  path: ["MODO_PRUEBAS"],
+  message: "MODO_PRUEBAS=true no se permite con NODE_ENV=production: el servidor no arranca así",
 });
 
 export type Env = z.infer<typeof esquema>;

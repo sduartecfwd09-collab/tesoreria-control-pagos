@@ -1,11 +1,11 @@
-import { Proximamente } from "@/components/Proximamente";
+import { PanelAvisos } from "@/components/pagos/PanelAvisos";
 
-export default function Avisos() {
+export default function PaginaAvisos() {
   return (
-    <Proximamente
-      titulo="Avisos"
-      hito={5}
-      descripcion="Avisos de vencimientos próximos para todo el equipo de Tesorería, en el tablero y como borradores de correo listos para revisar y enviar."
-    />
+    <>
+      <h1 className="text-[32px] font-extrabold">Avisos</h1>
+      <p className="mt-2 max-w-3xl text-suave">Los pagos que requieren atención, agrupados por situación.</p>
+      <PanelAvisos />
+    </>
   );
 }

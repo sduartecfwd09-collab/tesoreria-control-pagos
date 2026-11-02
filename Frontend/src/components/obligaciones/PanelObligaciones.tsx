@@ -1,23 +1,29 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { ordenarSociedades } from "@/lib/formato";
+import { useListaInfinita } from "@/lib/useListaInfinita";
+import { desplazarSuave } from "@/lib/useFiltroTarjeta";
 import type {
-  CambiosObligacion, Categoria, Cuenta, FiltroObligaciones, Frecuencia, Obligacion, Pagina, Regeneracion,
+  CambiosObligacion, Categoria, FiltroObligaciones, Frecuencia, Obligacion, Regeneracion,
   ResultadoImportacionCatalogo, ResumenCatalogo, Sociedad,
 } from "@/lib/tipos";
-import { CajaError, claseBoton, claseBotonSecundario, claseControl, Paginador } from "../ui";
+import { LineaAlcance } from "../LineaAlcance";
+import { CajaError, claseBoton, claseBotonSecundario, claseControl, FinDeLista } from "../ui";
+import { SelectorSociedad } from "../SelectorSociedad";
 import { FormularioObligacion } from "./FormularioObligacion";
+import { FichaObligacion } from "./FichaObligacion";
 import { ResumenCalidad } from "./ResumenCalidad";
 import { TablaObligaciones } from "./TablaObligaciones";
 
-const POR_PAGINA = 25;
-type Filtro = Omit<FiltroObligaciones, "porPagina">;
-const FILTRO_INICIAL: Filtro = { activa: true, pagina: 1 };
+const POR_PAGINA = 100;
+const TEXTO_FALTA = { monto: "falta monto", cuenta: "falta cuenta de pago", responsable: "sin responsable", dia: "falta día", frecuencia: "frecuencia sin confirmar" } as const;
+type Filtro = Omit<FiltroObligaciones, "porPagina" | "pagina">;
+const FILTRO_INICIAL: Filtro = { activa: true };
 
 interface Catalogos {
   sociedades: Sociedad[];
   categorias: Categoria[];
-  cuentas: Cuenta[];
   frecuenciaDefecto: Frecuencia;
 }
 
@@ -27,7 +33,7 @@ function textoRegeneracion(r: Regeneracion | null): string {
     r.creados && `${r.creados} creados`,
     r.actualizados && `${r.actualizados} ajustados`,
     r.eliminados && `${r.eliminados} eliminados`,
-    r.protegidos && `${r.protegidos} sin tocar por tener pago conciliado`,
+    r.protegidos && `${r.protegidos} sin tocar por estar pagados o con aviso`,
   ].filter(Boolean);
   return partes.length ? ` Vencimientos futuros: ${partes.join(", ")}.` : " No hubo que ajustar vencimientos futuros.";
 }
@@ -35,31 +41,39 @@ function textoRegeneracion(r: Regeneracion | null): string {
 export function PanelObligaciones() {
   const [catalogos, setCatalogos] = useState<Catalogos | null>(null);
   const [resumen, setResumen] = useState<ResumenCatalogo | null>(null);
-  const [pagina, setPagina] = useState<Pagina<Obligacion> | null>(null);
   const [filtro, setFiltro] = useState<Filtro>(FILTRO_INICIAL);
   const [texto, setTexto] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [editando, setEditando] = useState<Obligacion | "nueva" | null>(null);
+  const [gestionando, setGestionando] = useState<Obligacion | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
   const [importacion, setImportacion] = useState<ResultadoImportacionCatalogo | null>(null);
 
-  const cambiarFiltro = useCallback((f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f, pagina: f.pagina ?? 1 })), []);
+  const destinoLista = useRef<HTMLElement | null>(null);
+  const previo = useRef<{ filtro: Filtro; texto: string } | null>(null);
+
+  const cambiarFiltro = useCallback((f: Partial<Filtro>) => setFiltro((x) => ({ ...x, ...f })), []);
+
+  // Al activar una tarjeta baja la vista hasta la lista.
+  useEffect(() => {
+    if (filtro.falta) desplazarSuave(destinoLista.current);
+  }, [filtro.falta]);
 
   // Búsqueda: espera 300 ms después de la última tecla para no consultar en cada letra.
   useEffect(() => {
-    const t = setTimeout(() => setFiltro((x) => (x.q === (texto.trim() || undefined) ? x : { ...x, q: texto.trim() || undefined, pagina: 1 })), 300);
+    const t = setTimeout(() => setFiltro((x) => (x.q === (texto.trim() || undefined) ? x : { ...x, q: texto.trim() || undefined })), 300);
     return () => clearTimeout(t);
   }, [texto]);
 
   useEffect(() => {
     let vigente = true;
-    Promise.all([api.listarSociedades(), api.listarCategorias(), api.listarCuentas(), api.listarParametros(), api.resumenCatalogo()])
-      .then(([sociedades, categorias, cuentas, parametros, r]) => {
+    Promise.all([api.listarSociedades(), api.listarCategorias(), api.listarParametros(), api.resumenCatalogo()])
+      .then(([sociedades, categorias, parametros, r]) => {
         if (!vigente) return;
         const fd = parametros.find((p) => p.clave === "frecuencia_defecto")?.valor as Frecuencia | undefined;
-        setCatalogos({ sociedades, categorias, cuentas, frecuenciaDefecto: fd ?? "mensual" });
+        setCatalogos({ sociedades: ordenarSociedades(sociedades), categorias, frecuenciaDefecto: fd ?? "mensual" });
         setResumen(r);
         setError(null);
       })
@@ -69,16 +83,8 @@ export function PanelObligaciones() {
     };
   }, [intento]);
 
-  useEffect(() => {
-    let vigente = true;
-    api
-      .listarObligaciones({ ...filtro, porPagina: POR_PAGINA })
-      .then((p) => vigente && setPagina(p))
-      .catch((e) => vigente && setError(e instanceof Error ? e.message : "Error desconocido"));
-    return () => {
-      vigente = false;
-    };
-  }, [filtro, intento]);
+  const cargar = useCallback((p: number) => api.listarObligaciones({ ...filtro, pagina: p, porPagina: POR_PAGINA }), [filtro]);
+  const lista = useListaInfinita(cargar, intento);
 
   const recargar = () => setIntento((n) => n + 1);
 
@@ -90,6 +96,13 @@ export function PanelObligaciones() {
       const r = await api.editarObligacion(editando.id, cambios);
       setAviso(`Se guardaron los cambios de ${r.datos.proveedor} (${r.datos.sociedad}).${textoRegeneracion(r.regeneracion)}`);
     }
+    setEditando(null);
+    recargar();
+  }
+
+  /** El cambio permanente del día ya se guardó (con o sin otros cambios): se cierra la edición y se actualiza la lista. */
+  function terminarCambioDeDia(o: Obligacion) {
+    setAviso(`Día de pago cambiado: ${o.proveedor} (${o.sociedad}).`);
     setEditando(null);
     recargar();
   }
@@ -106,22 +119,32 @@ export function PanelObligaciones() {
     }
   }
 
-  if (error) return <CajaError mensaje={error} alReintentar={() => (setError(null), recargar())} />;
-  if (!catalogos || !resumen || !pagina)
+  function quitarTarjeta() {
+    const p = previo.current;
+    previo.current = null;
+    setTexto(p?.texto ?? "");
+    setFiltro(p ? { ...p.filtro, falta: undefined } : { ...filtro, falta: undefined });
+  }
+
+  const mensajeError = error ?? lista.error;
+  if (mensajeError) return <CajaError mensaje={mensajeError} alReintentar={() => (setError(null), recargar())} />;
+  if (!catalogos || !resumen || !lista.datos)
     return (
       <p className="mt-8 text-suave" role="status">
         Cargando obligaciones…
       </p>
     );
 
-  const hayFiltros = filtro.sociedad || filtro.categoria || filtro.activa !== true || filtro.q || filtro.falta;
+  const hayOtrosFiltros = filtro.sociedadId || filtro.categoria || filtro.activa !== true || filtro.q;
+  // M: el total del catálogo en el alcance, según se muestren activas, inactivas o ambas
+  const totalCatalogo = filtro.activa === true ? resumen.activas : filtro.activa === false ? resumen.inactivas : resumen.total;
 
   return (
     <>
+      <LineaAlcance alcance={lista.alcance} />
       {aviso && (
         <div role="status" className="mt-6 flex flex-wrap items-start justify-between gap-3 rounded border-2 border-control bg-fondo-suave p-4">
           <p>
-            <span aria-hidden="true">✓ </span>
             {aviso}
           </p>
           <button type="button" className="text-sm underline" onClick={() => setAviso(null)}>
@@ -144,10 +167,13 @@ export function PanelObligaciones() {
         <ResumenCalidad
           r={resumen}
           faltaActiva={filtro.falta}
-          alFiltrarFalta={(falta) => cambiarFiltro({ falta: filtro.falta === falta ? undefined : falta })}
-          alBuscar={(sociedad, q) => {
-            setTexto(q);
-            cambiarFiltro({ sociedad, q, activa: true, falta: undefined, categoria: undefined });
+          // los contadores de las tarjetas cuentan solo obligaciones activas: el filtro también, para que N coincida con la tarjeta
+          // y quita los otros filtros para que el total de la lista sea el de la tarjeta; el segundo toque los restaura
+          alFiltrarFalta={(falta) => {
+            if (filtro.falta === falta) return quitarTarjeta();
+            if (!filtro.falta) previo.current = { filtro, texto };
+            setTexto("");
+            setFiltro({ activa: true, falta });
           }}
         />
       )}
@@ -159,7 +185,7 @@ export function PanelObligaciones() {
         </p>
       )}
 
-      <section aria-labelledby="h-lista" className="mt-10">
+      <section ref={destinoLista} aria-labelledby="h-lista" className="mt-10 scroll-mt-4">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b-2 border-acento pb-1">
           <h2 id="h-lista" className="text-lg font-bold">Lista de obligaciones</h2>
           <button type="button" className={claseBoton} onClick={() => setEditando("nueva")}>
@@ -168,24 +194,25 @@ export function PanelObligaciones() {
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
-          <label className="text-sm font-medium">
-            Sociedad
-            <select className={`${claseControl} mt-1 w-full`} value={filtro.sociedad ?? ""} onChange={(e) => cambiarFiltro({ sociedad: e.target.value || undefined })}>
-              <option value="">Todas</option>
-              {catalogos.sociedades.map((s) => (
-                <option key={s.id} value={s.codigo}>
-                  {s.codigo} ({s.obligaciones})
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="text-sm font-medium">
+            <label htmlFor="filtro-sociedad">Sociedad</label>
+            <div className="mt-1">
+              <SelectorSociedad
+                id="filtro-sociedad"
+                opciones={catalogos.sociedades.map((s) => ({ valor: String(s.id), nombre: s.nombreLargo }))}
+                valor={filtro.sociedadId ? String(filtro.sociedadId) : ""}
+                alCambiar={(v) => cambiarFiltro({ sociedadId: v ? Number(v) : undefined })}
+                textoTodas="Todas"
+              />
+            </div>
+          </div>
           <label className="text-sm font-medium">
             Categoría
             <select className={`${claseControl} mt-1 w-full`} value={filtro.categoria ?? ""} onChange={(e) => cambiarFiltro({ categoria: e.target.value ? Number(e.target.value) : undefined })}>
               <option value="">Todas</option>
               {catalogos.categorias.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nombre} ({c.obligaciones})
+                  {c.nombre}
                 </option>
               ))}
             </select>
@@ -207,7 +234,7 @@ export function PanelObligaciones() {
             <input
               type="search"
               className={`${claseControl} mt-1 w-full`}
-              placeholder="Proveedor, identificador o responsable"
+              placeholder={lista.alcance?.tipo === "mio" ? "Proveedor o identificador" : "Proveedor, identificador o responsable"}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
             />
@@ -216,14 +243,23 @@ export function PanelObligaciones() {
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span aria-live="polite">
-            {pagina.total === 0 ? "Ninguna obligación coincide con los filtros." : `${pagina.total.toLocaleString("es-CR")} obligaciones`}
-            {filtro.falta && ` · filtrando: ${{ monto: "falta monto", cuenta: "falta cuenta", responsable: "sin responsable", dia: "falta día" }[filtro.falta]}`}
+            {lista.total === 0
+              ? "Ninguna obligación coincide con los filtros."
+              : filtro.falta
+                ? `Mostrando ${lista.total.toLocaleString("es-CR")} de ${totalCatalogo.toLocaleString("es-CR")} obligaciones: ${TEXTO_FALTA[filtro.falta]}`
+                : `${lista.total.toLocaleString("es-CR")} obligaciones`}
           </span>
-          {hayFiltros && (
+          {filtro.falta && (
+            <button type="button" className={`${claseBotonSecundario} py-1 text-sm`} onClick={quitarTarjeta}>
+              Quitar filtro
+            </button>
+          )}
+          {hayOtrosFiltros && (
             <button
               type="button"
               className={`${claseBotonSecundario} py-1 text-sm`}
               onClick={() => {
+                previo.current = null;
                 setTexto("");
                 setFiltro(FILTRO_INICIAL);
               }}
@@ -233,24 +269,30 @@ export function PanelObligaciones() {
           )}
         </div>
 
-        {pagina.datos.length > 0 && (
+        {lista.datos.length > 0 && (
           <>
-            <TablaObligaciones datos={pagina.datos} alEditar={setEditando} />
-            <Paginador pagina={pagina.pagina} paginas={pagina.paginas} total={pagina.total} unidad="obligaciones" alCambiar={(p) => cambiarFiltro({ pagina: p })} />
+            <TablaObligaciones
+              datos={lista.datos}
+              alEditar={setEditando}
+              alGestionar={setGestionando}
+            />
+            <FinDeLista cantidad={lista.datos.length} total={lista.total} unidad="obligaciones" hayMas={lista.hayMas} cargando={lista.cargandoMas} alLlegar={lista.cargarMas} />
           </>
         )}
         <p className="mt-4 text-sm text-suave">
-          Etiquetas: <strong>Falta monto</strong> y <strong>Falta cuenta</strong> son datos opcionales sin completar. <strong>Por confirmar con Tesorería</strong> marca valores supuestos o
-          dudosos (pase el cursor sobre la etiqueta o abra «Editar» para ver el detalle). <strong>Falta día</strong> y <strong>Falta mes de arranque</strong> impiden generar vencimientos.
+          <strong>Observaciones</strong> señala solo problemas reales: un identificador repetido o con formato de IBAN, y la falta del día de pago o del mes de arranque, sin los cuales no se
+          generan vencimientos. Pase el cursor sobre una observación para ver el detalle.
         </p>
       </section>
 
+      {gestionando && <FichaObligacion o={gestionando} alCerrar={() => setGestionando(null)} alCambiar={recargar} />}
       {editando && (
         <FormularioObligacion
           key={editando === "nueva" ? "nueva" : editando.id}
           obligacion={editando === "nueva" ? null : editando}
           {...catalogos}
           alGuardar={guardar}
+          alCambiarDia={terminarCambioDeDia}
           alCerrar={() => setEditando(null)}
         />
       )}

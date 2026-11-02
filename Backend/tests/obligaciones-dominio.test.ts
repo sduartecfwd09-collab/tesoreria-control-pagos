@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, etiquetasDe, identificadoresRepetidos,
+  calidadCatalogo, errorMesArranque, esquemaAlta, esquemaEdicion, estadoDeObligacion, etiquetasDe, identificadoresRepetidos,
   pareceIban, primerError, type ObligacionCalidad,
 } from "../src/domain/obligaciones.js";
 
@@ -28,7 +28,7 @@ describe("alertas de calidad del catálogo", () => {
     expect(pareceIban("000999888777")).toBe(false);
   });
 
-  it("cuenta faltantes y supuestos, y lista las sociedades sin obligaciones activas", () => {
+  it("cuenta faltantes y supuestos, y separa las sociedades sin obligaciones según tengan o no estados de cuenta", () => {
     const c = calidadCatalogo(
       [
         ob({ montoEsperado: 100, cuentaEsperadaId: 1, responsable: "X", frecuenciaPorConfirmar: false, monedaPorConfirmar: false }),
@@ -36,42 +36,42 @@ describe("alertas de calidad del catálogo", () => {
         ob({ identificador: "CR12000000000000000001" }),
         ob({ sociedad: "CCC", activa: false }),
       ],
-      ["AAA", "CCC", "DM"],
+      [{ nombre: "AAA", conEstados: true }, { nombre: "CCC", conEstados: true }, { nombre: "DM", conEstados: false }, { nombre: "EEE", conEstados: false }],
     );
     expect(c).toMatchObject({
       total: 4, activas: 3, inactivas: 1, sinDia: 1, sinMonto: 2, sinCuenta: 2, sinResponsable: 2,
-      sinMesArranque: 1, frecuenciaPorConfirmar: 2, monedaPorConfirmar: 2, sociedadesSinObligaciones: ["CCC", "DM"],
+      sinMesArranque: 1, frecuenciaPorConfirmar: 2, monedaPorConfirmar: 2, sociedadesSinObligaciones: ["CCC"],
+      sociedadesSinEstadosNiObligaciones: ["DM", "EEE"],
     });
     expect(c.formatoIban).toHaveLength(1);
   });
 });
 
 describe("etiquetas por obligación", () => {
-  it("marca lo que falta y lo que está por confirmar con Tesorería", () => {
+  it("solo señala problemas reales: sin día o sin mes de arranque; monto, cuenta, responsable y lo supuesto no", () => {
     const o = ob({ diaEsperadoPago: null, frecuencia: "anual" });
-    expect(etiquetasDe(o, []).map((e) => e.codigo)).toEqual([
-      "falta_dia", "falta_monto", "falta_cuenta", "falta_responsable", "falta_mes_arranque", "por_confirmar",
-    ]);
-    const completa = ob({ montoEsperado: 1, cuentaEsperadaId: 2, responsable: "Y", frecuenciaPorConfirmar: false, monedaPorConfirmar: false });
-    expect(etiquetasDe(completa, [])).toEqual([]);
+    expect(etiquetasDe(o, []).map((e) => e.codigo)).toEqual(["falta_dia", "falta_mes_arranque"]);
+    expect(etiquetasDe(ob({}), [])).toEqual([]); // sin monto, cuenta ni responsable y con frecuencia y moneda supuestas
+    expect(estadoDeObligacion(true, [])).toBe("activa");
+    expect(estadoDeObligacion(false, [])).toBe("inactiva");
+    expect(estadoDeObligacion(true, etiquetasDe(o, []))).toBe("en_revision");
   });
 
   it("explica el identificador repetido y el formato de IBAN", () => {
     const a = ob({ identificador: "CR12000000000000000001", proveedor: "Uno" });
     const b = ob({ identificador: "CR12000000000000000001", proveedor: "Dos" });
     const e = etiquetasDe(a, identificadoresRepetidos([a, b]));
-    expect(e.find((x) => x.codigo === "id_repetido")).toMatchObject({ texto: "Por confirmar con Tesorería", ayuda: expect.stringContaining("(Dos)") });
-    expect(e.find((x) => x.codigo === "formato_iban")?.texto).toBe("Por confirmar con Tesorería");
+    expect(e.find((x) => x.codigo === "id_repetido")).toMatchObject({ texto: "Identificador repetido", ayuda: "El mismo identificador aparece con otro proveedor (Dos). Verifique cuál es el correcto." });
+    expect(e.find((x) => x.codigo === "formato_iban")?.texto).toBe("Formato de IBAN");
   });
 });
 
 describe("validaciones", () => {
   const error = (r: { success: boolean; error?: unknown }) => (r.success ? null : primerError(r.error as never));
 
-  it("acepta una edición válida y normaliza el responsable", () => {
-    const r = esquemaEdicion.parse({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050, responsable: "  Ana   Pérez " });
-    expect(r).toEqual({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050, responsable: "Ana Pérez" });
-    expect(esquemaEdicion.parse({ responsable: "" })).toEqual({ responsable: null });
+  it("acepta una edición válida; el responsable ya no es un campo editable", () => {
+    expect(esquemaEdicion.parse({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050 })).toEqual({ frecuencia: "bimestral", mesArranque: 3, montoEsperado: 150_050 });
+    expect(error(esquemaEdicion.safeParse({ responsable: "Ana" }))?.error).toBe("No se indicó ningún cambio");
   });
 
   it("rechaza valores fuera de rango con mensajes en español y el campo afectado", () => {
@@ -85,11 +85,11 @@ describe("validaciones", () => {
     expect(error(esquemaEdicion.safeParse({ activa: "si" }))?.campo).toBe("activa");
   });
 
-  it("el alta exige sociedad, categoría, proveedor e identificador, y limpia el identificador", () => {
+  it("el alta exige sociedadId, categoría, proveedor e identificador, y limpia el identificador", () => {
     expect(error(esquemaAlta.safeParse({}))).toMatchObject({ error: "Indique la sociedad" });
-    expect(error(esquemaAlta.safeParse({ sociedad: "aaa", categoriaId: 1, proveedor: "  " }))).toMatchObject({ campo: "proveedor" });
-    const r = esquemaAlta.parse({ sociedad: "aaa", categoriaId: 1, proveedor: " Luz ", identificador: " cr12 0000 " });
-    expect(r).toEqual({ sociedad: "AAA", categoriaId: 1, proveedor: "Luz", identificador: "CR120000" });
+    expect(error(esquemaAlta.safeParse({ sociedadId: 7, categoriaId: 1, proveedor: "  " }))).toMatchObject({ campo: "proveedor" });
+    const r = esquemaAlta.parse({ sociedadId: 7, categoriaId: 1, proveedor: " Luz ", identificador: " cr12 0000 " });
+    expect(r).toEqual({ sociedadId: 7, categoriaId: 1, proveedor: "Luz", identificador: "CR120000" });
   });
 
   it("el mes de arranque solo aplica a frecuencias no mensuales", () => {

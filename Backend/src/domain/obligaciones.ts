@@ -3,11 +3,15 @@
 // así desaparecen solas cuando Tesorería corrige el catálogo.
 import { z } from "zod";
 import { limpiarIdentificador } from "../catalogo/lector.js";
+import { proveedorCanonico } from "../config/alias-proveedores.js";
+import { identificadorClave } from "./identificadores.js";
+import { esPeriodo } from "./vencimientos.js";
 import { FRECUENCIAS } from "./parametros.js";
 
 export const MONEDAS = ["CRC", "USD"] as const;
-// Prisma Int es de 32 bits: ₡21 474 836,47 como máximo (ver deuda técnica en el README).
-export const MONTO_MAXIMO = 2_147_483_647;
+// Los montos se guardan en centavos como BigInt y la API los envía como número: el máximo es el mayor entero que un
+// número representa sin perder precisión (unos ₡90 billones). Hay montos reales mayores a ₡21,4 millones.
+export const MONTO_MAXIMO = Number.MAX_SAFE_INTEGER;
 
 /** Identificador con forma de IBAN (dos letras, dos dígitos de control y el resto alfanumérico). */
 export const pareceIban = (id: string) => /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(id);
@@ -33,13 +37,16 @@ const camposEditables = {
     .number({ error: "El monto debe ser un número" })
     .int("El monto se envía en centavos (número entero)")
     .min(0, "El monto no puede ser negativo")
-    .max(MONTO_MAXIMO, "El monto supera el máximo admitido (21 474 836,47)")
+    .max(MONTO_MAXIMO, "El monto es demasiado grande")
     .nullable(),
   moneda: z.enum(MONEDAS, { error: "La moneda debe ser CRC (colones) o USD (dólares)" }),
   monedaPorConfirmar: z.boolean({ error: "Indique sí o no" }),
   cuentaEsperadaId: z.number({ error: "La cuenta de pago no es válida" }).int("La cuenta de pago no es válida").positive("La cuenta de pago no es válida").nullable(),
-  responsable: textoOpcional(80, "El responsable"),
   activa: z.boolean({ error: "Indique si la obligación está activa (sí o no)" }),
+  controlDesde: z
+    .string({ error: "«Control desde» debe ser un mes con el formato AAAA-MM (por ejemplo 2026-08)" })
+    .refine(esPeriodo, "«Control desde» debe ser un mes con el formato AAAA-MM (por ejemplo 2026-08)")
+    .nullable(),
 };
 
 export const CAMPOS_EDITABLES = Object.keys(camposEditables);
@@ -49,11 +56,14 @@ const editablesOpcionales = z.object(camposEditables).partial();
 export const esquemaEdicion = editablesOpcionales.refine((o) => Object.keys(o).length > 0, "No se indicó ningún cambio");
 
 export const esquemaAlta = editablesOpcionales.extend({
-  sociedad: z.string({ error: "Indique la sociedad" }).trim().min(1, "Indique la sociedad").transform((s) => s.toUpperCase()),
+  /** «Es intencional»: la persona confirma que el identificador ya existe en otra obligación y quiere crearla igual. */
+  esIntencional: z.boolean({ error: "Indique sí o no" }).optional(),
+  // La sociedad se elige por su nombre oficial y se envía su identificador (61 sociedades no tienen abreviatura).
+  sociedadId: z.number({ error: "Indique la sociedad" }).int("Indique la sociedad").positive("Indique la sociedad"),
   categoriaId: z.number({ error: "Indique la categoría" }).int().positive("Indique la categoría"),
   proveedor: z
     .string({ error: "Indique el proveedor" })
-    .transform((s) => s.replace(/\s+/g, " ").trim())
+    .transform((s) => proveedorCanonico(s.replace(/\s+/g, " ").trim())) // variantes conocidas -> proveedor canónico
     .pipe(z.string().min(1, "Indique el proveedor").max(80, "El proveedor admite como máximo 80 caracteres")),
   identificador: z
     .string({ error: "Indique el identificador (NISE, cuenta o número de servicio)" })
@@ -78,6 +88,11 @@ export function errorMesArranque(frecuencia: string, mesArranque: number | null 
 
 // --- Etiquetas y calidad ------------------------------------------------------------------------
 
+/** El responsable de una obligación es el tesorero vigente de su sociedad (cambiarlo = reasignar la sociedad). */
+export function responsableEfectivo(o: { sociedad: { tesorero: { nombre: string } | null } }): { nombre: string | null; de: "tesorero" | null } {
+  return o.sociedad.tesorero ? { nombre: o.sociedad.tesorero.nombre, de: "tesorero" } : { nombre: null, de: null };
+}
+
 export interface ObligacionCalidad {
   id: number;
   sociedad: string;
@@ -91,12 +106,11 @@ export interface ObligacionCalidad {
   montoEsperado: number | null;
   monedaPorConfirmar: boolean;
   cuentaEsperadaId: number | null;
+  /** el responsable: el tesorero vigente de su sociedad (null si la sociedad no tiene) */
   responsable: string | null;
 }
 
-export type CodigoEtiqueta =
-  | "falta_dia" | "falta_monto" | "falta_cuenta" | "falta_responsable" | "falta_mes_arranque"
-  | "por_confirmar" | "id_repetido" | "formato_iban";
+export type CodigoEtiqueta = "falta_dia" | "falta_mes_arranque" | "id_repetido" | "formato_iban";
 
 export interface Etiqueta {
   codigo: CodigoEtiqueta;
@@ -104,7 +118,7 @@ export interface Etiqueta {
   ayuda: string;
 }
 
-const claveId = (o: { sociedad: string; identificador: string }) => `${o.sociedad}|${o.identificador}`;
+const claveId = (o: { sociedad: string; identificador: string }) => `${o.sociedad}|${identificadorClave(o.identificador)}`;
 
 /** Grupos de obligaciones activas con el mismo identificador en una sociedad y distinto proveedor. */
 export function identificadoresRepetidos(obs: ObligacionCalidad[]) {
@@ -115,47 +129,70 @@ export function identificadoresRepetidos(obs: ObligacionCalidad[]) {
     .map((g) => ({ sociedad: g[0]!.sociedad, identificador: g[0]!.identificador, proveedores: g.map((o) => o.proveedor), obligaciones: g.map((o) => o.id) }));
 }
 
+/**
+ * Observaciones de una obligación: solo problemas reales. Monto, cuenta y responsable son datos opcionales y no se
+ * señalan; frecuencia y moneda por confirmar siguen guardadas como dato interno, pero no se muestran como observación.
+ */
 export function etiquetasDe(o: ObligacionCalidad, repetidos: ReturnType<typeof identificadoresRepetidos>): Etiqueta[] {
   const e: Etiqueta[] = [];
   if (o.diaEsperadoPago === null) e.push({ codigo: "falta_dia", texto: "Falta día", ayuda: "Sin día esperado de pago no se pueden generar sus vencimientos. Indíquelo al editar." });
-  if (o.montoEsperado === null) e.push({ codigo: "falta_monto", texto: "Falta monto", ayuda: "Monto esperado sin definir. Es opcional: en el piloto el monto no se valida." });
-  if (o.cuentaEsperadaId === null) e.push({ codigo: "falta_cuenta", texto: "Falta cuenta", ayuda: "No se indicó desde qué cuenta bancaria se paga. Es opcional." });
-  if (o.responsable === null) e.push({ codigo: "falta_responsable", texto: "Sin responsable", ayuda: "Nadie asignado. Es opcional: en el piloto todos ven todo." });
   if (o.frecuencia !== "mensual" && o.mesArranque === null) {
     e.push({ codigo: "falta_mes_arranque", texto: "Falta mes de arranque", ayuda: "Para una frecuencia no mensual indique en qué mes toca el primer pago." });
-  }
-  const supuestos = [o.frecuenciaPorConfirmar && "frecuencia", o.monedaPorConfirmar && "moneda"].filter(Boolean);
-  if (supuestos.length > 0) {
-    e.push({ codigo: "por_confirmar", texto: "Por confirmar con Tesorería", ayuda: `Valor supuesto (no viene en la tabla de pagos): ${supuestos.join(" y ")}. Confírmelo al editar.` });
   }
   const rep = repetidos.find((g) => g.obligaciones.includes(o.id));
   if (rep) {
     const otros = rep.proveedores.filter((p) => p !== o.proveedor).join(", ");
-    e.push({ codigo: "id_repetido", texto: "Por confirmar con Tesorería", ayuda: `El mismo identificador aparece en ${rep.sociedad} con otro proveedor (${otros}). Confirme cuál es el correcto.` });
+    e.push({ codigo: "id_repetido", texto: "Identificador repetido", ayuda: `El mismo identificador aparece con otro proveedor (${otros}). Verifique cuál es el correcto.` });
   }
   if (pareceIban(o.identificador)) {
-    e.push({ codigo: "formato_iban", texto: "Por confirmar con Tesorería", ayuda: "El identificador tiene formato de IBAN (cuenta bancaria), no de número de servicio. Confirme cuál es el correcto." });
+    e.push({ codigo: "formato_iban", texto: "Formato de IBAN", ayuda: "El identificador tiene formato de IBAN (cuenta bancaria), no de número de servicio. Verifique cuál es el correcto." });
   }
   return e;
 }
 
-export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: string[]) {
+export type EstadoObligacion = "activa" | "inactiva" | "en_revision" | "revisada";
+
+/**
+ * Inactiva; activa con alguna observación = en revisión; activa sin observaciones = activa. Una observación con una revisión vigente y con efecto
+ * (misma huella) pasa de «en revisión» a «revisada»; sin efecto vuelve a «en revisión».
+ */
+export const estadoDeObligacion = (activa: boolean, observaciones: Etiqueta[], revisadaConEfecto = false): EstadoObligacion =>
+  !activa ? "inactiva" : observaciones.length === 0 ? "activa" : revisadaConEfecto ? "revisada" : "en_revision";
+
+/** Una sociedad con su nombre y si tiene estados de cuenta cargados (para separar las que no tienen estados). */
+export interface SociedadParaCalidad {
+  nombre: string;
+  conEstados: boolean;
+}
+
+/**
+ * Calidad del catálogo. `revisadas` = obligaciones con una revisión vigente y con efecto. «Falta día» y «Falta mes de arranque» SIGUEN contando el dato
+ * faltante aunque la obligación esté revisada (no genera vencimientos y ese hueco no debe esconderse): se informa aparte cuántas están revisadas.
+ * «Identificador repetido» y «Formato de IBAN» sí dejan de contar a las revisadas (un grupo repetido solo desaparece si todas las suyas lo están).
+ */
+export function calidadCatalogo(obs: ObligacionCalidad[], sociedades: SociedadParaCalidad[], revisadas: ReadonlySet<number> = new Set()) {
   const activas = obs.filter((o) => o.activa);
   const conActivas = new Set(activas.map((o) => o.sociedad));
+  const sinObligaciones = sociedades.filter((s) => !conActivas.has(s.nombre));
   const n = (f: (o: ObligacionCalidad) => boolean) => activas.filter(f).length;
   return {
     total: obs.length,
     activas: activas.length,
     inactivas: obs.length - activas.length,
     sinDia: n((o) => o.diaEsperadoPago === null),
+    sinDiaRevisadas: n((o) => o.diaEsperadoPago === null && revisadas.has(o.id)),
     sinMonto: n((o) => o.montoEsperado === null),
     sinCuenta: n((o) => o.cuentaEsperadaId === null),
     sinResponsable: n((o) => o.responsable === null),
     sinMesArranque: n((o) => o.frecuencia !== "mensual" && o.mesArranque === null),
+    sinMesArranqueRevisadas: n((o) => o.frecuencia !== "mensual" && o.mesArranque === null && revisadas.has(o.id)),
     frecuenciaPorConfirmar: n((o) => o.frecuenciaPorConfirmar),
     monedaPorConfirmar: n((o) => o.monedaPorConfirmar),
-    identificadoresRepetidos: identificadoresRepetidos(obs),
-    formatoIban: activas.filter((o) => pareceIban(o.identificador)).map((o) => ({ id: o.id, sociedad: o.sociedad, proveedor: o.proveedor, identificador: o.identificador })),
-    sociedadesSinObligaciones: sociedades.filter((s) => !conActivas.has(s)).sort(),
+    identificadoresRepetidos: identificadoresRepetidos(obs).filter((g) => g.obligaciones.some((id) => !revisadas.has(id))),
+    formatoIban: activas.filter((o) => pareceIban(o.identificador) && !revisadas.has(o.id)).map((o) => ({ id: o.id, sociedad: o.sociedad, proveedor: o.proveedor, identificador: o.identificador })),
+    // con estados de cuenta pero sin obligaciones: aviso individual (algo falta en el catálogo)
+    sociedadesSinObligaciones: sinObligaciones.filter((s) => s.conEstados).map((s) => s.nombre).sort(),
+    // sin estados de cuenta ni obligaciones: una sola línea resumen (sociedades sin movimiento cargado)
+    sociedadesSinEstadosNiObligaciones: sinObligaciones.filter((s) => !s.conEstados).map((s) => s.nombre).sort(),
   };
 }

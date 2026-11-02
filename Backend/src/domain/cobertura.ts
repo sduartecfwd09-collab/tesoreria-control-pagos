@@ -1,10 +1,14 @@
+import { estadoDeArchivo, motivoDeArchivo } from "./estado-archivo.js";
 import { parsearNombreArchivo } from "../ingest/nombre-archivo.js";
+import { esImagenNoLegible, textoSaldoDeDetalle, type ContinuidadGuardada } from "./saldo.js";
 
 export interface ArchivoCobertura {
+  id?: number;
   ruta: string;
   sociedad: string | null;
   mes: string | null;
-  estado: string;
+  estado: string; // leido | error | en_revision | pendiente
+  motivo?: string | null; // motivo fijo si el archivo quedó en revisión
   numMovimientos: number;
   numDuplicados: number;
   banco: string | null;
@@ -14,18 +18,28 @@ export interface ArchivoCobertura {
   cuentaId: number | null;
   formato: string | null;
   detalle: unknown;
+  retiradoEn?: Date | null;
+  /** una imagen no legible justificada con «El banco confirma que no hubo movimientos»: cuenta como sin movimientos que cubre */
+  cubreJustificado?: boolean;
 }
 
-export type EstadoCelda = "leido" | "error" | "falta";
+/** error: el archivo no se pudo leer; sin_sociedad: su carpeta no tiene sociedad; falta: no hay archivo de ese mes. */
+export type EstadoCelda = "leido" | "error" | "sin_sociedad" | "falta";
 
 export interface CeldaCobertura {
   estado: EstadoCelda;
+  /** identificador del archivo registrado: la celda enlaza a su motivo en el detalle */
+  archivoId?: number;
   archivo?: string;
   formato?: string | null;
   movimientos: number;
   duplicados: number;
   /** "cuadra" | "no_cuadra" | "no_verificable" */
   saldo?: string;
+  /** el resultado del saldo en lenguaje claro (también para Cuadra y No verificable) */
+  saldoMotivo?: string;
+  /** los movimientos vienen como imagen: el archivo no da cobertura */
+  imagenNoLegible?: boolean;
   error?: string | null;
 }
 
@@ -47,7 +61,13 @@ export interface Cobertura {
   sinUbicar: { ruta: string; error: string | null }[];
 }
 
+export const conImagenesDe = (d: unknown): boolean | null => {
+  const v = (d as { conImagenes?: unknown } | null)?.conImagenes;
+  return typeof v === "boolean" ? v : null; // null: archivo leído antes de registrar este dato (se completa al reimportar)
+};
+
 const continuidadDe = (d: unknown): string | undefined => (d as { continuidad?: { estado?: string } } | null)?.continuidad?.estado;
+const saldoDe = (d: unknown) => textoSaldoDeDetalle(d as { continuidad?: ContinuidadGuardada } | null);
 
 /**
  * Cobertura por sociedad, cuenta y mes: qué hay, qué falta y qué falló.
@@ -58,12 +78,13 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
   const filas = new Map<string, FilaCobertura>();
   const sinUbicar: Cobertura["sinUbicar"] = [];
 
-  for (const a of archivos) {
+  // Los archivos retirados de la carpeta no cuentan en la cobertura.
+  for (const a of archivos.filter((x) => !x.retiradoEn)) {
     const nombre = parsearNombreArchivo(a.ruta.split("/").pop() ?? "");
     const sociedad = a.sociedad ?? a.ruta.split("/")[0] ?? "";
     const mes = a.mes ?? nombre?.periodo ?? null;
     if (!nombre || !mes) {
-      sinUbicar.push({ ruta: a.ruta, error: a.error ?? null });
+      sinUbicar.push({ ruta: a.ruta, error: a.error ?? a.motivo ?? null });
       continue;
     }
     meses.add(mes);
@@ -77,13 +98,17 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       fila.monedaPorConfirmar = a.monedaPorConfirmar;
     }
     fila.celdas[mes] = {
-      estado: a.estado === "error" ? "error" : "leido",
+      // un archivo que no aportó datos se muestra como celda con problema, nunca como leído
+      estado: { leido: "leido", sin_sociedad: "sin_sociedad", con_error: "error", retirado: "error" }[estadoDeArchivo(a)] as EstadoCelda,
+      ...(a.id !== undefined ? { archivoId: a.id } : {}),
       archivo: a.ruta,
       formato: a.formato,
       movimientos: a.numMovimientos,
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
-      error: a.error ?? null,
+      saldoMotivo: saldoDe(a.detalle)?.motivo,
+      ...(estadoDeArchivo(a) === "leido" && !a.cubreJustificado && esImagenNoLegible((a.detalle as { continuidad?: ContinuidadGuardada } | null)?.continuidad) ? { imagenNoLegible: true } : {}),
+      error: motivoDeArchivo(a),
     };
     filas.set(k, fila);
   }

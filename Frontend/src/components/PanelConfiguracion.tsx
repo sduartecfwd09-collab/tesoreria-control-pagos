@@ -1,165 +1,210 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ErrorApi } from "@/lib/api";
-import type { Parametro } from "@/lib/tipos";
+import { avisar, cerrar, reemplazar } from "@/lib/avisos";
+import type { MiConfiguracion } from "@/lib/tipos";
+import { ConfirmarCambio, type CambioPendiente } from "./ConfirmarCambio";
+import { CajaError } from "./ui";
+import { fechaHoraCR } from "@/lib/formato";
+import { fraseDeAviso, fraseDeEspera } from "@/lib/fechas";
 
-type Mensaje = { tipo: "ok" | "error"; texto: string };
+const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
 
-function FilaParametro({ p, alGuardar }: { p: Parametro; alGuardar: (p: Parametro, valor: string) => void }) {
-  const [valor, setValor] = useState(p.valor);
-  const [guardando, setGuardando] = useState(false);
-  const [msg, setMsg] = useState<Mensaje | null>(null);
-  const idCampo = `param-${p.id}`;
-  const cambiado = valor !== p.valor;
-  const rango = p.min !== null && p.max !== null ? `Valores permitidos: de ${p.min} a ${p.max}.` : "";
+/** Entero entre 0 y max, o null si el texto no lo es. */
+function entero(texto: string, max: number): number | null {
+  if (!/^\d+$/.test(texto.trim())) return null;
+  const n = Number(texto);
+  return n <= max ? n : null;
+}
 
-  async function guardar(e: React.FormEvent) {
-    e.preventDefault();
-    setGuardando(true);
-    setMsg(null);
-    try {
-      const r = await api.guardarParametro(p.id, valor);
-      alGuardar(p, r.datos.valor);
-      setValor(r.datos.valor);
-      setMsg({ tipo: "ok", texto: "Guardado" });
-    } catch (err) {
-      setMsg({ tipo: "error", texto: err instanceof ErrorApi ? err.message : "No se pudo guardar" });
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  const control = "border-2 border-control bg-fondo rounded px-3 py-2 text-base";
+function CampoDias({
+  id, titulo, ayuda, ejemplo, valor, max, alCambiar, error, puedeGuardar, actualizando, alGuardar,
+}: {
+  id: string; titulo: string; ayuda: string; ejemplo: string; valor: string; max: number; alCambiar: (v: string) => void; error?: string;
+  /** el valor cambió y es válido */
+  puedeGuardar: boolean; actualizando: boolean; alGuardar: () => void;
+}) {
   return (
-    <form onSubmit={guardar} className="py-5 border-b border-divisor grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
-      <div>
-        <label htmlFor={idCampo} className="font-semibold">
-          {p.categoria ? p.categoria : p.etiqueta}
-          {p.supuesto && (
-            <span className="ml-2 align-middle text-xs font-medium bg-ambar-fondo text-ambar-texto rounded px-2 py-0.5">
-              Por confirmar con Tesorería
-            </span>
-          )}
-        </label>
-        <p id={`${idCampo}-ayuda`} className="mt-1 text-sm text-suave max-w-xl">
-          {p.ayuda} {rango}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {p.opciones ? (
-          <select
-            id={idCampo}
-            aria-describedby={`${idCampo}-ayuda`}
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
-            className={control}
-          >
-            {p.opciones.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            id={idCampo}
-            type="number"
-            inputMode="numeric"
-            step={1}
-            min={p.min ?? undefined}
-            max={p.max ?? undefined}
-            aria-describedby={`${idCampo}-ayuda`}
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
-            className={`${control} w-24`}
-          />
-        )}
-        {p.unidad && <span className="text-sm text-suave">{p.unidad}</span>}
-        <button
-          type="submit"
-          disabled={!cambiado || guardando}
-          className="bg-acento text-sobre-acento font-semibold rounded px-4 py-2 disabled:bg-fondo-suave disabled:text-suave disabled:border disabled:border-divisor disabled:cursor-not-allowed"
-        >
-          {guardando ? "Guardando…" : "Guardar"}
+    <form onSubmit={(e) => (e.preventDefault(), alGuardar())} noValidate className="border-b border-divisor py-5">
+      <label htmlFor={id} className="font-semibold">{titulo}</label>
+      <p id={`${id}-ayuda`} className="mt-1 text-sm text-suave">{ayuda} Valores permitidos: de 0 a {max}.</p>
+      <div className="mt-3 flex items-center gap-2">
+        <input
+          id={id}
+          type="number"
+          inputMode="numeric"
+          step={1}
+          min={0}
+          max={max}
+          aria-describedby={`${id}-ayuda${error ? ` ${id}-error` : ""}`}
+          aria-invalid={error ? true : undefined}
+          value={valor}
+          onChange={(e) => alCambiar(e.target.value)}
+          className="w-24 rounded border-2 border-control bg-fondo px-3 py-2 text-base"
+        />
+        <span className="text-sm font-medium">días</span>
+        <button type="submit" disabled={!puedeGuardar || actualizando} className="ml-2 rounded bg-acento px-5 py-2 font-bold text-sobre-acento disabled:cursor-not-allowed disabled:opacity-40">
+          {actualizando ? "Actualizando…" : "Guardar"}
         </button>
-        <span
-          role="status"
-          aria-live="polite"
-          className={`text-sm w-full md:w-auto ${msg?.tipo === "error" ? "text-rojo font-medium" : "text-suave"}`}
-        >
-          {msg?.texto}
-        </span>
       </div>
+      {error && <p id={`${id}-error`} role="alert" className="mt-2 text-sm font-medium text-rojo">{error}</p>}
+      <p className="mt-3 text-sm">{ejemplo}</p>
     </form>
   );
 }
 
 export function PanelConfiguracion() {
-  const [datos, setDatos] = useState<Parametro[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
+  const [datos, setDatos] = useState<MiConfiguracion | null>(null);
+  const [error, setError] = useState<{ texto: string; sinUsuario: boolean } | null>(null);
   const [intento, setIntento] = useState(0);
+  const [aviso, setAviso] = useState("");
+  const [espera, setEspera] = useState("");
+  const [confirmacion, setConfirmacion] = useState<CambioPendiente | null>(null);
+  const [actualizando, setActualizando] = useState<"aviso" | "espera" | null>(null);
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null);
+  const [modoPruebas, setModoPruebas] = useState<boolean | null>(null);
 
   useEffect(() => {
     let vigente = true;
     api
-      .listarParametros()
-      .then((d) => vigente && (setDatos(d), setError(null)))
-      .catch((e) => vigente && setError(e instanceof Error ? e.message : 'Error desconocido'));
+      .obtenerIdentidad()
+      .then((i) => vigente && setModoPruebas(i.modoPruebas))
+      .catch((e) => vigente && (setModoPruebas(true), setError({ texto: e instanceof Error ? e.message : "No se pudo cargar su configuración.", sinUsuario: false })));
     return () => {
       vigente = false;
     };
   }, [intento]);
 
-  const alGuardar = useCallback((p: Parametro, valor: string) => {
-    setDatos((d) => d && d.map((x) => (x.id === p.id ? { ...x, valor } : x)));
-  }, []);
+  useEffect(() => {
+    if (modoPruebas !== true) return;
+    let vigente = true;
+    api
+      .obtenerMiConfiguracion()
+      .then((d) => {
+        if (!vigente) return;
+        setDatos(d);
+        setAviso(String(d.diasAviso));
+        setEspera(String(d.diasEspera));
+        setError(null);
+      })
+      .catch((e) => vigente && setError({ texto: e instanceof Error ? e.message : "No se pudo cargar su configuración.", sinUsuario: e instanceof ErrorApi && e.estado === 401 }));
+    return () => {
+      vigente = false;
+    };
+  }, [intento, modoPruebas]);
 
-  const { globales, porCategoria } = useMemo(
-    () => ({
-      globales: (datos ?? []).filter((p) => p.ambito === "global"),
-      porCategoria: (datos ?? []).filter((p) => p.ambito === "categoria"),
-    }),
-    [datos],
-  );
-
-  if (error)
+  if (modoPruebas === false)
     return (
-      <div role="alert" className="mt-8 border-2 border-rojo bg-rojo-fondo text-rojo rounded p-4">
-        <p className="font-semibold">{error}</p>
-        <button onClick={() => setIntento((n) => n + 1)} className="mt-3 bg-acento text-sobre-acento font-semibold rounded px-4 py-2">
-          Reintentar
-        </button>
+      <p role="status" className="mt-8 max-w-2xl rounded border-2 border-control bg-fondo-suave p-4 font-semibold">
+        Esta pantalla estará disponible cuando exista el inicio de sesión.
+      </p>
+    );
+  if (error)
+    return error.sinUsuario ? (
+      <div role="alert" className="mt-8 max-w-2xl rounded border-2 border-control bg-fondo-suave p-4">
+        <p className="font-semibold">{error.texto}</p>
+        <p className="mt-2 text-sm text-suave">Elija su nombre en el selector «Actuando como» de la parte superior de la pantalla y esta página se actualizará con sus datos.</p>
       </div>
+    ) : (
+      <CajaError mensaje={error.texto} alReintentar={() => setIntento((n) => n + 1)} />
     );
   if (!datos)
     return (
       <p className="mt-8 text-suave" role="status">
-        Cargando parámetros…
+        Cargando su configuración…
       </p>
     );
 
+  const nAviso = entero(aviso, 60);
+  const nEspera = entero(espera, 15);
+
+  // Un pago de ejemplo que vence el 20 del mes en curso; las frases cambian mientras se escribe.
+  const hoy = new Date();
+  const pago = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-20`;
+  const ejemploAviso = nAviso === null ? "Escriba un número de días para ver un ejemplo." : fraseDeAviso(nAviso, pago);
+  const ejemploEspera = nEspera === null ? "Escriba un número de días para ver un ejemplo." : fraseDeEspera(nEspera, pago);
+
+  // Cada opción se guarda sola: el valor de la otra es el que ya estaba guardado, no lo que se esté escribiendo.
+  function guardar(cual: "aviso" | "espera") {
+    setErrorGuardado(null);
+    const n = cual === "aviso" ? nAviso : nEspera;
+    if (n === null || !datos) return;
+    const antes = datos;
+    const [titulo, linea] = cual === "aviso" ? ["Cambiar el aviso", (d: number) => `Avisarme con ${textoDias(d)} de anticipación`] : ["Cambiar la espera", (d: number) => `Marcar Vencido si pasan ${textoDias(d)} sin pago`];
+    const valorAntes = cual === "aviso" ? antes.diasAviso : antes.diasEspera;
+    setConfirmacion({
+      titulo,
+      antes: linea(valorAntes),
+      despues: linea(n),
+      // Se cierra la confirmación de inmediato: guardar recalcula los estados y puede tardar unos segundos; el avance se ve en el panel.
+      ejecutar: async () => {
+        setActualizando(cual);
+        const idAviso = avisar.informacion("Actualizando…", { fijo: true });
+        api
+          .guardarMiConfiguracion(cual === "aviso" ? n : antes.diasAviso, cual === "espera" ? n : antes.diasEspera)
+          .then((nuevo) => {
+            setDatos(nuevo);
+            // solo se refresca el campo guardado: lo que se escribe en el otro sin guardar se conserva
+            if (cual === "aviso") setAviso(String(nuevo.diasAviso));
+            else setEspera(String(nuevo.diasEspera));
+            const f = nuevo.estadosCalculadosEn ? fechaHoraCR(nuevo.estadosCalculadosEn) : null;
+            const texto = f ? `Listo: los estados se calcularon el ${f}` : "Listo: sus cambios quedaron guardados.";
+            reemplazar(idAviso, "exito", texto);
+          })
+          .catch((e) => {
+            const mensaje = e instanceof Error && e.message ? e.message : "No se pudo guardar.";
+            setErrorGuardado(mensaje);
+            reemplazar(idAviso, "error", `${mensaje} Sus valores anteriores siguen vigentes.`);
+          })
+          .finally(() => {
+            setActualizando(null);
+            cerrar(idAviso);
+          });
+      },
+    });
+  }
+
   return (
-    <div className="mt-8 space-y-10">
-      <section aria-labelledby="h-reglas">
-        <h2 id="h-reglas" className="text-lg font-bold border-b-2 border-acento pb-1">
-          Reglas de cruce y avisos
+    <div className="mt-8 max-w-[640px]">
+      <section aria-labelledby="h-mis-reglas">
+        <h2 id="h-mis-reglas" className="text-lg font-bold border-b-2 border-acento pb-1">
+          Sus avisos y sus plazos
         </h2>
-        {globales.map((p) => (
-          <FilaParametro key={p.id} p={p} alGuardar={alGuardar} />
-        ))}
+        <fieldset disabled={actualizando !== null} className="contents">
+          <CampoDias
+            id="mi-aviso"
+            titulo="Avisarme con N días de anticipación"
+            ayuda="Cuántos días antes de la fecha de pago quiere que el sistema le avise de un vencimiento."
+            ejemplo={ejemploAviso}
+            valor={aviso}
+            max={60}
+            alCambiar={setAviso}
+            error={nAviso === null ? "Indique un número entero de días entre 0 y 60." : undefined}
+            puedeGuardar={nAviso !== null && nAviso !== datos.diasAviso}
+            actualizando={actualizando === "aviso"}
+            alGuardar={() => guardar("aviso")}
+          />
+          <CampoDias
+            id="mi-espera"
+            titulo="Marcar Vencido si pasan N días sin pago"
+            ayuda="Cuántos días espera el sistema, después de la fecha de pago, antes de marcar el pago como Vencido."
+            ejemplo={ejemploEspera}
+            valor={espera}
+            max={15}
+            alCambiar={setEspera}
+            error={nEspera === null ? "Indique un número entero de días entre 0 y 15." : undefined}
+            puedeGuardar={nEspera !== null && nEspera !== datos.diasEspera}
+            actualizando={actualizando === "espera"}
+            alGuardar={() => guardar("espera")}
+          />
+        </fieldset>
       </section>
-      <section aria-labelledby="h-tol">
-        <h2 id="h-tol" className="text-lg font-bold border-b-2 border-acento pb-1">
-          Tolerancia de monto por categoría
-        </h2>
-        <p className="mt-2 text-sm text-suave max-w-2xl">
-          En el piloto el monto no se valida: estos valores se guardan para cuando Tesorería active esa regla.
+      {errorGuardado && actualizando === null && (
+        <p role="alert" className="mt-3 text-sm font-medium text-rojo">
+          {errorGuardado} Sus valores anteriores siguen vigentes.
         </p>
-        {porCategoria.map((p) => (
-          <FilaParametro key={p.id} p={p} alGuardar={alGuardar} />
-        ))}
-      </section>
+      )}
+      {confirmacion && <ConfirmarCambio cambio={confirmacion} alCerrar={() => setConfirmacion(null)} />}
     </div>
   );
 }

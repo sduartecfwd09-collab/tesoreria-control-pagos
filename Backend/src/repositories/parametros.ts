@@ -1,4 +1,5 @@
 import { prisma } from "../db.js";
+import { normalizar } from "../ingest/utiles.js";
 
 export interface ParametroFila {
   id: number;
@@ -50,10 +51,28 @@ export async function asegurarParametro(d: {
   });
 }
 
+/** "Cable" y "CABLE" son la misma categoria: se busca por el nombre normalizado y se conserva la primera forma. */
 export async function asegurarCategoria(nombre: string) {
-  return prisma.categoria.upsert({ where: { nombre }, create: { nombre }, update: {} });
+  const nombreNormalizado = normalizar(nombre);
+  return prisma.categoria.upsert({ where: { nombreNormalizado }, create: { nombre, nombreNormalizado }, update: {} });
 }
 
 export async function contarParametros() {
   return prisma.parametro.count();
 }
+
+/** Guarda un dato interno en la tabla de parámetros (crea o actualiza). No es un parámetro editable: no tiene definición. */
+export async function guardarValorGlobal(clave: string, valor: string, tipo = "texto") {
+  return prisma.parametro.upsert({
+    where: { clave_ambito_categoriaId: { clave, ambito: "global", categoriaId: 0 } },
+    create: { clave, valor, tipo, ambito: "global", categoriaId: 0 },
+    update: { valor },
+  });
+}
+
+/** Cuándo se calcularon por última vez los estados de los vencimientos (ISO), o null si nunca. */
+export async function ultimoCalculoDeEstados(): Promise<string | null> {
+  return valorGlobal(CLAVE_CALCULO_ESTADOS);
+}
+
+export const CLAVE_CALCULO_ESTADOS = "estados_calculados_en";
