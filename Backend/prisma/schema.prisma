@@ -208,8 +208,8 @@ model HistorialCambio {
   entidadId     Int
   obligacionId  Int?
   obligacion    Obligacion? @relation(fields: [obligacionId], references: [id], onDelete: Restrict)
-  sociedadId    Int // para el alcance: quién puede ver este registro
-  sociedad      Sociedad    @relation(fields: [sociedadId], references: [id])
+  sociedadId    Int? // para el alcance: quién puede ver este registro; nulo = una decisión sobre algo sin sociedad (solo Jefatura la ve)
+  sociedad      Sociedad?   @relation(fields: [sociedadId], references: [id], onDelete: Restrict)
   accion        String      @db.VarChar(30) // crear | editar | activar | desactivar
   campo         String      @db.VarChar(50)
   antes         String?     @db.VarChar(100)
@@ -359,8 +359,8 @@ model Usuario {
 model DecisionManual {
   id                     Int               @id @default(autoincrement())
   tipo                   String            @db.VarChar(40) // asociacion_pago | justificacion_vencimiento | justificacion_archivo | nota_revision
-  sociedadId             Int
-  sociedad               Sociedad          @relation(fields: [sociedadId], references: [id], onDelete: Restrict)
+  sociedadId             Int? // nulo = una decisión sobre algo sin sociedad (p. ej. un archivo cuya carpeta no tiene sociedad): solo Jefatura
+  sociedad               Sociedad?         @relation(fields: [sociedadId], references: [id], onDelete: Restrict)
   obligacionId           Int?
   obligacion             Obligacion?       @relation(fields: [obligacionId], references: [id], onDelete: Restrict)
   periodo                String?           @db.VarChar(7) // AAAA-MM

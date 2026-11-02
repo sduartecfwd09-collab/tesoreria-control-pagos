@@ -11,7 +11,7 @@ import { limitesDeMovimientos } from "../repositories/fechas.js";
 import { valorGlobal } from "../repositories/parametros.js";
 import { listarVencimientos } from "../repositories/vencimientos.js";
 
-const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"] as const;
+const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar", "justificado"] as const;
 
 const fecha = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM-DD)` }).refine(esFechaIso, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe ser una fecha válida con el formato AAAA-MM-DD (por ejemplo 2026-08-15)`);
 

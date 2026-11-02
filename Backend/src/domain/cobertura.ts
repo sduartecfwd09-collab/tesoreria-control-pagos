@@ -19,6 +19,8 @@ export interface ArchivoCobertura {
   formato: string | null;
   detalle: unknown;
   retiradoEn?: Date | null;
+  /** una imagen no legible justificada con «El banco confirma que no hubo movimientos»: cuenta como sin movimientos que cubre */
+  cubreJustificado?: boolean;
 }
 
 /** error: el archivo no se pudo leer; sin_sociedad: su carpeta no tiene sociedad; falta: no hay archivo de ese mes. */
@@ -105,7 +107,7 @@ export function calcularCobertura(archivos: (ArchivoCobertura & { error?: string
       duplicados: a.numDuplicados,
       saldo: continuidadDe(a.detalle),
       saldoMotivo: saldoDe(a.detalle)?.motivo,
-      ...(estadoDeArchivo(a) === "leido" && esImagenNoLegible((a.detalle as { continuidad?: ContinuidadGuardada } | null)?.continuidad) ? { imagenNoLegible: true } : {}),
+      ...(estadoDeArchivo(a) === "leido" && !a.cubreJustificado && esImagenNoLegible((a.detalle as { continuidad?: ContinuidadGuardada } | null)?.continuidad) ? { imagenNoLegible: true } : {}),
       error: motivoDeArchivo(a),
     };
     filas.set(k, fila);

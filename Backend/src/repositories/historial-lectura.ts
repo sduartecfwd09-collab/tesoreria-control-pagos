@@ -45,7 +45,10 @@ export async function listarHistorial(f: FiltroHistorial) {
       },
     }),
   ]);
-  return { total, filas };
+  // las líneas de un archivo no tienen obligación: se ubican por el archivo (solo su nombre, el mes y la cuenta; el que arma la respuesta enmascara)
+  const idsArchivo = [...new Set(filas.filter((h) => h.entidad === "archivo").map((h) => h.entidadId))];
+  const archivos = idsArchivo.length === 0 ? [] : await prisma.archivoImportado.findMany({ where: { id: { in: idsArchivo } }, select: { id: true, ruta: true, mes: true, cuenta: { select: { numero: true } } } });
+  return { total, filas, archivos: new Map(archivos.map((a) => [a.id, a])) };
 }
 
 /** Lo que existe DENTRO del alcance, para que los filtros no ofrezcan opciones vacías ni ajenas. */
@@ -58,7 +61,8 @@ export async function opcionesDeHistorial(sociedadIds: number[] | null) {
     prisma.historialCambio.findMany({ where, distinct: ["campo"], select: { campo: true } }),
   ]);
   return {
-    sociedades: sociedades.map((s) => ({ id: s.sociedad.id, nombre: s.sociedad.nombreLargo })),
+    // lo que no tiene sociedad (p. ej. un archivo cuya carpeta no la tiene) no es una opción del filtro de sociedad
+    sociedades: sociedades.flatMap((s) => (s.sociedad ? [{ id: s.sociedad.id, nombre: s.sociedad.nombreLargo }] : [])),
     personas: personas.map((p) => ({ id: p.usuarioId, nombre: p.nombreUsuario })),
     campos: campos.map((c) => c.campo),
   };

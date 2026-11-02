@@ -26,6 +26,8 @@ export class ErrorDeServicio extends Error {
   constructor(
     readonly codigo: CodigoErrorServicio,
     mensaje: string,
+    /** el dato del formulario al que se refiere el error (motivo, nota...) */
+    readonly campo?: string,
   ) {
     super(mensaje);
   }

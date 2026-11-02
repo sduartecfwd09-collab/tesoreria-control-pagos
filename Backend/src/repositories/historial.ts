@@ -12,13 +12,13 @@ export interface AutorDelCambio {
 
 export async function insertarHistorial(
   tx: Prisma.TransactionClient,
-  d: { obligacionId: number; sociedadId: number; autor: AutorDelCambio; lineas: LineaCambio[]; motivo?: string | null; /** por defecto «obligacion» y la propia obligación */ entidad?: string; entidadId?: number },
+  d: { obligacionId: number | null; sociedadId: number | null; autor: AutorDelCambio; lineas: LineaCambio[]; motivo?: string | null; /** por defecto «obligacion» y la propia obligación; sin obligación (un archivo) hay que indicar la entidad y su id */ entidad?: string; entidadId?: number },
 ): Promise<number> {
   if (d.lineas.length === 0) return 0;
   const r = await tx.historialCambio.createMany({
     data: d.lineas.map((l) => ({
       entidad: d.entidad ?? "obligacion",
-      entidadId: d.entidadId ?? d.obligacionId,
+      entidadId: d.entidadId ?? d.obligacionId ?? 0,
       obligacionId: d.obligacionId,
       sociedadId: d.sociedadId,
       accion: l.accion,

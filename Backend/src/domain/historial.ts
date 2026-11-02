@@ -15,10 +15,10 @@ export interface DatosEditables {
   cuentaEsperadaId: number | null;
 }
 
-export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion";
+export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion";
 
 /** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
-export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion"];
+export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion"];
 
 export interface LineaCambio {
   accion: AccionHistorial;
@@ -75,3 +75,10 @@ export function limitesDeDias(desde?: string, hasta?: string): { desde?: Date; h
 export const lineaDeAsociarPago = (periodo: string): LineaCambio => ({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: periodo });
 /** Quitar la asociación manual: el periodo queda en «antes». */
 export const lineaDeQuitarAsociacion = (periodo: string): LineaCambio => ({ accion: "quitar_asociacion", campo: "pago_asociado", antes: periodo, despues: null });
+
+/** Justificar un vencimiento: solo el periodo (AAAA-MM). */
+export const lineaDeJustificarVencimiento = (periodo: string): LineaCambio => ({ accion: "justificar", campo: "justificacion_vencimiento", antes: null, despues: periodo });
+export const lineaDeQuitarJustificacionVencimiento = (periodo: string): LineaCambio => ({ accion: "quitar_justificacion", campo: "justificacion_vencimiento", antes: periodo, despues: null });
+/** Justificar un archivo: solo el mes del archivo (AAAA-MM; nulo si no se conoce). Nunca la ruta ni la cuenta. */
+export const lineaDeJustificarArchivo = (mes: string | null): LineaCambio => ({ accion: "justificar", campo: "justificacion_archivo", antes: null, despues: mes });
+export const lineaDeQuitarJustificacionArchivo = (mes: string | null): LineaCambio => ({ accion: "quitar_justificacion", campo: "justificacion_archivo", antes: mes, despues: null });

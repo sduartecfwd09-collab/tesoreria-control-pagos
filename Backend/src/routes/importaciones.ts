@@ -7,6 +7,10 @@ import { esImagenNoLegible, esSinMovimientos, textoSaldoDeDetalle, type Continui
 import { etiquetaSociedad } from "../domain/sociedades.js";
 import { hayImportacionEnCurso } from "../ingest/importar-carpeta.js";
 import { listarArchivos, listarCuentas } from "../repositories/consultas.js";
+import { justificacionDaCobertura, justificacionDeArchivoTieneEfecto, leerDatos, motivosDeProblema, problemaDeArchivo } from "../domain/justificacion.js";
+import { puedeEscribirEnSociedad } from "../identidad/exigir-persona.js";
+import { usuarioActual } from "../identidad/usuario-actual.js";
+import { justificacionesVigentesDeArchivos } from "../repositories/decisiones.js";
 
 // Estas rutas solo muestran el estado de lo importado. La importación se ejecuta desde el Backend (npm run reimportar).
 // Ninguna respuesta incluye rutas de archivo ni números de cuenta completos: solo el nombre del archivo y los últimos 4 de la cuenta.
@@ -28,8 +32,15 @@ export async function rutasImportaciones(app: FastifyInstance, opts: { modoPrueb
     const sociedades = await sociedadesDelAlcance(alcance);
     // un archivo sin sociedad asignada no es de ninguna sociedad: solo lo ve quien ve todo
     const archivos = (await listarArchivos()).filter((a) => !sociedades || (a.sociedadId !== null && sociedades.includes(a.sociedadId)));
+    const persona = await usuarioActual(req, opts.modoPruebas);
+    const justificaciones = await justificacionesVigentesDeArchivos();
     const datos = archivos.map((a) => {
       const d = (a.detalle ?? {}) as DetalleArchivo;
+      // el problema que tiene el archivo AHORA y su justificación (aunque ya no tenga efecto: se informa para poder quitarla)
+      const problema = problemaDeArchivo({ estado: a.estado, motivo: a.motivo, error: a.error, retiradoEn: a.retiradoEn, detalle: a.detalle });
+      const j = justificaciones.get(a.id) ?? null;
+      const conEfecto = j !== null && problema !== null && justificacionDeArchivoTieneEfecto(j, { hash: a.hash, problema });
+      const puedeActuar = persona !== null && puedeEscribirEnSociedad(persona, { tesoreroId: a.tesoreroId });
       return {
         id: a.id, archivo: nombreDeArchivoSeguro(a.ruta), sociedad: a.sociedad, cuenta: a.cuenta === null ? null : enmascararCuenta(a.cuenta),
         formato: a.formato, mes: a.mes, estado: estadoDeArchivo(a),
@@ -52,6 +63,13 @@ export async function rutasImportaciones(app: FastifyInstance, opts: { modoPrueb
         // el lector ignora las imágenes (sin OCR); null = archivo leído antes de registrar este dato
         conImagenes: typeof d.conImagenes === "boolean" ? d.conImagenes : null,
         leidoEn: a.leidoEn?.toISOString() ?? null,
+        problema,
+        // quién, cuándo y por qué se justificó; sinEfecto = el archivo cambió o tiene otro problema (vuelve a requerir atención)
+        justificacion: j ? { quien: j.nombreUsuario, cuando: j.creadoEn.toISOString(), motivo: j.motivo, nota: leerDatos(j.datos).nota, sinEfecto: !conEfecto } : null,
+        // los motivos que se pueden elegir para este problema (los define el Backend; la pantalla no tiene su propia lista)
+        motivosPosibles: problema ? motivosDeProblema(problema) : [],
+        puedeJustificar: puedeActuar && problema !== null && !conEfecto,
+        puedeQuitarJustificacion: puedeActuar && j !== null,
       };
     });
     return {
@@ -69,7 +87,14 @@ export async function rutasImportaciones(app: FastifyInstance, opts: { modoPrueb
   app.get("/api/cobertura", async (req) => {
     const alcance = await alcanceDe(req, opts.modoPruebas);
     const sociedades = await sociedadesDelAlcance(alcance);
-    const archivos = (await listarArchivos()).filter((a) => a.retiradoEn === null && (!sociedades || (a.sociedadId !== null && sociedades.includes(a.sociedadId))));
+    const justificaciones = await justificacionesVigentesDeArchivos();
+    const archivos = (await listarArchivos())
+      .filter((a) => a.retiradoEn === null && (!sociedades || (a.sociedadId !== null && sociedades.includes(a.sociedadId))))
+      // una imagen no legible justificada con «El banco confirma que no hubo movimientos» cubre (igual que en el cruce)
+      .map((a) => {
+        const j = justificaciones.get(a.id);
+        return { ...a, cubreJustificado: j !== undefined && justificacionDaCobertura(j, { hash: a.hash, problema: problemaDeArchivo({ estado: a.estado, motivo: a.motivo, error: a.error, retiradoEn: a.retiradoEn, detalle: a.detalle }) }) };
+      });
     return { alcance: alcanceParaRespuesta(alcance), datos: coberturaSegura(calcularCobertura(archivos)) };
   });
 

@@ -36,12 +36,14 @@
 // vencimiento en Pagado con ese movimiento, gana a lo automático y a Por revisar, y saca el movimiento de los candidatos de cualquier
 // otro vencimiento (esos se recalculan solos). Si el movimiento ya no se encuentra (o no es de la misma sociedad), la decisión sigue
 // vigente pero no tiene efecto y el vencimiento vuelve a su estado calculado. Sin decisiones vigentes el resultado es idéntico al de siempre.
+// JUSTIFICACIÓN de un vencimiento: se aplica DESPUÉS de calcular el estado y solo si ese estado es Vencido o Sin información: queda «Justificado».
+// Si hay un pago (automático o asociación manual), el pago manda: queda Pagado y la justificación no tiene efecto. No cuenta como pagado.
 import { nombresEnDescripcion } from "../config/alias-proveedores.js";
 import { normalizar } from "../ingest/utiles.js";
 import { coberturaDeSociedad, noCuadraEnRango, sinLecturaEnRango, type CuentaCorte } from "./cobertura-corte.js";
 import { identificadorClave, patronIdentificador } from "./identificadores.js";
 
-export type EstadoCruce = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar";
+export type EstadoCruce = "proyectado" | "por_vencer" | "vencido" | "pagado" | "pagado_con_inconsistencia" | "sin_informacion" | "por_revisar" | "justificado";
 
 export const MOTIVOS = {
   pagado: "Pago encontrado en una cuenta de la sociedad",
@@ -49,6 +51,7 @@ export const MOTIVOS = {
   repetido: "Pago repetido",
   empate: "El pago podría corresponder a dos meses distintos de este servicio",
   asociadoAMano: "Pago asociado a mano",
+  justificado: "Justificado a mano",
   compartido: "No se pudo saber con certeza a cuál servicio corresponde el pago: el número de servicio está en varias obligaciones",
   vencido: "Pasó la fecha de pago y no hay pago en los estados de cuenta",
   vencidoBuscando: "El pago no aparece todavía; se sigue buscando",
@@ -70,6 +73,8 @@ export interface MovimientoCruce {
   /** huella estable del movimiento (claveDedup); solo hace falta para localizar las asociaciones manuales */
   clave?: string;
 }
+/** Un vencimiento justificado a mano (obligación + periodo): solo aplica si el estado calculado es Vencido o Sin información. */
+export interface JustificacionManual { obligacionId: number; periodo: string }
 /** Asociación manual de un pago a un vencimiento (obligación + periodo), por la huella del movimiento. */
 export interface AsociacionManual { obligacionId: number; periodo: string; claveMovimiento: string }
 
@@ -81,6 +86,8 @@ export interface EntradaCruce {
   movimientos: MovimientoCruce[];
   /** asociaciones manuales vigentes; sin ellas (o vacías) el cruce es el automático de siempre */
   asociaciones?: AsociacionManual[];
+  /** justificaciones manuales vigentes de vencimientos; sin ellas (o vacías) el cruce es el de siempre */
+  justificaciones?: JustificacionManual[];
   /** cuentas conocidas por sociedad */
   cuentas: Map<number, CuentaCorte[]>;
   diasAntes: number;
@@ -220,7 +227,8 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
 
   // Paso 3: estado de cada vencimiento.
   const hoyDia = diaDe(e.hoy);
-  const resultados = e.vencimientos.map((v): ResultadoCruce => {
+  const justificados = new Set((e.justificaciones ?? []).map((j) => `${j.obligacionId}|${j.periodo}`));
+  const calcular = (v: VencimientoCruce): ResultadoCruce => {
     const base = { vencimientoId: v.id, movimientoId: null, diferenciaDias: null, sinInfoHasta: null };
     const f = diaDe(v.fecha);
     // la decisión manual gana a todo lo demás (también a Por revisar)
@@ -264,6 +272,12 @@ export function cruzar(e: EntradaCruce): { resultados: ResultadoCruce[]; estadis
     if (e.marcarVencidoSinEstado) return { ...base, estado: "vencido", motivo: MOTIVOS.vencidoSinEstado, sinInfoHasta: cobertura.hasta };
     if (cobertura.antesDe) return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacionDesde, sinInfoHasta: null };
     return { ...base, estado: "sin_informacion", motivo: MOTIVOS.sinInformacion, sinInfoHasta: cobertura.hasta };
+  };
+  const resultados = e.vencimientos.map((v): ResultadoCruce => {
+    const r = calcular(v);
+    return justificados.size > 0 && (r.estado === "vencido" || r.estado === "sin_informacion") && justificados.has(`${v.obligacionId}|${periodoDe(v)}`)
+      ? { ...r, estado: "justificado", motivo: MOTIVOS.justificado, sinInfoHasta: null }
+      : r;
   });
   return { resultados, estadisticas: est };
 }

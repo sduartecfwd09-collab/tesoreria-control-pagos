@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { enmascararIdentificador, textoSeguro } from "../domain/enmascarar.js";
+import { enmascararCuenta, enmascararIdentificador, nombreDeArchivoSeguro, textoSeguro } from "../domain/enmascarar.js";
 import { HISTORIAL_POR_PAGINA_DEFECTO, HISTORIAL_POR_PAGINA_MAXIMO, limitesDeDias } from "../domain/historial.js";
 import { hoyDe, type Reloj } from "../domain/reloj.js";
 import { esFechaIso } from "../domain/vencimientos.js";
@@ -46,7 +46,7 @@ export async function rutasHistorialCambios(app: FastifyInstance, opts: { modoPr
     const alcance = await alcanceDe(req, opts.modoPruebas);
     const sociedadIds = await sociedadesDelAlcance(alcance);
     const porPagina = q.data.porPagina ?? (await porPaginaPorDefecto());
-    const [{ total, filas }, opciones] = await Promise.all([
+    const [{ total, filas, archivos }, opciones] = await Promise.all([
       listarHistorial({
         sociedadIds, sociedadId: q.data.sociedadId, usuarioId: q.data.usuarioId, campo: q.data.campo,
         ...limitesDeDias(q.data.desde, hasta), pagina: q.data.pagina, porPagina,
@@ -57,8 +57,10 @@ export async function rutasHistorialCambios(app: FastifyInstance, opts: { modoPr
       datos: filas.map((h) => ({
         id: h.id,
         creadoEn: h.creadoEn.toISOString(),
-        sociedad: h.sociedad.nombreLargo,
+        sociedad: h.sociedad?.nombreLargo ?? null, // null = sin sociedad (solo Jefatura lo ve)
         obligacion: h.obligacion ? { proveedor: h.obligacion.proveedor, categoria: h.obligacion.categoria.nombre, identificador: enmascararIdentificador(h.obligacion.identificador) } : null,
+        // un archivo (justificación de un archivo): su mes, la cuenta con los últimos 4 y solo el nombre del archivo; nunca la ruta
+        archivo: h.entidad === "archivo" ? archivoParaRespuesta(archivos.get(h.entidadId)) : null,
         accion: h.accion,
         campo: h.campo,
         antes: h.antes,
@@ -75,4 +77,8 @@ export async function rutasHistorialCambios(app: FastifyInstance, opts: { modoPr
       paginas: Math.max(1, Math.ceil(total / porPagina)),
     };
   });
+}
+
+function archivoParaRespuesta(a: { ruta: string; mes: string | null; cuenta: { numero: string } | null } | undefined) {
+  return a ? { nombre: nombreDeArchivoSeguro(a.ruta), mes: a.mes, cuenta: a.cuenta ? enmascararCuenta(a.cuenta.numero) : null } : { nombre: null, mes: null, cuenta: null };
 }

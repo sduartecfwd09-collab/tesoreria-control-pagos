@@ -10,6 +10,9 @@ import { autorDe, exigirPersona, puedeEscribirEnSociedad, SIN_PERMISO_SOCIEDAD }
 import { usuarioActual, type UsuarioActual } from "../identidad/usuario-actual.js";
 import { asociacionesVigentesDe, asociacionVigente } from "../repositories/decisiones.js";
 import { asociarPago, listarCandidatos, quitarAsociacion } from "../vencimientos/asociar-pago.js";
+import { ESTADOS_JUSTIFICABLES, leerDatos, MOTIVOS_VENCIMIENTO } from "../domain/justificacion.js";
+import { justificacionesVigentesDeVencimientos, justificacionVigenteDeVencimiento } from "../repositories/decisiones.js";
+import { justificarVencimiento, quitarJustificacionDeVencimiento } from "../justificaciones/vencimiento.js";
 import { MOTIVOS } from "../domain/cruce.js";
 import { inicioDeDatos } from "../domain/cobertura-corte.js";
 import { TEXTO_SALDO_IMAGEN, TEXTO_SALDO_NO_CUADRA, textoDatosDesactualizados, textoEstadoLista, textoFaltanEstados, textoSinEstadosAnteriores } from "../domain/textos-pago.js";
@@ -25,7 +28,7 @@ import { diasDeAviso } from "../vencimientos/generar.js";
 import { ultimoCalculoDeEstados, valorGlobal } from "../repositories/parametros.js";
 import { listarVencimientos, periodosGenerados, vencimientoParaAsociar } from "../repositories/vencimientos.js";
 
-const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar"] as const;
+const ESTADOS = ["proyectado", "por_vencer", "vencido", "pagado", "pagado_con_inconsistencia", "sin_informacion", "por_revisar", "justificado"] as const;
 
 const periodo = (nombre: string) => z.string({ error: `Indique ${nombre} (AAAA-MM)` }).refine(esPeriodo, `${nombre[0]!.toUpperCase()}${nombre.slice(1)} debe tener el formato AAAA-MM (por ejemplo 2026-08)`);
 
@@ -62,12 +65,11 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     // asociación manual: quién, cuándo y por qué; y si hay una acción posible para quien consulta
     const paraAsociar = await vencimientoParaAsociar(id.data);
     const decision = paraAsociar ? await asociacionVigente(paraAsociar.obligacionId, paraAsociar.periodo) : null;
+    const justificacion = paraAsociar ? await justificacionVigenteDeVencimiento(paraAsociar.obligacionId, paraAsociar.periodo) : null;
     const persona = await usuarioActual(req, opts.modoPruebas);
-    const gestion = {
-      asociadoAMano: decision ? { quien: decision.nombreUsuario, cuando: decision.creadoEn.toISOString(), motivo: decision.motivo } : null,
-      sinEfecto: decision && paraAsociar ? asociacionSinEfecto(paraAsociar.estado, paraAsociar.movimiento?.claveDedup ?? null, decision.claveMovimiento) : false,
-      puedeGestionar: Boolean(persona && paraAsociar && puedeEscribirEnSociedad(persona, paraAsociar.sociedad) && (ESTADOS_ASOCIABLES.includes(paraAsociar.estado) || decision)),
-    };
+    const gestion = paraAsociar
+      ? { ...gestionDe(paraAsociar, decision, justificacion, persona), motivosDeJustificacion: MOTIVOS_VENCIMIENTO }
+      : { asociadoAMano: null, sinEfecto: false, justificado: null, puedeGestionar: false, motivosDeJustificacion: MOTIVOS_VENCIMIENTO };
     // el responsable solo se informa a Jefatura: a un tesorero le repetiría que es él
     return { datos: { ...(alcance.tipo === "todo" ? d : { ...d, responsableEfectivo: undefined }), ...gestion } };
   });
@@ -95,7 +97,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
   const errorDeServicio = (reply: import("fastify").FastifyReply, e: unknown) => {
     if (!(e instanceof ErrorDeServicio)) throw e;
     const estado = { permiso: 403, validacion: 422, no_encontrado: 404, conflicto: 409 }[e.codigo];
-    return reply.code(estado).send({ error: e.message });
+    return reply.code(estado).send({ error: e.message, ...(e.campo ? { campo: e.campo } : {}) });
   };
   const MENSAJE_MOTIVO = "Indique el motivo (entre 3 y 300 caracteres)";
 
@@ -119,6 +121,30 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     if (motivo === null) return reply.code(422).send({ error: MENSAJE_MOTIVO, campo: "motivo" });
     try {
       return { datos: await asociarPago({ vencimiento: g.v, movimientoId: movimiento.data, motivo, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
+  });
+
+  // Justificar un vencimiento Vencido o Sin información (motivo de una lista fija y una nota que según el motivo es opcional u obligatoria).
+  app.post("/api/vencimientos/:id/justificar", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    const cuerpo = (req.body ?? {}) as { motivo?: unknown; nota?: unknown };
+    try {
+      return { datos: await justificarVencimiento({ vencimiento: g.v, motivo: cuerpo.motivo, nota: cuerpo.nota, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
+    } catch (e) {
+      return errorDeServicio(reply, e);
+    }
+  });
+
+  app.post("/api/vencimientos/:id/quitar-justificacion", async (req, reply) => {
+    const g = await paraGestionar(req, reply);
+    if (!g) return reply;
+    const motivo = normalizarMotivo(((req.body ?? {}) as { motivo?: unknown }).motivo);
+    if (motivo === null) return reply.code(422).send({ error: MENSAJE_MOTIVO, campo: "motivo" });
+    try {
+      return { datos: await quitarJustificacionDeVencimiento({ vencimiento: g.v, motivo, autor: autorDe(g.persona, opts.modoPruebas) }, opts.reloj) };
     } catch (e) {
       return errorDeServicio(reply, e);
     }
@@ -167,6 +193,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
     // decisiones manuales de lo que se ve, y quién puede gestionar (sin persona identificada nadie)
     const persona = await usuarioActual(req, opts.modoPruebas);
     const asociaciones = await asociacionesVigentesDe(datos.map((v) => v.obligacionId), datos.map((v) => v.periodo));
+    const justificaciones = await justificacionesVigentesDeVencimientos(datos.map((v) => v.obligacionId), datos.map((v) => v.periodo));
     // «Sin información» por inicio de datos: desde cuándo hay estados de cuenta de cada sociedad
     const datosDesde = new Map<number, string | null>();
     if (datos.some((v) => v.estado === "sin_informacion" && v.motivo === MOTIVOS.sinInformacionDesde)) {
@@ -198,7 +225,7 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
         pago: v.movimiento ? { fecha: v.movimiento.fecha.toISOString().slice(0, 10), monto: aNumero(v.movimiento.debito), moneda: v.movimiento.cuenta.moneda, banco: v.movimiento.cuenta.banco, cuenta: enmascararCuenta(v.movimiento.cuenta.numero) } : null,
         diferenciaDias: v.diferenciaDias,
         sinInfoHasta: v.sinInfoHasta ? v.sinInfoHasta.toISOString().slice(0, 10) : null,
-        ...gestionDe(v, asociaciones.get(claveObligacionPeriodo(v.obligacionId, v.periodo)) ?? null, persona),
+        ...gestionDe(v, asociaciones.get(claveObligacionPeriodo(v.obligacionId, v.periodo)) ?? null, justificaciones.get(claveObligacionPeriodo(v.obligacionId, v.periodo)) ?? null, persona),
         conciliado: v._count.conciliaciones > 0,
         futuro: v.fecha >= hoy,
         // días de hoy a la fecha vigente (negativo = ya pasó): «Hace N días» / «En N días»
@@ -212,15 +239,24 @@ export async function rutasVencimientos(app: FastifyInstance, opts: { reloj: Rel
 
 type DecisionVigente = Awaited<ReturnType<typeof asociacionVigente>>;
 
-/** Lo que la lista dice de la gestión de un vencimiento: la asociación manual (quién, cuándo y por qué), si no tiene efecto y si esta persona puede actuar. */
+/**
+ * Lo que la lista y el detalle dicen de la gestión de un vencimiento: el pago asociado a mano (quién, cuándo y por qué) y si no tiene efecto, la
+ * justificación (solo mientras el estado sea Justificado: con un pago, el pago manda) y si esta persona puede actuar (asociar un pago, justificar
+ * o quitar lo que haya).
+ */
 function gestionDe(
   v: { estado: string; sociedad: { tesoreroId: number | null }; movimiento: { claveDedup: string } | null },
-  decision: DecisionVigente,
+  asociacion: DecisionVigente,
+  justificacion: DecisionVigente,
   persona: UsuarioActual | null,
 ) {
+  const datos = justificacion ? leerDatos(justificacion.datos) : null;
   return {
-    asociadoAMano: decision ? { quien: decision.nombreUsuario, cuando: decision.creadoEn.toISOString(), motivo: decision.motivo } : null,
-    sinEfecto: decision ? asociacionSinEfecto(v.estado, v.movimiento?.claveDedup ?? null, decision.claveMovimiento) : false,
-    puedeGestionar: Boolean(persona && puedeEscribirEnSociedad(persona, v.sociedad) && (ESTADOS_ASOCIABLES.includes(v.estado) || decision)),
+    asociadoAMano: asociacion ? { quien: asociacion.nombreUsuario, cuando: asociacion.creadoEn.toISOString(), motivo: asociacion.motivo } : null,
+    sinEfecto: asociacion ? asociacionSinEfecto(v.estado, v.movimiento?.claveDedup ?? null, asociacion.claveMovimiento) : false,
+    justificado: justificacion && datos && v.estado === "justificado" ? { quien: justificacion.nombreUsuario, cuando: justificacion.creadoEn.toISOString(), motivo: justificacion.motivo, nota: datos.nota } : null,
+    puedeGestionar: Boolean(
+      persona && puedeEscribirEnSociedad(persona, v.sociedad) && (ESTADOS_ASOCIABLES.includes(v.estado) || ESTADOS_JUSTIFICABLES.includes(v.estado) || asociacion || justificacion),
+    ),
   };
 }

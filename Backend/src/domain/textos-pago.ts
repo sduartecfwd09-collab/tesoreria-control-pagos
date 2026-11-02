@@ -218,6 +218,9 @@ export function textosDePago(d: DatosTexto): TextosPago {
       };
     case "proyectado":
       return { resumen: `Vence el ${ft(d.fecha, d)}.`, parrafos: [], queHacer: null };
+    case "justificado":
+      // la frase «Justificado por … Motivo: …» la arma la pantalla con quién, cuándo y por qué (datos de la decisión)
+      return { resumen: "", parrafos: [], queHacer: null };
     default:
       return { resumen: "Estado sin definir.", parrafos: [], queHacer: null };
   }

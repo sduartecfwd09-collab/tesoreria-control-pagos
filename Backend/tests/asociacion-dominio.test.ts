@@ -111,7 +111,7 @@ describe("motor: decisiones manuales", () => {
 
 describe("reglas puras de asociar un pago", () => {
   it("estados que lo admiten: por revisar, vencido y sin información", () => {
-    expect([...ESTADOS_ASOCIABLES].sort()).toEqual(["por_revisar", "sin_informacion", "vencido"]);
+    expect([...ESTADOS_ASOCIABLES].sort()).toEqual(["justificado", "por_revisar", "sin_informacion", "vencido"]); // «justificado» viene de un vencido o sin información: la asociación gana
   });
 
   it("la ventana sale del parámetro, con respaldo de 30 días si falta o no vale", () => {

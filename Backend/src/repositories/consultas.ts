@@ -5,6 +5,10 @@ import { etiquetaSociedad } from "../domain/sociedades.js";
 export interface ArchivoFila {
   id: number;
   ruta: string;
+  /** hash del contenido (la huella con la que se justifica un archivo); vacío si el archivo no se leyó */
+  hash: string;
+  /** tesorero vigente de la sociedad del archivo (null = sin tesorero o sin sociedad) */
+  tesoreroId: number | null;
   sociedad: string | null;
   sociedadId: number | null;
   cuentaId: number | null;
@@ -32,7 +36,7 @@ export async function listarArchivos(): Promise<ArchivoFila[]> {
     orderBy: { ruta: "asc" },
   });
   return filas.map((a) => ({
-    id: a.id, ruta: a.ruta, sociedadId: a.sociedadId, sociedad: a.sociedad ? etiquetaSociedad(a.sociedad) : null,
+    id: a.id, ruta: a.ruta, hash: a.hash, tesoreroId: a.sociedad?.tesoreroId ?? null, sociedadId: a.sociedadId, sociedad: a.sociedad ? etiquetaSociedad(a.sociedad) : null,
     cuentaId: a.cuentaId, cuenta: a.cuenta?.numero ?? null,
     banco: a.cuenta?.banco ?? null, bancoPorConfirmar: a.cuenta?.bancoPorConfirmar ?? null,
     moneda: a.cuenta?.moneda ?? null, monedaPorConfirmar: a.cuenta?.monedaPorConfirmar ?? null,
@@ -116,3 +120,15 @@ export async function obtenerArchivoRegistrado(id: number) {
   });
 }
 
+
+/** Lo que hace falta para justificar un archivo: su estado, su hash (la huella del contenido), su sociedad (o la de su cuenta) y el tesorero de esa sociedad. */
+export async function archivoParaJustificar(id: number) {
+  return prisma.archivoImportado.findUnique({
+    where: { id },
+    select: {
+      id: true, ruta: true, hash: true, mes: true, estado: true, motivo: true, error: true, detalle: true, retiradoEn: true, sociedadId: true,
+      sociedad: { select: { id: true, tesoreroId: true } },
+      cuenta: { select: { numero: true, sociedad: { select: { id: true, tesoreroId: true } } } },
+    },
+  });
+}

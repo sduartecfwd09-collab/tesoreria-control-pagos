@@ -4,7 +4,8 @@ import { prisma } from "../db.js";
 import { esImagenNoLegible, type ContinuidadGuardada } from "../domain/saldo.js";
 import { normalizarNombrePersona } from "../domain/usuarios.js";
 import type { CuentaCorte } from "../domain/cobertura-corte.js";
-import type { AsociacionManual, MovimientoCruce, ObligacionCruce, ResultadoCruce, VencimientoCruce } from "../domain/cruce.js";
+import { justificacionDaCobertura, TIPO_JUSTIFICACION_ARCHIVO } from "../domain/justificacion.js";
+import type { AsociacionManual, JustificacionManual, MovimientoCruce, ObligacionCruce, ResultadoCruce, VencimientoCruce } from "../domain/cruce.js";
 
 export interface VencimientoGuardado extends VencimientoCruce {
   estado: string;
@@ -21,6 +22,8 @@ export interface DatosCruce {
   movimientos: MovimientoCruce[];
   /** asociaciones manuales vigentes (decisiones humanas que el cruce consulta antes de calcular) */
   asociaciones: AsociacionManual[];
+  /** justificaciones manuales vigentes de vencimientos */
+  justificaciones: JustificacionManual[];
   cuentas: Map<number, CuentaCorte[]>;
 }
 
@@ -56,18 +59,29 @@ function imagenNoLegible(detalle: string | null): boolean {
 }
 
 /**
+ * Un archivo de imagen no legible justificado con «El banco confirma que no hubo movimientos» (misma huella y mismo problema) cuenta como un archivo
+ * sin movimientos que cubre, como el de un logo. Cualquier otro motivo, o una justificación sin efecto, no toca la cobertura.
+ */
+function daCoberturaJustificada(j: { huella: string | null; datos: string | null } | undefined, hash: string): boolean {
+  return j !== undefined && justificacionDaCobertura(j, { hash, problema: "imagen_no_legible" });
+}
+
+/**
  * Cuentas conocidas por sociedad con los meses que tienen archivo leído (no retirado) y su última fecha con movimientos.
  * Con `hasta` (solo para simular un «hoy» pasado) se ignoran los meses y los movimientos posteriores a esa fecha.
  */
 export async function cargarCoberturaCuentas(hasta?: Date): Promise<Map<number, CuentaCorte[]>> {
-  const [archivosTodos, ultimas, primeras] = await Promise.all([
+  const [archivosTodos, ultimas, primeras, justificaciones] = await Promise.all([
     prisma.archivoImportado.findMany({
       where: { estado: "leido", retiradoEn: null, cuentaId: { not: null }, mes: { not: null } },
-      select: { cuentaId: true, mes: true, detalle: true, cuenta: { select: { sociedadId: true } } },
+      select: { id: true, hash: true, cuentaId: true, mes: true, detalle: true, cuenta: { select: { sociedadId: true } } },
     }),
     prisma.movimiento.groupBy({ by: ["cuentaId", "periodo"], where: { archivo: { retiradoEn: null }, ...(hasta ? { fecha: { lte: hasta } } : {}) }, _max: { fecha: true } }),
     primerasFechasPorCuenta(),
+    // justificaciones vigentes de archivos: solo «El banco confirma que no hubo movimientos» (con efecto) cambia la cobertura
+    prisma.decisionManual.findMany({ where: { tipo: TIPO_JUSTIFICACION_ARCHIVO, vigente: true, archivoId: { not: null } }, select: { archivoId: true, huella: true, datos: true } }),
   ]);
+  const justificacionPorArchivo = new Map(justificaciones.map((j) => [j.archivoId!, j]));
   const mesHasta = hasta?.toISOString().slice(0, 7);
   const archivos = mesHasta ? archivosTodos.filter((a) => a.mes! <= mesHasta) : archivosTodos;
   const ultima = new Map(ultimas.map((u) => [`${u.cuentaId}|${u.periodo}`, u._max.fecha]));
@@ -77,7 +91,7 @@ export async function cargarCoberturaCuentas(hasta?: Date): Promise<Map<number, 
     const cuentaId = a.cuentaId!;
     const c: { sociedadId: number; corte: CuentaCorte } = porCuenta.get(cuentaId) ?? { sociedadId: a.cuenta!.sociedadId, corte: { cuentaId, meses: new Map(), primeraFecha: primeras.get(cuentaId) ?? null } };
     if (noCuadra(a.detalle)) c.corte.mesesNoCuadran = (c.corte.mesesNoCuadran ?? new Set()).add(a.mes!);
-    else if (imagenNoLegible(a.detalle)) c.corte.mesesSinLectura = (c.corte.mesesSinLectura ?? new Set()).add(a.mes!);
+    else if (imagenNoLegible(a.detalle) && !daCoberturaJustificada(justificacionPorArchivo.get(a.id), a.hash)) c.corte.mesesSinLectura = (c.corte.mesesSinLectura ?? new Set()).add(a.mes!);
     else {
       c.corte.meses.set(a.mes!, ultima.get(`${cuentaId}|${a.mes}`) ?? null);
       // la cobertura de la cuenta empieza en el «Del» que declara su primer archivo leído (que cuadre) o, si no lo declara, el día 1 de su mes
@@ -100,7 +114,7 @@ export async function contarCuentasPorMoneda(): Promise<Record<string, number>> 
 
 /** Obligaciones activas con sus vencimientos, los débitos de archivos vigentes y la cobertura de cada cuenta. */
 export async function cargarDatosCruce(hasta?: Date): Promise<DatosCruce> {
-  const [obligaciones, vencimientos, movimientos, cuentas, decisiones] = await Promise.all([
+  const [obligaciones, vencimientos, movimientos, cuentas, decisiones, justificadas] = await Promise.all([
     prisma.obligacion.findMany({ where: { activa: true }, select: { id: true, sociedadId: true, proveedor: true, identificador: true } }),
     prisma.vencimiento.findMany({
       where: { obligacion: { activa: true } },
@@ -112,12 +126,14 @@ export async function cargarDatosCruce(hasta?: Date): Promise<DatosCruce> {
     }),
     cargarCoberturaCuentas(hasta),
     prisma.decisionManual.findMany({ where: { tipo: "asociacion_pago", vigente: true }, select: { obligacionId: true, periodo: true, claveMovimiento: true } }),
+    prisma.decisionManual.findMany({ where: { tipo: "justificacion_vencimiento", vigente: true }, select: { obligacionId: true, periodo: true } }),
   ]);
 
   return {
     obligaciones,
     vencimientos,
     movimientos: movimientos.map((m) => ({ id: m.id, sociedadId: m.cuenta.sociedadId, fecha: m.fecha, descripcion: m.descripcion, clave: m.claveDedup })),
+    justificaciones: justificadas.flatMap((d) => (d.obligacionId !== null && d.periodo !== null ? [{ obligacionId: d.obligacionId, periodo: d.periodo }] : [])),
     asociaciones: decisiones.flatMap((d) => (d.obligacionId !== null && d.periodo !== null && d.claveMovimiento !== null ? [{ obligacionId: d.obligacionId, periodo: d.periodo, claveMovimiento: d.claveMovimiento }] : [])),
     cuentas,
   };

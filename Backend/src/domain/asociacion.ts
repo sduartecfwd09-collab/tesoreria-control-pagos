@@ -4,7 +4,7 @@ import { normalizar } from "../ingest/utiles.js";
 import { patronIdentificador } from "./identificadores.js";
 
 /** Estados que admiten asociar un pago a mano. Con un pago ya asociado el estado es Pagado: primero se quita la asociación. */
-export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion"];
+export const ESTADOS_ASOCIABLES = ["por_revisar", "vencido", "sin_informacion", "justificado"]; // «justificado» viene de un vencido o sin información: la asociación gana
 
 /** Respaldo del parámetro `ventana_asociacion_manual_dias` (SUPUESTO: 30 días a cada lado de la fecha vigente del vencimiento). */
 export const VENTANA_ASOCIACION_DEFECTO_DIAS = 30;

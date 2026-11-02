@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import { env } from "./config/env.js";
 import { aNumero } from "./domain/montos.js";
 import { relojSistema, type Reloj } from "./domain/reloj.js";
-import { rutasArchivos } from "./routes/archivos.js";
+import { rutasArchivos, rutasJustificarArchivos } from "./routes/archivos.js";
 import { rutasAvisos } from "./routes/avisos.js";
 import { rutasMovimientosSinObligacion } from "./routes/movimientos-sin-obligacion.js";
 import { rutasFechas } from "./routes/fechas.js";
@@ -41,6 +41,7 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
   await app.register(rutasParametros);
   await app.register(rutasAvisos, { reloj, modoPruebas });
   await app.register(rutasArchivos, { modoPruebas });
+  await app.register(rutasJustificarArchivos, { modoPruebas, reloj });
   await app.register(rutasMovimientosSinObligacion, { modoPruebas });
   await app.register(rutasIdentidad, { modoPruebas, reloj });
   await app.register(rutasImportaciones, { modoPruebas });
