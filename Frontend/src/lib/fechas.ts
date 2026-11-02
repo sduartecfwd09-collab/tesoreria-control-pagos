@@ -1,0 +1,260 @@
+// Lógica pura del selector de fechas: fechas ISO (AAAA-MM-DD) y periodos (AAAA-MM), formato día/mes/año, rangos, atajos y límites.
+// Sin dependencias, para poder probarla con `npm run fechas`. Todo es «solo día»: se calcula en UTC, sin zona horaria.
+
+export interface Rango {
+  desde: string;
+  hasta: string;
+}
+
+/** Primera y última fecha con datos (salen del servidor, con el alcance de la persona). */
+export interface Limites {
+  primera: string;
+  ultima: string;
+}
+
+export type IdAtajo = "hoy" | "semana" | "mes" | "mes_anterior" | "ultimos_3_meses" | "ultimos_12_meses" | "anio";
+
+export const TEXTO_ATAJO: Record<IdAtajo, string> = {
+  hoy: "Hoy",
+  semana: "Esta semana",
+  mes: "Este mes",
+  mes_anterior: "Mes anterior",
+  ultimos_3_meses: "Últimos 3 meses",
+  ultimos_12_meses: "Últimos 12 meses",
+  anio: "Este año",
+};
+
+const MS_DIA = 86_400_000;
+const NOMBRES_MES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+const aFecha = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+const deFecha = (f: Date) => f.toISOString().slice(0, 10);
+
+/** ¿Es una fecha real AAAA-MM-DD? (rechaza 2026-02-30). */
+export function esFechaIso(f: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return false;
+  const d = aFecha(f);
+  return !Number.isNaN(d.getTime()) && deFecha(d) === f;
+}
+
+export const periodoDe = (iso: string) => iso.slice(0, 7);
+
+/** "2026-10-15" -> "15/10/2026". */
+export const aTextoDMA = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+/** "15/10/2026" (también con - o .; día y mes de uno o dos dígitos; año de cuatro) -> "2026-10-15"; null si no es una fecha real. */
+export function deTextoDMA(texto: string): string | null {
+  const m = /^\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\s*$/.exec(texto);
+  if (!m) return null;
+  const iso = `${m[3]}-${m[2]!.padStart(2, "0")}-${m[1]!.padStart(2, "0")}`;
+  return esFechaIso(iso) ? iso : null;
+}
+
+export const sumarDias = (iso: string, n: number) => deFecha(new Date(aFecha(iso).getTime() + n * MS_DIA));
+
+/** Periodo AAAA-MM desplazado n meses (también hacia atrás y a través de los años). */
+export function sumarMeses(periodo: string, n: number): string {
+  const i = Number(periodo.slice(0, 4)) * 12 + Number(periodo.slice(5, 7)) - 1 + n;
+  return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`;
+}
+
+export const primerDia = (periodo: string) => `${periodo}-01`;
+
+export function ultimoDia(periodo: string): string {
+  return sumarDias(primerDia(sumarMeses(periodo, 1)), -1);
+}
+
+/** "2026-10" -> "octubre 2026". */
+export const nombreDelPeriodo = (p: string) => `${NOMBRES_MES[Number(p.slice(5, 7)) - 1] ?? p} ${p.slice(0, 4)}`;
+
+/** Lunes a domingo de la semana de una fecha. */
+export function semanaDe(iso: string): Rango {
+  const dia = aFecha(iso).getUTCDay(); // 0 = domingo
+  const desde = sumarDias(iso, -((dia + 6) % 7));
+  return { desde, hasta: sumarDias(desde, 6) };
+}
+
+/**
+ * Rango de cada atajo a partir de «hoy». Son bloques de calendario: «Este mes» y «Mes anterior» son meses completos;
+ * «Últimos 3 meses» son los dos meses anteriores y el actual, completos; «Últimos 12 meses» van del día 1 del mes de hace 11 meses a hoy;
+ * «Este año» va del 1 de enero al 31 de diciembre. Quien los usa en una pantalla del pasado los recorta a hoy (recortarRango).
+ */
+export function rangoDeAtajo(id: IdAtajo, hoy: string): Rango {
+  const mes = periodoDe(hoy);
+  switch (id) {
+    case "hoy": return { desde: hoy, hasta: hoy };
+    case "semana": return semanaDe(hoy);
+    case "mes": return { desde: primerDia(mes), hasta: ultimoDia(mes) };
+    case "mes_anterior": { const m = sumarMeses(mes, -1); return { desde: primerDia(m), hasta: ultimoDia(m) }; }
+    case "ultimos_3_meses": return { desde: primerDia(sumarMeses(mes, -2)), hasta: ultimoDia(mes) };
+    case "ultimos_12_meses": return { desde: primerDia(sumarMeses(mes, -11)), hasta: hoy };
+    case "anio": return { desde: `${hoy.slice(0, 4)}-01-01`, hasta: `${hoy.slice(0, 4)}-12-31` };
+  }
+}
+
+/** Recorta un rango a los límites de los datos y, si se indica, a un mes (null si no queda ningún día). */
+export function recortarRango(r: Rango, opciones: { limites?: Limites | null; mes?: string | null } = {}): Rango | null {
+  let { desde, hasta } = r;
+  if (opciones.mes) {
+    if (desde < primerDia(opciones.mes)) desde = primerDia(opciones.mes);
+    if (hasta > ultimoDia(opciones.mes)) hasta = ultimoDia(opciones.mes);
+  }
+  if (opciones.limites) {
+    if (desde < opciones.limites.primera) desde = opciones.limites.primera;
+    if (hasta > opciones.limites.ultima) hasta = opciones.limites.ultima;
+  }
+  return desde <= hasta ? { desde, hasta } : null;
+}
+
+/** Mensaje claro si el rango no es válido (desde <= hasta, dentro de los límites y del mes); null si lo es. */
+export function validarRango(r: Rango, opciones: { limites?: Limites | null; mes?: string | null } = {}): string | null {
+  if (!esFechaIso(r.desde) || !esFechaIso(r.hasta)) return "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
+  if (r.desde > r.hasta) return "«Desde» no puede ser posterior a «Hasta».";
+  if (opciones.mes && (r.desde < primerDia(opciones.mes) || r.hasta > ultimoDia(opciones.mes))) {
+    return `Las fechas deben estar dentro de ${nombreDelPeriodo(opciones.mes)}.`;
+  }
+  const l = opciones.limites;
+  if (l && (r.desde < l.primera || r.hasta > l.ultima)) return `Elija fechas entre ${aTextoDMA(l.primera)} y ${aTextoDMA(l.ultima)}.`;
+  return null;
+}
+
+/**
+ * Fechas que se pueden elegir en el selector: la ventana que informa el servidor (años atrás y meses adelante), no los datos.
+ * Las pantallas del pasado (Histórico) la cierran en hoy.
+ */
+export function limitesDeNavegacion(respuesta: { hoy: string; ventana: Limites }, soloPasado = false): Limites {
+  return { primera: respuesta.ventana.primera, ultima: soloPasado && respuesta.hoy < respuesta.ventana.ultima ? respuesta.hoy : respuesta.ventana.ultima };
+}
+
+/** ¿Se puede ir a este mes? Sin límites siempre; con límites, solo si el mes tiene algún día con datos. */
+export function mesDentroDeLimites(periodo: string, limites: Limites | null | undefined): boolean {
+  if (!limites) return true;
+  return periodo >= periodoDe(limites.primera) && periodo <= periodoDe(limites.ultima);
+}
+
+/** «15/10/2026 y 31/10/2026» para los mensajes («entre … y …»). */
+export const textoEntre = (r: Rango) => `${aTextoDMA(r.desde)} y ${aTextoDMA(r.hasta)}`;
+
+/**
+ * Qué decir cuando un período no tiene filas: «sin_informacion» (ya pasó y ningún día tiene estados de cuenta cargados: una tabla vacía
+ * se leería como «no hubo pagos») o «normal» (hay estados de cuenta, o el período es futuro: de verdad no hay filas).
+ */
+export function tipoDeVacio(rango: Rango, hoy: string, cobertura: Limites | null): "sin_informacion" | "normal" {
+  if (rango.desde > hoy) return "normal";
+  if (!cobertura || rango.hasta < cobertura.primera || rango.desde > cobertura.ultima) return "sin_informacion";
+  return "normal";
+}
+
+// Frases de Mi configuración: un pago de ejemplo que vence el día de `pago`, con los días de aviso y de espera que la persona escribe.
+
+/** «20» si cae en el mes del pago; «21 de septiembre» si cae en otro mes. */
+function diaConMes(iso: string, mesDelPago: string): string {
+  const dia = Number(iso.slice(8, 10));
+  return periodoDe(iso) === mesDelPago ? String(dia) : `${dia} de ${NOMBRES_MES[Number(iso.slice(5, 7)) - 1]}`;
+}
+
+const textoDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
+
+/** «Con 3 días de aviso, un pago que vence el 20 aparece en Avisos desde el 17.» */
+export function fraseDeAviso(diasAviso: number, pago: string): string {
+  const mes = periodoDe(pago);
+  return `Con ${textoDias(diasAviso)} de aviso, un pago que vence el ${Number(pago.slice(8, 10))} aparece en Avisos desde el ${diaConMes(sumarDias(pago, -diasAviso), mes)}.`;
+}
+
+/** «Si el pago del 20 no aparece en el banco, se espera hasta el 23 y desde el 24 se marca Vencido.» */
+export function fraseDeEspera(diasEspera: number, pago: string): string {
+  const mes = periodoDe(pago);
+  const dia = Number(pago.slice(8, 10));
+  if (diasEspera === 0) return `Si el pago del ${dia} no aparece en el banco, desde el ${diaConMes(sumarDias(pago, 1), mes)} se marca Vencido.`;
+  return `Si el pago del ${dia} no aparece en el banco, se espera hasta el ${diaConMes(sumarDias(pago, diasEspera), mes)} y desde el ${diaConMes(sumarDias(pago, diasEspera + 1), mes)} se marca Vencido.`;
+}
+
+// Opciones de la lista «Período» (Histórico, Vencidos, Movimientos sin obligación) y «Mostrar» (Pagos del mes). Solo se ofrecen las válidas.
+
+/** `rango` null = sin filtro de fechas (todo el período). «elegir» no lleva rango: la persona escribe Desde y Hasta. */
+export interface OpcionPeriodo {
+  id: IdAtajo | "todo" | "todo_el_mes" | "elegir";
+  texto: string;
+  rango: Rango | null;
+}
+
+export const OPCION_ELEGIR: OpcionPeriodo = { id: "elegir", texto: "Elegir fechas", rango: null };
+
+/** Atajos de calendario recortados a lo que se puede elegir; los que quedan fuera no se ofrecen. `conTodo` agrega «Todas las fechas» al principio. */
+export function opcionesDePeriodo(ids: IdAtajo[], hoy: string, limites?: Limites | null, conTodo = false): OpcionPeriodo[] {
+  const lista: OpcionPeriodo[] = conTodo ? [{ id: "todo", texto: "Todas las fechas", rango: null }] : [];
+  for (const id of ids) {
+    const rango = recortarRango(rangoDeAtajo(id, hoy), { limites });
+    if (rango) lista.push({ id, texto: TEXTO_ATAJO[id], rango });
+  }
+  return [...lista, OPCION_ELEGIR];
+}
+
+/** Pagos del mes: «Todo el mes» siempre; «Hoy» y «Esta semana» solo si se ve el mes actual (la semana, recortada al mes). */
+export function opcionesDelMes(periodo: string, hoy: string): OpcionPeriodo[] {
+  const lista: OpcionPeriodo[] = [{ id: "todo_el_mes", texto: "Todo el mes", rango: null }];
+  if (periodo === periodoDe(hoy)) {
+    lista.push({ id: "hoy", texto: TEXTO_ATAJO.hoy, rango: rangoDeAtajo("hoy", hoy) });
+    const semana = recortarRango(semanaDe(hoy), { mes: periodo });
+    if (semana) lista.push({ id: "semana", texto: TEXTO_ATAJO.semana, rango: semana });
+  }
+  return [...lista, OPCION_ELEGIR];
+}
+
+// --- Fechas escritas a mano en «Elegir fechas» (Desde y Hasta) ---------------------------------------------------------------
+
+export const MENSAJE_INCOMPLETO = "Complete «Desde» y «Hasta».";
+const MENSAJE_FORMATO = "Escriba las fechas como día/mes/año, por ejemplo 15/10/2026.";
+
+/**
+ * Qué son las dos fechas escritas: `vacio` (ninguna), `incompleto` (falta una y la escrita está bien), `invalido` (no es una fecha
+ * completa y real, está fuera de los límites o del mes, o «Desde» es posterior a «Hasta») o `valido` (se puede aplicar).
+ * Lo escrito se valida contra los MISMOS límites que el calendario: si una sola fecha ya está fuera de ellos se dice, sin esperar a la otra.
+ * La pantalla decide cuándo mostrar el mensaje (nunca mientras se escribe).
+ */
+export type FechasEscritas =
+  | { estado: "vacio" }
+  | { estado: "incompleto"; mensaje: string }
+  | { estado: "invalido"; mensaje: string }
+  | { estado: "valido"; rango: Rango };
+
+export function evaluarFechasEscritas(desde: string, hasta: string, opciones: { limites?: Limites | null; mes?: string | null } = {}): FechasEscritas {
+  const d = desde.trim();
+  const h = hasta.trim();
+  if (d === "" && h === "") return { estado: "vacio" };
+  const a = d === "" ? null : deTextoDMA(d);
+  const b = h === "" ? null : deTextoDMA(h);
+  if ((d !== "" && a === null) || (h !== "" && b === null)) return { estado: "invalido", mensaje: MENSAJE_FORMATO };
+  if (a !== null && b !== null) {
+    const mensaje = validarRango({ desde: a, hasta: b }, opciones);
+    return mensaje ? { estado: "invalido", mensaje } : { estado: "valido", rango: { desde: a, hasta: b } };
+  }
+  // falta una: si la escrita ya queda fuera de los límites, se dice eso en vez de pedir la otra
+  const unica = (a ?? b)!;
+  const mensaje = validarRango({ desde: unica, hasta: unica }, opciones);
+  return mensaje ? { estado: "invalido", mensaje } : { estado: "incompleto", mensaje: MENSAJE_INCOMPLETO };
+}
+
+/** El mensaje que se muestra, o null: solo después de salir del campo o de intentar aplicar, nunca mientras se escribe. */
+export function mensajeDeFechas(f: FechasEscritas, mostrar: boolean): string | null {
+  return mostrar && (f.estado === "incompleto" || f.estado === "invalido") ? f.mensaje : null;
+}
+
+// --- Una sola fecha escrita a mano («Nueva fecha» de Mover fecha) ------------------------------------------------------------
+
+const MENSAJE_FORMATO_UNA = "Escriba la fecha como día/mes/año, por ejemplo 15/10/2026.";
+
+/** Una fecha escrita: `vacio`, `invalido` (no es una fecha real o queda fuera de los límites) o `valido` (con la fecha ISO). Los límites son ISO e incluyen los extremos. */
+export type FechaEscrita = { estado: "vacio"; mensaje: string } | { estado: "invalido"; mensaje: string } | { estado: "valido"; fecha: string };
+
+export function evaluarFechaEscrita(texto: string, limites: { minimo?: string; maximo?: string } = {}): FechaEscrita {
+  if (texto.trim() === "") return { estado: "vacio", mensaje: "Elija la nueva fecha" };
+  const iso = deTextoDMA(texto);
+  if (iso === null) return { estado: "invalido", mensaje: MENSAJE_FORMATO_UNA };
+  if ((limites.minimo && iso < limites.minimo) || (limites.maximo && iso > limites.maximo)) {
+    const desde = limites.minimo ? aTextoDMA(limites.minimo) : null;
+    const hasta = limites.maximo ? aTextoDMA(limites.maximo) : null;
+    return { estado: "invalido", mensaje: desde && hasta ? `Elija una fecha entre el ${desde} y el ${hasta}.` : desde ? `Elija una fecha desde el ${desde}.` : `Elija una fecha hasta el ${hasta}.` };
+  }
+  return { estado: "valido", fecha: iso };
+}

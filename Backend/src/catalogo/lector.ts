@@ -3,6 +3,8 @@
 // Los mensajes no incluyen identificadores (solo número de fila y el texto del día, que no es sensible).
 import type { Worksheet } from "exceljs";
 import { ErrorLectura, type LibroLeido } from "../ingest/lector.js";
+import { proveedorCanonico } from "../config/alias-proveedores.js";
+import { identificadorClave } from "../domain/identificadores.js";
 import { normalizar, valorPlano } from "../ingest/utiles.js";
 
 export interface FilaCatalogo {
@@ -12,6 +14,7 @@ export interface FilaCatalogo {
   proveedor: string;
   identificador: string; // texto: conserva ceros a la izquierda
   dia: number | null; // null = día inválido o vacío (la fila se importa igual y queda "Falta día")
+  estado: string | null; // texto de la columna ESTADO; null = el archivo no tiene esa columna
 }
 
 export interface ProblemaFila {
@@ -44,6 +47,15 @@ const CABECERA: Record<Columna, (t: string) => boolean> = {
   identificador: (t) => t.includes("identificador") || t.includes("nise"),
   dia: (t) => t.includes("fecha de pago") || t.includes("dia de pago"),
 };
+
+// Columna opcional: si no existe, todas las filas se consideran activas.
+const COLUMNA_ESTADO = (t: string) => t === "estado";
+
+/** «INACTIVA» (sin importar mayúsculas ni tildes): la obligación se carga como inactiva y conserva su historial. */
+export const estadoEsInactiva = (estado: string): boolean => normalizar(estado) === "inactiva";
+
+/** Solo «ACTIVA» (sin importar mayúsculas ni tildes) es una obligación activa; cualquier otro valor (incluida una celda vacía) va a revisión. */
+export const estadoEsActiva = (estado: string): boolean => normalizar(estado) === "activa";
 
 const FILAS_BUSQUEDA_CABECERA = 20;
 
@@ -82,14 +94,16 @@ export function parsearDia(v: unknown): number | null {
   return n !== null && Number.isInteger(n) && n >= 1 && n <= 31 ? n : null;
 }
 
-function buscarCabecera(ws: Worksheet): { fila: number; cols: Record<Columna, number> } | null {
+function buscarCabecera(ws: Worksheet): { fila: number; cols: Record<Columna, number>; estado: number | null } | null {
   for (let r = 1; r <= Math.min(ws.rowCount, FILAS_BUSQUEDA_CABECERA); r++) {
     const cols: Partial<Record<Columna, number>> = {};
+    let estado: number | null = null;
     ws.getRow(r).eachCell((celda, c) => {
       const t = normalizar(celda.value);
       for (const k of Object.keys(CABECERA) as Columna[]) if (cols[k] === undefined && CABECERA[k](t)) cols[k] = c;
+      if (estado === null && COLUMNA_ESTADO(t)) estado = c;
     });
-    if (Object.keys(CABECERA).every((k) => cols[k as Columna] !== undefined)) return { fila: r, cols: cols as Record<Columna, number> };
+    if (Object.keys(CABECERA).every((k) => cols[k as Columna] !== undefined)) return { fila: r, cols: cols as Record<Columna, number>, estado };
   }
   return null;
 }
@@ -111,7 +125,7 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
   const problemas: ProblemaFila[] = [];
   // clave normalizada -> forma elegida (la primera que aparece) y demás formas vistas
   const nombres = { proveedor: new Map<string, Set<string>>(), categoria: new Map<string, Set<string>>() };
-  const vistas = new Map<string, number>(); // sociedad|proveedor|identificador -> fila
+  const vistas = new Map<string, number>(); // sociedad|proveedor|identificador|categoría -> fila
 
   const unificar = (campo: "proveedor" | "categoria", forma: string) => {
     const k = claveNombre(forma);
@@ -126,10 +140,11 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
     const celda = (k: Columna) => fila.getCell(cab.cols[k]).value;
     const sociedad = limpiarTexto(celda("sociedad")).toUpperCase();
     const categoriaTxt = formaCategoria(limpiarTexto(celda("categoria")));
-    const proveedorTxt = limpiarTexto(celda("proveedor"));
+    const proveedorTxt = proveedorCanonico(limpiarTexto(celda("proveedor"))); // «JASEC Internet» -> «JASEC»
     const idCrudo = valorPlano(celda("identificador"));
     const identificador = limpiarIdentificador(limpiarTexto(idCrudo));
     const diaTxt = limpiarTexto(celda("dia"));
+    const estado = cab.estado === null ? null : limpiarTexto(fila.getCell(cab.estado).value);
     if (!sociedad && !categoriaTxt && !proveedorTxt && !identificador && !diaTxt) continue; // fila vacía
 
     const faltan = [
@@ -145,10 +160,10 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
 
     const categoria = unificar("categoria", categoriaTxt);
     const proveedor = unificar("proveedor", proveedorTxt);
-    const clave = `${sociedad}|${claveNombre(proveedor)}|${identificador}`;
+    const clave = `${sociedad}|${claveNombre(proveedor)}|${identificadorClave(identificador)}|${claveNombre(categoria)}`;
     const previa = vistas.get(clave);
     if (previa !== undefined) {
-      problemas.push({ fila: r, motivo: `Repite la fila ${previa} (misma sociedad, proveedor e identificador): no se importó`, importada: false });
+      problemas.push({ fila: r, motivo: `Repite la fila ${previa} (misma sociedad, proveedor, identificador y categoría): no se importó`, importada: false });
       continue;
     }
     vistas.set(clave, r);
@@ -166,7 +181,7 @@ export function leerCatalogo(libro: LibroLeido): CatalogoLeido {
         importada: true,
       });
     }
-    filas.push({ fila: r, sociedad, categoria, proveedor, identificador, dia });
+    filas.push({ fila: r, sociedad, categoria, proveedor, identificador, dia, estado });
   }
 
   const variantes: VarianteNombre[] = [];

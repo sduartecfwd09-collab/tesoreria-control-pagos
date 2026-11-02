@@ -1,12 +1,23 @@
 import { prisma } from "../db.js";
 import type { Prisma } from "../generated/prisma/client.js";
-import { claveNombre, type FilaCatalogo } from "../catalogo/lector.js";
+import { claveNombre, estadoEsActiva, estadoEsInactiva, type FilaCatalogo } from "../catalogo/lector.js";
+import { codigoPorAlias } from "../config/alias-sociedades.js";
+import { claveCategoria } from "../domain/categorias.js";
+import { primerDiaDelPeriodo } from "../domain/control-desde.js";
+import { identificadorClave, MOTIVO_IDENTIFICADOR_DUPLICADO } from "../domain/identificadores.js";
+import { lineaDeAlta, lineasDeEdicion } from "../domain/historial.js";
+import { resolutorDeSociedades } from "../domain/sociedades.js";
+import { insertarHistorial, type AutorDelCambio } from "./historial.js";
 
-const incluir = { sociedad: true, categoria: true, cuentaEsperada: true } as const;
+export const MOTIVO_CATEGORIA_DESCONOCIDA = "La categoría no existe: solo Jefatura puede crearla";
+export const MOTIVO_ESTADO_DESCONOCIDO = "El estado de la fila no es «ACTIVA» ni «INACTIVA»: no se cargó, una persona decide";
+export const MOTIVO_SOCIEDAD_SIN_COINCIDENCIA = "La sociedad no coincide con ninguna sociedad existente";
+
+const incluir = { sociedad: { include: { tesorero: { select: { nombre: true } } } }, categoria: true, cuentaEsperada: true } as const;
 export type ObligacionCompleta = Prisma.ObligacionGetPayload<{ include: typeof incluir }>;
 
-const claveObligacion = (sociedadId: number, proveedor: string, identificador: string) =>
-  `${sociedadId}|${claveNombre(proveedor)}|${identificador}`;
+const claveObligacion = (sociedadId: number, proveedor: string, identificador: string, categoriaId: number) =>
+  `${sociedadId}|${claveNombre(proveedor)}|${identificadorClave(identificador)}|${categoriaId}`;
 
 export interface ResultadoSincronizacion {
   creadas: number;
@@ -14,63 +25,90 @@ export interface ResultadoSincronizacion {
   sinCambios: number;
   /** obligaciones del catálogo que ya no están en el archivo (no se desactivan solas) */
   noEnArchivo: number;
+  /** filas que no se cargaron o que piden decisión: quedan en la lista de revisión */
+  enRevision: number;
+  /** filas cargadas cuyo identificador ya existe en otra obligación: quedan marcadas en la lista de revisión */
+  identificadoresDuplicados: number;
 }
 
 /**
  * Sincroniza las filas leídas del catálogo en una sola transacción. Idempotente:
+ * - nunca crea categorías: la fila con una categoría que no existe queda en la lista de revisión;
+ * - nunca crea sociedades: solo asigna a las existentes; la fila que no coincide queda en la lista de revisión con su motivo;
+ * - la columna ESTADO es opcional: sin ella todas son activas; con ella, «ACTIVA» es activa, «INACTIVA» se carga inactiva
+ *   y cualquier otro valor (incluida una celda vacía) va a revisión (no se carga ni se asume);
  * - crea la obligación si no existe (sociedad + proveedor normalizado + identificador);
- * - si existe y es del catálogo, solo actualiza lo que viene del archivo: categoría, forma del nombre y
+ * - si existe y es del catálogo, solo actualiza lo que viene del archivo: forma del nombre y
  *   el día (si Tesorería no lo editó a mano y el archivo trae un día válido);
  * - nunca toca frecuencia, monto, moneda, cuenta, responsable ni activa, ni las obligaciones manuales.
  */
 export async function sincronizarCatalogo(filas: FilaCatalogo[], frecuenciaDefecto: string): Promise<ResultadoSincronizacion> {
   return prisma.$transaction(async (tx) => {
-    const sociedades = new Map<string, number>();
-    for (const codigo of new Set(filas.map((f) => f.sociedad))) {
-      const s = await tx.sociedad.upsert({ where: { codigo }, create: { codigo }, update: {} });
-      sociedades.set(codigo, s.id);
-    }
-    const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveNombre(c.nombre), c.id]));
-    for (const nombre of new Set(filas.map((f) => f.categoria))) {
-      if (!categorias.has(claveNombre(nombre))) categorias.set(claveNombre(nombre), (await tx.categoria.create({ data: { nombre } })).id);
-    }
-
-    const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador), o]));
-    const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0 };
+    const resolver = resolutorDeSociedades(await tx.sociedad.findMany({ select: { id: true, codigo: true, nombreLargo: true } }), codigoPorAlias);
+    const sociedades = new Map<string, number | null>();
+    for (const texto of new Set(filas.map((f) => f.sociedad))) sociedades.set(texto, resolver(texto));
+    await tx.catalogoRevision.deleteMany();
+    const revision: Prisma.CatalogoRevisionCreateManyInput[] = [];
+    const aRevision = (f: FilaCatalogo, tipo: string, motivo: string, obligacionId: number | null = null) =>
+      revision.push({ fila: f.fila, tipo, motivo, sociedadTexto: f.sociedad, categoria: f.categoria, proveedor: f.proveedor, identificador: f.identificador, dia: f.dia, obligacionId });
+    // El importador nunca crea categorías (solo Jefatura): una categoría que no existe manda la fila a revisión.
+    const categorias = new Map((await tx.categoria.findMany()).map((c) => [claveCategoria(c.nombre), c.id]));
+    const existentes = new Map((await tx.obligacion.findMany()).map((o) => [claveObligacion(o.sociedadId, o.proveedor, o.identificador, o.categoriaId), o]));
+    const r: ResultadoSincronizacion = { creadas: 0, actualizadas: 0, sinCambios: 0, noEnArchivo: 0, enRevision: 0, identificadoresDuplicados: 0 };
     const vistas = new Set<number>();
+    const cargadas: { f: FilaCatalogo; obligacionId: number }[] = [];
 
     for (const f of filas) {
-      const sociedadId = sociedades.get(f.sociedad)!;
-      const categoriaId = categorias.get(claveNombre(f.categoria))!;
-      const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador));
+      const sociedadId = sociedades.get(f.sociedad);
+      if (sociedadId == null) { aRevision(f, "sociedad_sin_coincidencia", MOTIVO_SOCIEDAD_SIN_COINCIDENCIA); continue; }
+      if (f.estado !== null && !estadoEsActiva(f.estado) && !estadoEsInactiva(f.estado)) { aRevision(f, "estado_desconocido", MOTIVO_ESTADO_DESCONOCIDO); continue; }
+      const categoriaId = categorias.get(claveCategoria(f.categoria));
+      if (categoriaId === undefined) { aRevision(f, "categoria_desconocida", MOTIVO_CATEGORIA_DESCONOCIDA); continue; }
+      const o = existentes.get(claveObligacion(sociedadId, f.proveedor, f.identificador, categoriaId));
       if (!o) {
-        await tx.obligacion.create({
-          data: { sociedadId, categoriaId, proveedor: f.proveedor, identificador: f.identificador, diaEsperadoPago: f.dia, frecuencia: frecuenciaDefecto },
+        const nueva = await tx.obligacion.create({
+          data: { sociedadId, categoriaId, proveedor: f.proveedor, identificador: f.identificador, diaEsperadoPago: f.dia, frecuencia: frecuenciaDefecto, activa: f.estado === null || !estadoEsInactiva(f.estado) },
         });
+        cargadas.push({ f, obligacionId: nueva.id });
         r.creadas++;
         continue;
       }
       vistas.add(o.id);
+      cargadas.push({ f, obligacionId: o.id });
       if (o.origen === "manual") { r.sinCambios++; continue; }
       const cambios: Prisma.ObligacionUncheckedUpdateInput = {};
-      if (o.categoriaId !== categoriaId) cambios.categoriaId = categoriaId;
       if (o.proveedor !== f.proveedor) cambios.proveedor = f.proveedor;
       if (!o.diaEditado && f.dia !== null && o.diaEsperadoPago !== f.dia) cambios.diaEsperadoPago = f.dia;
       if (Object.keys(cambios).length === 0) { r.sinCambios++; continue; }
       await tx.obligacion.update({ where: { id: o.id }, data: cambios });
       r.actualizadas++;
     }
+    // identificador duplicado: avisa, no bloquea. La fila ya se cargó; queda marcada en la lista de revisión.
+    const porId = new Map<string, number[]>();
+    for (const o of await tx.obligacion.findMany({ select: { id: true, identificador: true } })) {
+      const k = identificadorClave(o.identificador);
+      porId.set(k, [...(porId.get(k) ?? []), o.id]);
+    }
+    for (const { f, obligacionId } of cargadas) {
+      if ((porId.get(identificadorClave(f.identificador)) ?? []).length > 1) aRevision(f, "identificador_duplicado", MOTIVO_IDENTIFICADOR_DUPLICADO, obligacionId);
+    }
+    if (revision.length > 0) await tx.catalogoRevision.createMany({ data: revision });
+    r.identificadoresDuplicados = revision.filter((x) => x.tipo === "identificador_duplicado").length;
+    r.enRevision = revision.length - r.identificadoresDuplicados;
     r.noEnArchivo = [...existentes.values()].filter((o) => o.origen === "catalogo" && !vistas.has(o.id)).length;
     return r;
   });
 }
 
 export interface FiltroObligaciones {
-  sociedad?: string;
+  /** solo estas obligaciones (el alcance de la persona); ausente = todas */
+  ids?: number[];
+  sociedad?: string; // abreviatura
+  sociedadId?: number; // identificador: sirve también para sociedades sin abreviatura
   categoria?: number;
   activa?: boolean;
   q?: string;
-  falta?: "monto" | "cuenta" | "responsable" | "dia";
+  falta?: "monto" | "cuenta" | "responsable" | "dia" | "frecuencia";
   pagina: number;
   porPagina: number;
 }
@@ -78,18 +116,31 @@ export interface FiltroObligaciones {
 const FALTA: Record<NonNullable<FiltroObligaciones["falta"]>, Prisma.ObligacionWhereInput> = {
   monto: { montoEsperado: null },
   cuenta: { cuentaEsperadaId: null },
-  responsable: { responsable: null },
+  // el responsable es el tesorero de la sociedad: sin responsable = la sociedad no tiene tesorero asignado
+  responsable: { sociedad: { tesoreroId: null } },
   dia: { diaEsperadoPago: null },
+  frecuencia: { frecuenciaPorConfirmar: true },
 };
+
+/** Lo mínimo para decidir el alcance de una persona: el tesorero de la sociedad de cada obligación (y las sociedades de las que es tesorero). */
+export async function datosParaAlcance(tesoreroId?: number) {
+  const [obligaciones, sociedades] = await Promise.all([
+    prisma.obligacion.findMany({ select: { id: true, sociedadId: true, sociedad: { select: { tesoreroId: true } } } }),
+    tesoreroId === undefined ? Promise.resolve([]) : prisma.sociedad.findMany({ where: { tesoreroId }, select: { id: true } }),
+  ]);
+  return { obligaciones, sociedadesDeTesorero: sociedades.map((x) => x.id) };
+}
 
 export async function listarObligaciones(f: FiltroObligaciones) {
   const where: Prisma.ObligacionWhereInput = {
+    ...(f.ids ? { id: { in: f.ids } } : {}),
     ...(f.sociedad ? { sociedad: { codigo: f.sociedad } } : {}),
+    ...(f.sociedadId ? { sociedadId: f.sociedadId } : {}),
     ...(f.categoria ? { categoriaId: f.categoria } : {}),
     ...(f.activa !== undefined ? { activa: f.activa } : {}),
     ...(f.falta ? FALTA[f.falta] : {}),
     ...(f.q
-      ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }, { responsable: { contains: f.q } }] }
+      ? { OR: [{ proveedor: { contains: f.q } }, { identificador: { contains: f.q.replace(/\s+/g, "") } }, { sociedad: { tesorero: { nombre: { contains: f.q } } } }] }
       : {}),
   };
   const [total, datos] = await Promise.all([
@@ -97,7 +148,7 @@ export async function listarObligaciones(f: FiltroObligaciones) {
     prisma.obligacion.findMany({
       where,
       include: incluir,
-      orderBy: [{ sociedad: { codigo: "asc" } }, { categoria: { nombre: "asc" } }, { proveedor: "asc" }, { identificador: "asc" }],
+      orderBy: [{ sociedad: { nombreLargo: "asc" } }, { categoria: { nombre: "asc" } }, { proveedor: "asc" }, { identificador: "asc" }],
       skip: (f.pagina - 1) * f.porPagina,
       take: f.porPagina,
     }),
@@ -114,28 +165,71 @@ export async function obtenerObligacion(id: number) {
   return prisma.obligacion.findUnique({ where: { id }, include: incluir });
 }
 
-export async function buscarPorClave(sociedadId: number, proveedor: string, identificador: string) {
-  const candidatas = await prisma.obligacion.findMany({ where: { sociedadId, identificador } });
-  return candidatas.find((o) => claveNombre(o.proveedor) === claveNombre(proveedor)) ?? null;
+/** La misma obligación: sociedad, proveedor, identificador (sin ceros a la izquierda) y categoría. */
+export async function buscarPorClave(sociedadId: number, proveedor: string, identificador: string, categoriaId: number) {
+  const clave = identificadorClave(identificador);
+  const candidatas = await prisma.obligacion.findMany({ where: { sociedadId, categoriaId, identificador: { endsWith: clave } } });
+  return candidatas.find((o) => claveNombre(o.proveedor) === claveNombre(proveedor) && identificadorClave(o.identificador) === clave) ?? null;
 }
 
-export async function crearObligacion(data: Prisma.ObligacionUncheckedCreateInput) {
-  return prisma.obligacion.create({ data, include: incluir });
+/** Otras obligaciones (activas o inactivas, de cualquier sociedad) con el mismo identificador, sin contar ceros a la izquierda. */
+export async function buscarPorIdentificador(identificador: string, excluirId?: number) {
+  const clave = identificadorClave(identificador);
+  const candidatas = await prisma.obligacion.findMany({ where: { identificador: { endsWith: clave } }, include: incluir });
+  return candidatas.filter((o) => o.id !== excluirId && identificadorClave(o.identificador) === clave);
 }
 
-export async function actualizarObligacion(id: number, data: Prisma.ObligacionUncheckedUpdateInput) {
-  return prisma.obligacion.update({ where: { id }, data, include: incluir });
+/** Alta manual: la obligación y su línea del historial se guardan en la misma transacción (si el registro falla, no se crea). */
+export async function crearObligacionConHistorial(data: Prisma.ObligacionUncheckedCreateInput, autor: AutorDelCambio): Promise<ObligacionCompleta> {
+  return prisma.$transaction(async (tx) => {
+    const o = await tx.obligacion.create({ data, include: incluir });
+    await insertarHistorial(tx, { obligacionId: o.id, sociedadId: o.sociedadId, autor, lineas: [lineaDeAlta()] });
+    return o;
+  });
+}
+
+/**
+ * Edita una o varias obligaciones en UNA transacción junto con su historial: una línea por campo que realmente cambió
+ * (sin montos ni cuentas). Si el registro falla, no se guarda ninguna edición. `motivo` acompaña solo a activar y desactivar.
+ */
+export async function actualizarObligacionesConHistorial(
+  cambios: { id: number; data: Prisma.ObligacionUncheckedUpdateInput }[],
+  autor: AutorDelCambio,
+  motivo: string | null = null,
+): Promise<ObligacionCompleta[]> {
+  return prisma.$transaction(async (tx) => {
+    const salida: ObligacionCompleta[] = [];
+    for (const { id, data } of cambios) {
+      const antes = await tx.obligacion.findUniqueOrThrow({ where: { id } });
+      const o = await tx.obligacion.update({ where: { id }, data, include: incluir });
+      await insertarHistorial(tx, { obligacionId: id, sociedadId: o.sociedadId, autor, lineas: lineasDeEdicion(antes, o), motivo });
+      salida.push(o);
+    }
+    return salida;
+  });
+}
+
+/** Identificadores de las sociedades que tienen algún estado de cuenta cargado. */
+export async function sociedadesConEstados(): Promise<Set<number>> {
+  const g = await prisma.archivoImportado.groupBy({ by: ["sociedadId"], where: { sociedadId: { not: null }, retiradoEn: null } });
+  return new Set(g.map((x) => x.sociedadId!));
+}
+
+/** Identificadores de las sociedades que tienen al menos una obligación activa. */
+export async function sociedadesConObligacionesActivas(): Promise<Set<number>> {
+  const g = await prisma.obligacion.groupBy({ by: ["sociedadId"], where: { activa: true } });
+  return new Set(g.map((x) => x.sociedadId));
 }
 
 export async function listarSociedades() {
   return prisma.sociedad.findMany({
-    orderBy: { codigo: "asc" },
-    include: { _count: { select: { obligaciones: true, cuentas: true } } },
+    orderBy: { nombreLargo: "asc" },
+    include: { _count: { select: { obligaciones: true, cuentas: true } }, tesorero: { select: { nombre: true } } },
   });
 }
 
-export async function obtenerSociedadPorCodigo(codigo: string) {
-  return prisma.sociedad.findUnique({ where: { codigo } });
+export async function obtenerSociedadPorId(id: number) {
+  return prisma.sociedad.findUnique({ where: { id } });
 }
 
 export async function listarCategorias() {
@@ -149,3 +243,32 @@ export async function obtenerCategoria(id: number) {
 export async function obtenerCuenta(id: number) {
   return prisma.cuenta.findUnique({ where: { id } });
 }
+
+/** Mes más antiguo (AAAA-MM) con estados de cuenta leídos de la cuenta; si no se da cuenta, de las cuentas de la sociedad. */
+export async function mesMasAntiguoConEstados(sociedadId: number, cuentaId: number | null): Promise<string | null> {
+  const r = await prisma.archivoImportado.aggregate({
+    _min: { mes: true },
+    where: { estado: "leido", retiradoEn: null, mes: { not: null }, ...(cuentaId !== null ? { cuentaId } : { sociedadId }) },
+  });
+  return r._min.mes;
+}
+
+/**
+ * Pone «Control desde» a las obligaciones que aún no lo tienen: el primer día del mes más antiguo con estados cargados
+ * para su cuenta esperada (o, sin cuenta esperada, para su sociedad). Nunca cambia uno ya definido. Devuelve cuántas se completaron.
+ */
+export async function completarControlDesdePendientes(mesSinEstados?: string): Promise<number> {
+  const pendientes = await prisma.obligacion.findMany({ where: { controlDesde: null }, select: { id: true, sociedadId: true, cuentaEsperadaId: true } });
+  const cache = new Map<string, string | null>();
+  let n = 0;
+  for (const o of pendientes) {
+    const k = `${o.sociedadId}|${o.cuentaEsperadaId ?? ""}`;
+    if (!cache.has(k)) cache.set(k, await mesMasAntiguoConEstados(o.sociedadId, o.cuentaEsperadaId));
+    const mes = cache.get(k) ?? mesSinEstados; // sin estados: el mes en que se carga la obligación (si se indica)
+    if (!mes) continue;
+    await prisma.obligacion.update({ where: { id: o.id }, data: { controlDesde: primerDiaDelPeriodo(mes) } });
+    n++;
+  }
+  return n;
+}
+

@@ -1,16 +1,27 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { relojSistema, type Reloj } from "../domain/reloj.js";
+import { actualizarVencimientos } from "../vencimientos/mantenimiento.js";
+import { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE } from "../domain/estado-archivo.js";
+import { clasificarArchivo } from "../domain/clasificar-imagenes.js";
+import { esSinMovimientos } from "../domain/saldo.js";
 import { clavesDeDeduplicacion } from "./clave-dedup.js";
-import { ErrorLectura, LECTOR_VERSION, leerEstadoDeCuenta, leerLibro } from "./lector.js";
+import { cargarUmbralesImagen } from "./umbrales-imagen.js";
+import { valorGlobal } from "../repositories/parametros.js";
+import { ErrorLectura, LECTOR_VERSION, TOLERANCIA_SALDO_DEFECTO, leerEstadoDeCuenta, leerLibro } from "./lector.js";
 import { monedaDeIbanBct, parsearNombreArchivo, type NombreArchivo } from "./nombre-archivo.js";
 import type { ResultadoLectura } from "./tipos.js";
 import {
-  ArchivoConConciliaciones, asegurarSociedad, buscarArchivoPorRuta,
-  guardarArchivoConError, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
+buscarArchivoPorRuta, buscarSociedadPorCodigo, marcarRetirados, reactivarArchivo,
+  guardarArchivoConError, guardarArchivoEnRevision, guardarArchivoLeido, guardarCuenta, type ArchivoParaGuardar,
 } from "../repositories/importaciones.js";
+import { completarControlDesdePendientes } from "../repositories/obligaciones.js";
 
-export type EstadoArchivo = "leido" | "error" | "sin_cambios";
+export type EstadoArchivo = "leido" | "error" | "sin_cambios" | "en_revision";
+
+// Motivos fijos por los que un archivo queda "en revisión": ver domain/estado-archivo.ts.
+export { MOTIVO_CARPETA_SIN_SOCIEDAD, MOTIVO_NOMBRE_NO_COINCIDE };
 export type OrigenMoneda = "archivo" | "iban" | "otro_mes" | "desconocida";
 
 export interface ResumenArchivo {
@@ -27,7 +38,10 @@ export interface ResumenImportacion {
   archivos: ResumenArchivo[];
   leidos: number;
   conError: number;
+  enRevision: number;
   sinCambios: number;
+  /** archivos registrados que ya no están en la carpeta (se marcan «Retirado de la carpeta», no se borran) */
+  retirados: number;
   movimientos: number;
   duplicados: number;
 }
@@ -61,16 +75,20 @@ export async function listarCandidatos(raiz: string): Promise<Candidato[]> {
 
 interface Lectura {
   cand: Candidato;
+  sociedadId: number;
   hash: string;
   resultado?: ResultadoLectura;
   error?: string;
 }
 
-export async function importarCarpeta(raiz: string): Promise<ResumenImportacion> {
+export async function importarCarpeta(raiz: string, reloj: Reloj = relojSistema): Promise<ResumenImportacion> {
   if (enCurso) throw new Error("Ya hay una importación en curso");
   enCurso = true;
   try {
-    return await ejecutar(raiz);
+    const resumen = await ejecutar(raiz);
+    await completarControlDesdePendientes(); // los estados nuevos pueden definir «Control desde» de obligaciones que aún no lo tienen
+    await actualizarVencimientos(reloj); // calendario y cruce con los estados de cuenta nuevos
+    return resumen;
   } finally {
     enCurso = false;
   }
@@ -78,26 +96,43 @@ export async function importarCarpeta(raiz: string): Promise<ResumenImportacion>
 
 async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   const candidatos = await listarCandidatos(raiz);
-  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, sinCambios: 0, movimientos: 0, duplicados: 0 };
+  const resumen: ResumenImportacion = { archivos: [], leidos: 0, conError: 0, enRevision: 0, sinCambios: 0, retirados: 0, movimientos: 0, duplicados: 0 };
+  // Un archivo registrado que ya no está en la carpeta se marca retirado; si vuelve a estar, se reactiva (ver más abajo).
+  resumen.retirados = await marcarRetirados(candidatos.map((c) => c.ruta));
 
-  // Fase 1: hash y lectura. Un archivo con error se marca y se sigue con los demás.
+  // Fase 1: sociedad, hash y lectura. La sociedad y el nombre se comprueban ANTES de abrir el archivo.
+  // Un archivo con error se marca y se sigue con los demás.
   const lecturas: Lectura[] = [];
+  const tolerancia = Number(await valorGlobal("tolerancia_saldo"));
+  const toleranciaSaldo = Number.isInteger(tolerancia) && tolerancia >= 0 ? tolerancia : TOLERANCIA_SALDO_DEFECTO;
+  const umbralesImagen = await cargarUmbralesImagen();
+  const sociedades = new Map<string, Awaited<ReturnType<typeof buscarSociedadPorCodigo>>>();
   for (const cand of candidatos) {
+    if (!sociedades.has(cand.carpeta)) sociedades.set(cand.carpeta, await buscarSociedadPorCodigo(cand.carpeta));
+    const sociedad = sociedades.get(cand.carpeta) ?? null;
+    const enRevision = async (motivo: string) => {
+      await guardarArchivoEnRevision({ ruta: cand.ruta, hash: "", formato: null, mes: cand.nombre?.periodo ?? null, sociedadId: sociedad?.id ?? null, cuentaId: null }, motivo);
+      resumen.enRevision++;
+      resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: null, estado: "en_revision", movimientos: 0, duplicados: 0, error: motivo });
+    };
+    if (!sociedad) { await enRevision(MOTIVO_CARPETA_SIN_SOCIEDAD); continue; }
+    if (cand.nombre && cand.nombre.sociedad !== cand.carpeta) { await enRevision(MOTIVO_NOMBRE_NO_COINCIDE); continue; }
     let hash = "";
     try {
       const contenido = await readFile(cand.rutaAbsoluta);
       hash = createHash("sha256").update(contenido).digest("hex");
       const previo = await buscarArchivoPorRuta(cand.ruta);
       if (previo && previo.hash === hash && previo.estado === "leido" && versionDe(previo.detalle) === LECTOR_VERSION) {
+        if (previo.retiradoEn) await reactivarArchivo(cand.ruta);
         resumen.sinCambios++;
         resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: previo.formato, estado: "sin_cambios", movimientos: previo.numMovimientos, duplicados: previo.numDuplicados });
         continue;
       }
       if (!cand.nombre) throw new ErrorLectura("El nombre no cumple la convención «<IBAN> <MMAA> <SOCIEDAD>.xlsx»");
-      const resultado = leerEstadoDeCuenta(await leerLibro(contenido), cand.nombre);
-      lecturas.push({ cand, hash, resultado });
+      const resultado = leerEstadoDeCuenta(await leerLibro(contenido), cand.nombre, { toleranciaSaldo });
+      lecturas.push({ cand, sociedadId: sociedad.id, hash, resultado });
     } catch (e) {
-      lecturas.push({ cand, hash, error: e instanceof ErrorLectura ? e.message : "Error inesperado al leer el archivo" });
+      lecturas.push({ cand, sociedadId: sociedad.id, hash, error: e instanceof ErrorLectura ? e.message : "Error inesperado al leer el archivo" });
     }
   }
 
@@ -114,8 +149,8 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
   for (const l of lecturas) {
     const { cand, hash } = l;
     const base = { ruta: cand.ruta, hash, formato: l.resultado?.formato ?? null, mes: cand.nombre?.periodo ?? null };
-    const sociedad = await asegurarSociedad(cand.carpeta);
-    const archivoBase: ArchivoParaGuardar = { ...base, sociedadId: sociedad.id, cuentaId: null };
+    const sociedadId = l.sociedadId;
+    const archivoBase: ArchivoParaGuardar = { ...base, sociedadId, cuentaId: null };
     if (l.error || !l.resultado || !cand.nombre) {
       await guardarArchivoConError(archivoBase, l.error ?? "Error desconocido", { discrepancias: [], advertencias: [] });
       resumen.conError++;
@@ -126,9 +161,6 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     const nombre = cand.nombre;
     const advertencias = [...r.advertencias];
     const discrepancias = [...r.discrepancias];
-    if (nombre.sociedad !== cand.carpeta) {
-      discrepancias.push({ tipo: "sociedad", mensaje: `La sociedad del nombre (${nombre.sociedad}) no coincide con la carpeta (${cand.carpeta}); se usó la carpeta` });
-    }
 
     // moneda de este archivo y de la cuenta
     const explicitas = explicitaPorCuenta.get(clave(cand)) ?? new Set<string>();
@@ -146,13 +178,19 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
     const monedaCuenta = (explicitas.size > 0 ? ([...explicitas][0] as "CRC" | "USD") : porIban) ?? null;
 
     const cuenta = await guardarCuenta({
-      sociedadId: sociedad.id, numero: nombre.cuenta, codigoBanco: nombre.codigoBanco, formato: r.formato,
+      sociedadId, numero: nombre.cuenta, codigoBanco: nombre.codigoBanco, formato: r.formato,
       bancoArchivo: r.bancoArchivo, moneda: monedaCuenta, monedaPorConfirmar: explicitas.size === 0,
     });
     const claves = clavesDeDeduplicacion(cuenta.id, r.movimientos);
     const movs = r.movimientos.map((m, i) => ({ ...m, claveDedup: claves[i]! }));
+    // Clase de la imagen más grande, guardada con el archivo (no se recalcula al consultar). Un archivo sin movimientos con una
+    // imagen grande trae los movimientos como imagen: no se pueden leer y no da cobertura. Con logo pequeño o sin imagen, sí.
+    const claseImagen = clasificarArchivo(r.imagenes, r.conImagenes, umbralesImagen);
+    const continuidad = esSinMovimientos(r.continuidad) && claseImagen === "posible_captura"
+      ? { ...r.continuidad, razon: "imagen_no_legible" as const, motivo: "imagen no legible" }
+      : r.continuidad;
     const detalle = {
-      versionLector: LECTOR_VERSION, continuidad: r.continuidad, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas,
+      versionLector: LECTOR_VERSION, continuidad, claseImagen, saldoInicial: r.saldoInicial, saldoFinal: r.saldoFinal, fechas: r.fechas, periodoDeclarado: r.periodoDeclarado, advertencias, discrepancias, filasPieIgnoradas: r.filasPieIgnoradas, conImagenes: r.conImagenes, imagenes: r.imagenes, encabezadoSaldos: r.encabezadoSaldos,
       monedaOrigen: origen, moneda: monedaArchivo, hojaLeida: r.hoja, filaEncabezado: r.filaEncabezado,
     };
     try {
@@ -165,7 +203,7 @@ async function ejecutar(raiz: string): Promise<ResumenImportacion> {
       resumen.duplicados += duplicados;
       resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: r.formato, estado: "leido", movimientos: movs.length, duplicados });
     } catch (e) {
-      const msg = e instanceof ArchivoConConciliaciones ? e.message : "No se pudo guardar el archivo en la base de datos";
+      const msg = "No se pudo guardar el archivo en la base de datos";
       await guardarArchivoConError({ ...archivoBase, cuentaId: cuenta.id, formato: r.formato }, msg, detalle);
       resumen.conError++;
       resumen.archivos.push({ ruta: cand.ruta, sociedad: cand.carpeta, formato: r.formato, estado: "error", movimientos: 0, duplicados: 0, error: msg });

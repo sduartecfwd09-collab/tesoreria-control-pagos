@@ -29,8 +29,18 @@
   /* Estados — POR CONFIRMAR con Tesorería */
   --estado-rojo: #b3261e;
   --estado-rojo-fondo: #fde7e5;
+  --estado-ambar: #f2a900; /* Por vencer (maqueta): texto negro encima; nunca como texto */
   --estado-ambar-fondo: #fbe7a1;
+  --linea: #e3e3e3; /* divisores de tabla (maqueta) */
   --estado-ambar-texto: var(--garnier-negro);
+
+  /* Tablas y filtros de Historial de cambios, Histórico y Movimientos sin obligación: solo tintes de la paleta, con transparencia */
+  --tabla-cabecera: var(--garnier-gris-oscuro);
+  --texto-sobre-tabla-cabecera: var(--garnier-blanco);
+  --linea-tabla: var(--garnier-gris-claro);
+  --tinte-fila: rgb(185 185 185 / 0.08); /* filas alternas: tinte de gris claro */
+  --tinte-filtros: rgb(185 185 185 / 0.15); /* recuadro de filtros: tinte de gris claro */
+  --tinte-resalte: rgb(171 211 65 / 0.18); /* fila bajo el cursor: tinte de verde */
 }
 
 @theme inline {
@@ -46,8 +56,16 @@
   --color-sobre-cabecera: var(--texto-sobre-cabecera);
   --color-rojo: var(--estado-rojo);
   --color-rojo-fondo: var(--estado-rojo-fondo);
+  --color-ambar: var(--estado-ambar);
+  --color-linea: var(--linea);
   --color-ambar-fondo: var(--estado-ambar-fondo);
   --color-ambar-texto: var(--estado-ambar-texto);
+  --color-tabla-cabecera: var(--tabla-cabecera);
+  --color-sobre-tabla-cabecera: var(--texto-sobre-tabla-cabecera);
+  --color-linea-tabla: var(--linea-tabla);
+  --color-tinte-fila: var(--tinte-fila);
+  --color-tinte-filtros: var(--tinte-filtros);
+  --color-tinte-resalte: var(--tinte-resalte);
   --font-sans: Montserrat, Poppins, Arial, Helvetica, sans-serif;
 }
 

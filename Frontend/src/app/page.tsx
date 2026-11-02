@@ -1,11 +1,6 @@
-import { Proximamente } from "@/components/Proximamente";
+import { PagosDelMes } from "@/components/pagos/PagosDelMes";
 
-export default function Tablero() {
-  return (
-    <Proximamente
-      titulo="Tablero"
-      hito={6}
-      descripcion="Vista general del mes: cuántos vencimientos están por vencer, vencidos, pagados o con inconsistencias, por sociedad y categoría, con la proyección de los próximos meses."
-    />
-  );
+// La página de inicio es «Pagos del mes».
+export default function Inicio() {
+  return <PagosDelMes />;
 }

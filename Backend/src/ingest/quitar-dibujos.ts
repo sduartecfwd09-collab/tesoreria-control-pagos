@@ -24,3 +24,13 @@ export async function quitarDibujos(buffer: Buffer): Promise<Buffer> {
   }
   return zip.generateAsync({ type: "nodebuffer" });
 }
+
+/** ¿El libro trae imágenes? Solo mira los nombres de las partes del archivo (xl/media/): nunca lee ni interpreta una imagen. */
+export async function tieneImagenes(buffer: Buffer): Promise<boolean> {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    return Object.keys(zip.files).some((nombre) => /^xl\/media\/.+/.test(nombre) && !zip.files[nombre]!.dir);
+  } catch {
+    return false;
+  }
+}

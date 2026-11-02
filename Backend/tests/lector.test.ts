@@ -193,3 +193,31 @@ describe("errores de lectura", () => {
     await expect(leer(buf, "CR91010710102200000001 0826 ZFL.xlsx")).rejects.toThrow(/Formato no reconocido/);
   });
 });
+
+describe("filas con importe y sin fecha legible", () => {
+  const hojaConFechasIlegibles = (conUnaLegible: boolean) =>
+    M.libro([{
+      nombre: "Movimientos",
+      filas: {
+        1: ["Periodo Seleccionado", null, null, "SOCIEDAD SINTETICA S.A."],
+        2: ["Fecha", "Del: 01/08/2026", "Al: 28/08/2026", "BCT 0000"],
+        4: ["CR91010710102200000001"],
+        6: ["Fecha", "Concepto", "Referencia", "Debito", "Credito", "Saldo"],
+        7: ["03-ago-2026", "Cargo uno", "R-1", 100, 0, 900],
+        8: [conUnaLegible ? M.fecha(2026, 8, 4) : "04-ago-2026", "Cargo dos", "R-2", 50, 0, 850],
+        9: ["05-ago-2026", "Cargo tres", "R-3", 25, 0, 825],
+      },
+    }]);
+
+  it("sin ningún movimiento leído, esas filas ya no se descartan en silencio: generan advertencia", async () => {
+    const r = await leer(await hojaConFechasIlegibles(false), "CR91010710102200000001 0826 ZFL.xlsx");
+    expect(r.movimientos).toHaveLength(0);
+    expect(r.advertencias).toContain("3 fila(s) con importe pero sin fecha legible: no se importaron");
+  });
+
+  it("con movimientos leídos sigue avisando de las filas entre ellos", async () => {
+    const r = await leer(await hojaConFechasIlegibles(true), "CR91010710102200000001 0826 ZFL.xlsx");
+    expect(r.movimientos).toHaveLength(1);
+    expect(r.advertencias).toContain("1 fila(s) con importe pero sin fecha legible: no se importaron"); // la de la fila 7; la 9 queda como pie
+  });
+});

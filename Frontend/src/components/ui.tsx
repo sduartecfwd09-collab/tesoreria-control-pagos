@@ -1,5 +1,6 @@
+"use client";
 // Piezas visuales compartidas. Los estados siempre llevan texto además del color.
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export type Tono = "ambar" | "rojo" | "suave" | "verde";
 
@@ -10,9 +11,10 @@ const TONOS: Record<Tono, string> = {
   verde: "bg-acento text-sobre-acento",
 };
 
-export function Etiqueta({ children, tono, titulo }: { children: ReactNode; tono: Tono; titulo?: string }) {
+export function Etiqueta({ children, tono, titulo, icono, extra = "" }: { children: ReactNode; tono: Tono; titulo?: string; icono?: ReactNode; extra?: string }) {
   return (
-    <span title={titulo} className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${TONOS[tono]}`}>
+    <span title={titulo} className={`${icono ? "inline-flex items-center gap-1" : "inline-block"} whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${TONOS[tono]} ${extra}`}>
+      {icono}
       {children}
     </span>
   );
@@ -35,19 +37,32 @@ export const claseControl = "border-2 border-control bg-fondo rounded px-3 py-2 
 export const claseBoton = "bg-acento text-sobre-acento font-semibold rounded px-4 py-2 disabled:bg-fondo-suave disabled:text-suave disabled:cursor-not-allowed";
 export const claseBotonSecundario = "border-2 border-control bg-fondo text-texto font-semibold rounded px-4 py-2 hover:bg-fondo-suave disabled:opacity-50 disabled:cursor-not-allowed";
 
-export function Paginador({ pagina, paginas, total, unidad, alCambiar }: { pagina: number; paginas: number; total: number; unidad: string; alCambiar: (p: number) => void }) {
+/**
+ * Final de una lista que continúa hacia abajo: al acercarse al final del scroll pide más filas (sin botones de página).
+ * `cantidad` es cuántas filas hay cargadas: al cambiar se vuelve a observar, así sigue cargando si el final aún es visible.
+ */
+export function FinDeLista({ cantidad, total, unidad, hayMas, cargando, alLlegar }: { cantidad: number; total: number; unidad: string; hayMas: boolean; cargando: boolean; alLlegar: () => void }) {
+  const marca = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = marca.current;
+    if (!el || !hayMas) return;
+    const o = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && alLlegar(), { rootMargin: "400px" });
+    o.observe(el);
+    return () => o.disconnect();
+  }, [alLlegar, hayMas, cantidad]);
   return (
-    <nav aria-label="Paginación" className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-      <button type="button" className={claseBotonSecundario} disabled={pagina <= 1} onClick={() => alCambiar(pagina - 1)}>
-        ← Anterior
-      </button>
-      <span aria-live="polite">
-        Página <strong>{pagina}</strong> de {paginas} · {total.toLocaleString("es-CR")} {unidad}
-      </span>
-      <button type="button" className={claseBotonSecundario} disabled={pagina >= paginas} onClick={() => alCambiar(pagina + 1)}>
-        Siguiente →
-      </button>
-    </nav>
+    <div ref={marca} className="mt-4 text-sm text-suave" aria-live="polite">
+      {cargando ? "Cargando más…" : `${cantidad.toLocaleString("es-CR")} de ${total.toLocaleString("es-CR")} ${unidad}`}
+    </div>
+  );
+}
+
+/** Nombre largo de una sociedad en tablas: peso normal, letra pequeña y hasta 3 líneas, con el nombre completo al pasar el cursor. */
+export function NombreSociedad({ nombre, className = "" }: { nombre: string; className?: string }) {
+  return (
+    <span title={nombre} className={`line-clamp-3 text-xs ${className}`}>
+      {nombre}
+    </span>
   );
 }
 

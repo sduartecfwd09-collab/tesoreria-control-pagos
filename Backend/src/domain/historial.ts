@@ -1,0 +1,103 @@
+// Qué líneas del historial deja una edición de una obligación. Lógica pura: compara el antes y el después y devuelve solo
+// los campos que realmente cambiaron. Reglas de confidencialidad: de montoEsperado, moneda y cuentaEsperadaId solo se anota
+// que «cambió» (antes y despues nulos); en el resto, valores de texto corto sin montos ni cuentas.
+import { periodoDeControl } from "./control-desde.js";
+
+export interface DatosEditables {
+  frecuencia: string;
+  frecuenciaPorConfirmar: boolean;
+  mesArranque: number | null;
+  diaEsperadoPago: number | null;
+  activa: boolean;
+  controlDesde: Date | null;
+  montoEsperado: bigint | null;
+  moneda: string;
+  cuentaEsperadaId: number | null;
+}
+
+/**
+ * TODAS las acciones y TODOS los campos que el historial puede registrar. Es la única lista: el tipo de cada línea sale de aquí, así que un campo o una
+ * acción nuevos no compilan hasta declararse, y la prueba `historial-completo` comprueba que cada uno tenga su rótulo, su grupo del filtro «Qué cambió»
+ * y su lectura en el Frontend (src/lib/formato.ts: ROTULO_CAMPO, GRUPOS_DE_CAMPOS y cambioEnPalabras).
+ */
+export const ACCIONES_HISTORIAL = [
+  "crear", "editar", "activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision",
+  "mover_fecha", "quitar_movimiento", "cambiar_dia", "es_la_misma", "son_distintas", "sigue_vigente", "desactivar_diferencia", "mantener_plataforma", "usar_excel",
+] as const;
+export type AccionHistorial = (typeof ACCIONES_HISTORIAL)[number];
+
+export const CAMPOS_HISTORIAL = [
+  "obligacion", "frecuencia", "frecuenciaPorConfirmar", "mesArranque", "diaEsperadoPago", "activa", "controlDesde", "montoEsperado", "moneda", "cuentaEsperadaId",
+  "pago_asociado", "justificacion_vencimiento", "justificacion_archivo", "revision_obligacion", "fecha_vencimiento", "diferencia_excel",
+] as const;
+export type CampoHistorial = (typeof CAMPOS_HISTORIAL)[number];
+
+/** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
+export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision", "mover_fecha", "quitar_movimiento", "cambiar_dia", "es_la_misma", "son_distintas", "sigue_vigente", "desactivar_diferencia", "mantener_plataforma", "usar_excel"];
+
+export interface LineaCambio {
+  accion: AccionHistorial;
+  campo: CampoHistorial;
+  antes: string | null;
+  despues: string | null;
+}
+
+const texto = (n: number | null): string | null => (n === null ? null : String(n));
+const confirmada = (porConfirmar: boolean) => (porConfirmar ? "sin confirmar" : "confirmada");
+
+export function lineasDeEdicion(a: DatosEditables, d: DatosEditables): LineaCambio[] {
+  const l: LineaCambio[] = [];
+  const valor = (campo: CampoHistorial, antes: string | null, despues: string | null) => l.push({ accion: "editar", campo, antes, despues });
+  if (a.frecuencia !== d.frecuencia) valor("frecuencia", a.frecuencia, d.frecuencia);
+  if (a.frecuenciaPorConfirmar !== d.frecuenciaPorConfirmar) valor("frecuenciaPorConfirmar", confirmada(a.frecuenciaPorConfirmar), confirmada(d.frecuenciaPorConfirmar));
+  if (a.mesArranque !== d.mesArranque) valor("mesArranque", texto(a.mesArranque), texto(d.mesArranque));
+  // el día ya definido solo se cambia por el servicio de cambio de día; aquí se anota cuando se fija por primera vez
+  if (a.diaEsperadoPago === null && d.diaEsperadoPago !== null) valor("diaEsperadoPago", null, texto(d.diaEsperadoPago));
+  if (a.activa !== d.activa) l.push({ accion: d.activa ? "activar" : "desactivar", campo: "activa", antes: a.activa ? "activa" : "inactiva", despues: d.activa ? "activa" : "inactiva" });
+  if (periodoDeControl(a.controlDesde) !== periodoDeControl(d.controlDesde)) valor("controlDesde", periodoDeControl(a.controlDesde), periodoDeControl(d.controlDesde));
+  // datos sensibles: solo se anota que cambió
+  if (a.montoEsperado !== d.montoEsperado) valor("montoEsperado", null, null);
+  if (a.moneda !== d.moneda) valor("moneda", null, null);
+  if (a.cuentaEsperadaId !== d.cuentaEsperadaId) valor("cuentaEsperadaId", null, null);
+  return l;
+}
+
+/** El alta manual deja una sola línea. */
+export const lineaDeAlta = (): LineaCambio => ({ accion: "crear", campo: "obligacion", antes: null, despues: null });
+
+// --- Lectura del historial (pantalla «Historial de cambios») ---
+
+/** Tamaño de página de respaldo si el parámetro `historial_por_pagina` no existe o es inválido. */
+export const HISTORIAL_POR_PAGINA_DEFECTO = 50;
+export const HISTORIAL_POR_PAGINA_MAXIMO = 200;
+
+const MS_DIA = 86_400_000;
+const CR_UTC_MS = 6 * 3_600_000; // Costa Rica es UTC-6 todo el año (sin horario de verano)
+
+/**
+ * Límites en UTC de un rango de días de Costa Rica (AAAA-MM-DD): desde el inicio del día `desde` hasta el inicio del día siguiente a
+ * `hasta` (exclusivo). `creadoEn` se guarda en UTC, así que el día de la persona se traduce aquí.
+ */
+export function limitesDeDias(desde?: string, hasta?: string): { desde?: Date; hastaExclusivo?: Date } {
+  const inicio = (iso: string) => new Date(new Date(`${iso}T00:00:00.000Z`).getTime() + CR_UTC_MS);
+  return {
+    ...(desde ? { desde: inicio(desde) } : {}),
+    ...(hasta ? { hastaExclusivo: new Date(inicio(hasta).getTime() + MS_DIA) } : {}),
+  };
+}
+
+/** Asociar a mano un pago a un vencimiento: solo se anota el periodo (AAAA-MM), nunca el monto, la cuenta ni el identificador. */
+export const lineaDeAsociarPago = (periodo: string): LineaCambio => ({ accion: "asociar_pago", campo: "pago_asociado", antes: null, despues: periodo });
+/** Quitar la asociación manual: el periodo queda en «antes». */
+export const lineaDeQuitarAsociacion = (periodo: string): LineaCambio => ({ accion: "quitar_asociacion", campo: "pago_asociado", antes: periodo, despues: null });
+
+/** Justificar un vencimiento: solo el periodo (AAAA-MM). */
+export const lineaDeJustificarVencimiento = (periodo: string): LineaCambio => ({ accion: "justificar", campo: "justificacion_vencimiento", antes: null, despues: periodo });
+export const lineaDeQuitarJustificacionVencimiento = (periodo: string): LineaCambio => ({ accion: "quitar_justificacion", campo: "justificacion_vencimiento", antes: periodo, despues: null });
+/** Justificar un archivo: solo el mes del archivo (AAAA-MM; nulo si no se conoce). Nunca la ruta ni la cuenta. */
+export const lineaDeJustificarArchivo = (mes: string | null): LineaCambio => ({ accion: "justificar", campo: "justificacion_archivo", antes: null, despues: mes });
+export const lineaDeQuitarJustificacionArchivo = (mes: string | null): LineaCambio => ({ accion: "quitar_justificacion", campo: "justificacion_archivo", antes: mes, despues: null });
+
+/** Marcar como revisada una obligación «En revisión»: antes y después son el estado, nunca datos de la obligación. */
+export const lineaDeMarcarRevisada = (): LineaCambio => ({ accion: "marcar_revisada", campo: "revision_obligacion", antes: "en_revision", despues: "revisada" });
+export const lineaDeQuitarRevision = (): LineaCambio => ({ accion: "quitar_revision", campo: "revision_obligacion", antes: "revisada", despues: "en_revision" });

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { definicionDe, validarValor } from "../domain/parametros.js";
-import { actualizarValor, listarParametros, obtenerParametro } from "../repositories/parametros.js";
+import { definicionDe, errorRangoDeBusqueda, validarValor } from "../domain/parametros.js";
+import { actualizarValor, listarParametros, obtenerParametro, valorGlobal } from "../repositories/parametros.js";
 
 export async function rutasParametros(app: FastifyInstance) {
   app.get("/api/parametros", async () => {
@@ -23,6 +23,9 @@ export async function rutasParametros(app: FastifyInstance) {
           max: def?.max ?? null,
           opciones: def?.opciones ?? null,
           supuesto: def?.supuesto ?? false,
+          // false = el parámetro existe pero no se muestra en Configuración
+          visible: def?.visible ?? false,
+          ejemplo: def?.ejemplo ?? null,
           actualizado: p.actualizado.toISOString(),
         };
       }),
@@ -46,6 +49,13 @@ export async function rutasParametros(app: FastifyInstance) {
     } catch (e) {
       const msg = e instanceof z.ZodError ? e.issues[0]?.message : undefined;
       return reply.code(422).send({ error: msg ?? "Valor inválido" });
+    }
+    // los días antes y después del rango de búsqueda deben caber dentro del período más corto
+    if (actual.clave === "ventana_dias_antes" || actual.clave === "ventana_dias_despues") {
+      const otro = Number(await valorGlobal(actual.clave === "ventana_dias_antes" ? "ventana_dias_despues" : "ventana_dias_antes"));
+      const nuevo = Number(valor);
+      const mensaje = errorRangoDeBusqueda(actual.clave === "ventana_dias_antes" ? nuevo : otro, actual.clave === "ventana_dias_antes" ? otro : nuevo);
+      if (mensaje) return reply.code(422).send({ error: mensaje });
     }
     const guardado = await actualizarValor(id.data, valor);
     return {

@@ -4,8 +4,8 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/db.js";
 import { importarCarpeta } from "../src/ingest/importar-carpeta.js";
-import { actualizarCuentaManual } from "../src/repositories/importaciones.js";
-import { vaciarImportaciones } from "./helpers/db.js";
+import { sembrarSociedad } from "../src/repositories/importaciones.js";
+import { copiaDeObligacion, vaciarImportaciones } from "./helpers/db.js";
 import * as M from "./helpers/muestras.js";
 
 let raiz: string;
@@ -22,6 +22,8 @@ const sept = (movs: M.Mov[]) => movs.map((m) => ({ ...m, m: 9 }));
 
 beforeAll(async () => {
   await vaciarImportaciones();
+  // El importador solo asigna a sociedades que ya existen (nunca las crea).
+  for (const codigo of ["ZFL", "WW", "DM"]) await sembrarSociedad(codigo, `Sociedad inventada ${codigo}`);
   raiz = mkdtempSync(path.join(tmpdir(), "estados-sinteticos-"));
   poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1()); // sin moneda en el archivo
   poner(`ZFL/${IBAN_BCT} 0926 ZFL.xlsx`, await M.e1({ moneda: "USD", mes: 9, apertura: 699, movs: M.MOVS_BASE.slice(2) })); // solapa 2 movimientos de agosto
@@ -81,7 +83,7 @@ describe("importarCarpeta", () => {
 
   it("guarda sociedad, cuenta, formato, periodo, moneda y trazabilidad del movimiento", async () => {
     const m = await prisma.movimiento.findFirst({ where: { cuenta: { numero: IBAN_BNCR } }, include: { cuenta: { include: { sociedad: true } }, archivo: true }, orderBy: { fila: "asc" } });
-    expect(m).toMatchObject({ periodo: "2026-09", hoja: "Estado de Cuenta", fila: 13, debito: 15050, credito: 0 });
+    expect(m).toMatchObject({ periodo: "2026-09", hoja: "Estado de Cuenta", fila: 13, debito: 15050n, credito: 0n });
     expect(m!.cuenta.sociedad.codigo).toBe("ZFL");
     expect(m!.archivo).toMatchObject({ formato: "E7", mes: "2026-09" });
   });
@@ -98,7 +100,7 @@ describe("importarCarpeta", () => {
   it("reimporta de forma controlada cuando cambia el hash y no pisa el banco editado a mano", async () => {
     const cuenta = (await prisma.cuenta.findFirst({ where: { numero: IBAN_BCT } }))!;
     expect(cuenta).toMatchObject({ banco: "BCT", bancoPorConfirmar: true });
-    await actualizarCuentaManual(cuenta.id, { banco: "Banco confirmado por Tesorería" });
+    await prisma.cuenta.update({ where: { id: cuenta.id }, data: { banco: "Banco confirmado por Tesorería", bancoPorConfirmar: false } }); // edición manual
     poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1({ movs: M.MOVS_BASE.slice(0, 3) }));
     const r = await importarCarpeta(raiz);
     expect(r.leidos).toBe(1);
@@ -108,19 +110,25 @@ describe("importarCarpeta", () => {
     expect(await prisma.cuenta.findUnique({ where: { id: cuenta.id } })).toMatchObject({ banco: "Banco confirmado por Tesorería", bancoPorConfirmar: false });
   });
 
-  it("no reimporta un archivo cambiado si ya tiene conciliaciones", async () => {
-    const mov = (await prisma.movimiento.findFirst({ where: { archivo: { ruta: `ZFL/${IBAN_BCT} 0826 ZFL.xlsx` } } }))!;
+  it("reimportar un archivo cambiado reemplaza sus movimientos y no toca el vencimiento ni la decisión que se apoyaban en uno", async () => {
+    const ruta = `ZFL/${IBAN_BCT} 0826 ZFL.xlsx`;
+    const mov = (await prisma.movimiento.findFirst({ where: { archivo: { ruta } } }))!;
     const sociedad = (await prisma.sociedad.findFirst({ where: { codigo: "ZFL" } }))!;
-    const categoria = await prisma.categoria.upsert({ where: { nombre: "Prueba" }, create: { nombre: "Prueba" }, update: {} });
+    const categoria = await prisma.categoria.upsert({ where: { nombreNormalizado: "prueba" }, create: { nombre: "Prueba", nombreNormalizado: "prueba" }, update: {} });
     const ob = await prisma.obligacion.create({ data: { sociedadId: sociedad.id, categoriaId: categoria.id, proveedor: "P", identificador: "001", diaEsperadoPago: 15 } });
-    const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08" } });
-    await prisma.conciliacion.create({ data: { vencimientoId: ven.id, movimientoId: mov.id, tipoCruce: "automatico", estado: "claro" } });
+    const ven = await prisma.vencimiento.create({ data: { obligacionId: ob.id, fecha: new Date(Date.UTC(2026, 7, 15)), periodo: "2026-08", estado: "pagado", movimientoId: mov.id, ...copiaDeObligacion(ob) } });
+    const usuario = await prisma.usuario.create({ data: { correo: "u@x.cr", nombre: "U", nombreNormalizado: "u", rolId: (await prisma.rol.findFirstOrThrow()).id } });
+    const decision = await prisma.decisionManual.create({
+      data: { tipo: "asociacion_pago", sociedadId: sociedad.id, obligacionId: ob.id, periodo: "2026-08", movimientoId: mov.id, claveMovimiento: mov.claveDedup, motivo: "Prueba", usuarioId: usuario.id, nombreUsuario: "U", modoPruebas: true, unicaObligacionPeriodo: `${ob.id}|2026-08`, unicaMovimiento: mov.claveDedup },
+    });
 
-    poner(`ZFL/${IBAN_BCT} 0826 ZFL.xlsx`, await M.e1({ movs: M.MOVS_BASE.slice(0, 2) }));
+    poner(ruta, await M.e1({ movs: M.MOVS_BASE.slice(0, 2) }));
     const r = await importarCarpeta(raiz);
-    expect(r.archivos.find((a) => a.ruta.includes(`${IBAN_BCT} 0826`))).toMatchObject({ estado: "error", error: expect.stringMatching(/conciliaciones/) });
-    // los movimientos anteriores siguen intactos
-    expect(await prisma.movimiento.count({ where: { archivo: { ruta: `ZFL/${IBAN_BCT} 0826 ZFL.xlsx` } } })).toBe(3);
+    expect(r.archivos.find((a) => a.ruta.includes(`${IBAN_BCT} 0826`))).toMatchObject({ estado: "leido" });
+    expect(await prisma.movimiento.count({ where: { archivo: { ruta } } })).toBe(2);
+    // el vencimiento sigue ahí y la decisión sigue vigente con su huella del pago
+    expect(await prisma.vencimiento.findUnique({ where: { id: ven.id } })).toMatchObject({ estado: "pagado" });
+    expect(await prisma.decisionManual.findUniqueOrThrow({ where: { id: decision.id } })).toMatchObject({ vigente: true, claveMovimiento: mov.claveDedup });
   });
 
   it("DM queda como sociedad con sus movimientos (el catálogo vacío no impide importar)", async () => {

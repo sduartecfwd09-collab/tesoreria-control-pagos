@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { leerCatalogo, parsearDia } from "../src/catalogo/lector.js";
+import { estadoEsActiva, leerCatalogo, parsearDia } from "../src/catalogo/lector.js";
 import { leerLibro } from "../src/ingest/lector.js";
-import { catalogo, FILAS_BASE } from "./helpers/catalogo.js";
+import { CABECERA_CATALOGO, catalogo, FILAS_BASE } from "./helpers/catalogo.js";
+import { libro } from "./helpers/muestras.js";
 
 const leer = async (b: Promise<Buffer>) => leerCatalogo(await leerLibro(await b));
 
@@ -18,13 +19,57 @@ describe("parsearDia", () => {
   });
 });
 
+describe("leerCatalogo: la pestaña se elige por contenido (encabezados), no por posición ni por nombre", () => {
+  const CAB = [...CABECERA_CATALOGO, "ESTADO"];
+  const catalogoHoja = (nombre: string): { nombre: string; filas: Record<number, unknown[]> } => ({
+    nombre,
+    filas: { 3: CAB, 4: ["AAA", "Electricidad", "Luz", "100", "05 DIA", "ACTIVA"], 5: ["AAA", "Cable", "Red", "200", "06 DIA", "ACTIVA"] },
+  });
+  // Pestaña auxiliar: trae una columna llamada «Sociedad» pero no los demás encabezados.
+  const nombres = { nombre: "NOMBRE", filas: { 1: ["Sociedad", "Nombre oficial"], 2: ["AAA", "Sociedad AAA, S.A."], 3: ["BBB", "Sociedad BBB, S.A."] } };
+
+  it("lee la pestaña del catálogo aunque «NOMBRE» esté antes, y no mezcla sus filas", async () => {
+    const c = await leerCatalogo(await leerLibro(await libro([nombres, catalogoHoja("TABLA PAGOS FRECUENTES")])));
+    expect(c.hoja).toBe("TABLA PAGOS FRECUENTES");
+    expect(c.filas.map((f) => f.identificador)).toEqual(["100", "200"]);
+    expect(c.problemas).toEqual([]);
+  });
+
+  it("da el mismo resultado si el orden de las pestañas es otro", async () => {
+    const c = await leerCatalogo(await leerLibro(await libro([catalogoHoja("TABLA PAGOS FRECUENTES"), nombres])));
+    expect(c.hoja).toBe("TABLA PAGOS FRECUENTES");
+    expect(c.filas).toHaveLength(2);
+  });
+
+  it("encuentra el catálogo aunque la pestaña tenga otro nombre; sin pestaña con los encabezados falla con un mensaje claro", async () => {
+    expect((await leerCatalogo(await leerLibro(await libro([nombres, catalogoHoja("Otro nombre")])))).hoja).toBe("Otro nombre");
+    const sinCatalogo = await leerLibro(await libro([nombres]));
+    expect(() => leerCatalogo(sinCatalogo)).toThrow(/No se encontró la cabecera/);
+  });
+});
+
+describe("leerCatalogo: columna ESTADO opcional", () => {
+  const CAB_ESTADO = [...CABECERA_CATALOGO, "ESTADO"];
+  it("sin columna ESTADO el estado de cada fila es null", async () => {
+    expect((await leer(catalogo())).filas.every((f) => f.estado === null)).toBe(true);
+  });
+  it("con la columna lee el texto de cada fila", async () => {
+    const c = await leer(catalogo([["AAA", "Telecom", "Fono", "1", "05 DIA", "ACTIVA"], ["AAA", "Telecom", "Fono", "2", "05 DIA", "Inactiva"], ["AAA", "Telecom", "Fono", "3", "05 DIA", ""]], { cabecera: CAB_ESTADO }));
+    expect(c.filas.map((f) => f.estado)).toEqual(["ACTIVA", "Inactiva", ""]);
+  });
+  it("solo «ACTIVA» (sin mayúsculas ni tildes) es activa", () => {
+    expect(["ACTIVA", "activa", " Activa "].every(estadoEsActiva)).toBe(true);
+    expect(["INACTIVA", "", "Suspendida", "activo"].some(estadoEsActiva)).toBe(false);
+  });
+});
+
 describe("leerCatalogo", () => {
   it("encuentra la cabecera en la fila 3 y lee todas las filas", async () => {
     const c = await leer(catalogo());
     expect(c.filaCabecera).toBe(3);
     expect(c.filas).toHaveLength(FILAS_BASE.length);
     expect(c.problemas).toEqual([]);
-    expect(c.filas[0]).toEqual({ fila: 4, sociedad: "AAA", categoria: "Electricidad", proveedor: "Luz Uno", identificador: "00012345", dia: 15 });
+    expect(c.filas[0]).toEqual({ fila: 4, sociedad: "AAA", categoria: "Electricidad", proveedor: "Luz Uno", identificador: "00012345", dia: 15, estado: null });
   });
 
   it("conserva los ceros a la izquierda y avisa si el identificador vino como número", async () => {
