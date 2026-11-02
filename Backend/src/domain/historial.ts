@@ -15,10 +15,10 @@ export interface DatosEditables {
   cuentaEsperadaId: number | null;
 }
 
-export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion" | "marcar_revisada" | "quitar_revision" | "mover_fecha" | "quitar_movimiento" | "cambiar_dia";
+export type AccionHistorial = "crear" | "editar" | "activar" | "desactivar" | "asociar_pago" | "quitar_asociacion" | "justificar" | "quitar_justificacion" | "marcar_revisada" | "quitar_revision" | "mover_fecha" | "quitar_movimiento" | "cambiar_dia" | "es_la_misma" | "son_distintas" | "sigue_vigente" | "desactivar_diferencia" | "mantener_plataforma" | "usar_excel";
 
 /** Acciones cuyo motivo se guarda en la línea (las demás ediciones no lo piden). */
-export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision", "mover_fecha", "quitar_movimiento", "cambiar_dia"];
+export const ACCIONES_CON_MOTIVO: AccionHistorial[] = ["activar", "desactivar", "asociar_pago", "quitar_asociacion", "justificar", "quitar_justificacion", "marcar_revisada", "quitar_revision", "mover_fecha", "quitar_movimiento", "cambiar_dia", "es_la_misma", "son_distintas", "sigue_vigente", "desactivar_diferencia", "mantener_plataforma", "usar_excel"];
 
 export interface LineaCambio {
   accion: AccionHistorial;

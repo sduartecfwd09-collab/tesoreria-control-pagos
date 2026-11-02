@@ -8,6 +8,8 @@ import { rutasAvisos } from "./routes/avisos.js";
 import { rutasMovimientosSinObligacion } from "./routes/movimientos-sin-obligacion.js";
 import { rutasFechas } from "./routes/fechas.js";
 import { rutasHistorialCambios } from "./routes/historial-cambios.js";
+import { rutasDiferenciasExcel } from "./routes/diferencias-excel.js";
+import type { FuenteDeFilas } from "./diferencias/fuente-excel.js";
 import { rutasHistorico } from "./routes/historico.js";
 import { rutasIdentidad } from "./routes/identidad.js";
 import { rutasImportaciones } from "./routes/importaciones.js";
@@ -16,7 +18,7 @@ import { rutasParametros } from "./routes/parametros.js";
 import { rutasVencimientos } from "./routes/vencimientos.js";
 
 /** `reloj` se inyecta en las pruebas para fijar la fecha de hoy. */
-export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPruebas?: boolean } = {}) {
+export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPruebas?: boolean; /** de dónde salen las filas del Excel (solo pruebas); por defecto, el archivo del catálogo */ fuenteDeFilasExcel?: FuenteDeFilas } = {}) {
   const app = Fastify({ logger: opts.logger ?? false });
   const reloj = opts.reloj ?? relojSistema;
   const modoPruebas = opts.modoPruebas ?? env.MODO_PRUEBAS;
@@ -50,6 +52,7 @@ export async function crearApp(opts: { logger?: boolean; reloj?: Reloj; modoPrue
   await app.register(rutasFechas, { reloj, modoPruebas });
   await app.register(rutasHistorico, { reloj, modoPruebas });
   await app.register(rutasHistorialCambios, { modoPruebas, reloj });
+  await app.register(rutasDiferenciasExcel, { modoPruebas, reloj, ...(opts.fuenteDeFilasExcel ? { fuente: opts.fuenteDeFilasExcel } : {}) });
 
   return app;
 }

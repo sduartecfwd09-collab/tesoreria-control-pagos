@@ -3,6 +3,7 @@
 // mes en curso sigue pendiente, hay que decir si el nuevo día también aplica a este mes (aplicaAlMesEnCurso). Los permisos (persona y sociedad)
 // los verifica la ruta; aquí van las reglas del negocio. El registro del historial se guarda en la MISMA transacción.
 import { prisma } from "../db.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import { diaValido, normalizarMotivo } from "../domain/cambio-dia.js";
 import { lineaDeCambiarDia, validarDesdeMes } from "../domain/mover-fecha.js";
 import { ErrorDeServicio } from "../domain/permisos.js";
@@ -27,7 +28,9 @@ const estaPendienteYFuturo = (v: { fecha: Date; estado: string } | null, hoy: Da
   v !== null && v.fecha >= hoy && !ESTADOS_PAGADOS.includes(v.estado) && v.estado !== "justificado";
 
 export async function cambiarDia(
-  d: { obligacion: ObligacionParaCambiarDia; nuevoDia: unknown; desdeMes: unknown; aplicaAlMesEnCurso: unknown; motivo: unknown; autor: AutorDelCambio },
+  d: { obligacion: ObligacionParaCambiarDia; nuevoDia: unknown; desdeMes: unknown; aplicaAlMesEnCurso: unknown; motivo: unknown; autor: AutorDelCambio;
+    /** algo más que debe guardarse junto con el cambio (misma transacción): lo usa «Usar el del Excel» para dejar su decisión */
+    enLaTransaccion?: (tx: Prisma.TransactionClient) => Promise<void> },
   reloj: Reloj,
 ): Promise<ResultadoCambioDia> {
   const o = d.obligacion;
@@ -63,6 +66,7 @@ export async function cambiarDia(
       obligacionId: o.id, diaAnterior, diaNuevo: d.nuevoDia as number, desde: efectivo, motivo, usuarioId: d.autor.id, modoPruebas: d.autor.modoPruebas, cambiaElDiaBase: efectivo <= mesEnCurso,
     });
     await insertarHistorial(tx, { obligacionId: o.id, sociedadId: o.sociedadId, autor: d.autor, lineas: [lineaDeCambiarDia(diaAnterior, d.nuevoDia as number, efectivo)], motivo });
+    if (d.enLaTransaccion) await d.enLaTransaccion(tx);
   });
   const { calendario } = await actualizarVencimientos(reloj, o.id);
   return { desde: efectivo, dia: d.nuevoDia as number, actualizados: calendario.actualizados };
